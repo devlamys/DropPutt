@@ -64,6 +64,22 @@ The system MUST be tenant-safe: a customer, user, vendor, rider, order, product,
 - `MediaRecorder`
 - `navigator.wakeLock`
 
+### Mobile
+
+- React Native + Expo (Rider & Vendor apps — Phase 1)
+- Capacitor / Ionic (Customer PWA wrapper — Phase 1)
+- Flutter (Phase 2, if performance issues require it)
+- `expo-location` — foreground and background GPS
+- `expo-av` — audio recording (voice notes)
+- `expo-notifications` / `@react-native-firebase/messaging` — push notifications
+- `expo-keep-awake` — wake lock equivalent during active deliveries
+- `expo-secure-store` / `react-native-keychain` — secure token storage
+- `expo-image-picker` — bill/gate photo capture
+- `expo-task-manager` — background task registration
+- `socket.io-client` — same package, works in React Native
+- `axios` — same package, works in React Native
+- `@capacitor/geolocation`, `@capacitor/push-notifications`, `@capacitor/preferences` — Capacitor plugins
+
 ### Storage
 
 Cloudflare R2 or an equivalent S3-compatible object store for:
@@ -544,6 +560,8 @@ model SettlementEntry {
   @@map("settlement_entries")
 }
 ```
+
+> **Note:** See Section 57 for mobile model additions (`RefreshToken`, `DeviceRegistration`, `IdempotencyRecord`).
 
 ---
 
@@ -2141,5 +2159,1056 @@ The following statements MUST always remain true:
 19. Customer Magic Links cannot access another order or franchise.
 20. All financial calculations use two-decimal safe money arithmetic.
 ```
+
+This document is the authoritative production specification for the corrected multi-franchise hyperlocal delivery architecture.
+
+---
+
+# 46. Mobile Readiness Audit & Gap Analysis
+
+## 46.1 Current Auth Architecture vs Mobile Requirements
+
+**Current state:**
+- PIN + JWT (stateless) for staff/riders
+- Phone-based customer lookup with no token
+- FCM token stored as a single `String?` field on `User` and `Customer` models
+
+**Gap: No refresh token mechanism**
+JWTs have an implicit expiry but no server-side rotation or revocation mechanism. Mobile apps require long-lived sessions with silent token refresh; a rider app that loses its JWT mid-shift must not force the rider to re-authenticate manually.
+
+**Gap: No device registration model**
+A single `fcm_token` field on `User`/`Customer` cannot support multiple devices per user (e.g., a rider carrying both a personal phone and a franchise-issued tablet). Switching devices invalidates the previous token without any cleanup record.
+
+**Gap: No OTP/passwordless flow for customers**
+The existing spec stores customer phone scoped to franchise but defines no login flow for customers at all. A mobile customer app must have an authentication path; Phase 1 defers this to admin-managed registration (Section 49.2), and Phase 2 adds OTP via SMS gateway.
+
+**Gap: `x-franchise-slug` header convention**
+The slug convention works for web browsers but must be formally codified for mobile SDK usage. Native mobile apps must embed the franchise slug in their build configuration (`app.json`, `AndroidManifest.xml`, or a build-time environment variable) rather than deriving it from the hostname.
+
+**Gap: Browser-only Web APIs**
+The spec references `navigator.geolocation`, `navigator.wakeLock`, and `MediaRecorder`. These are Web APIs and are unavailable in native mobile contexts. Native equivalents must be used (see Section 53.2).
+
+**Gap: Socket.io client**
+The spec references a React/web Socket.io client. Native mobile must use the same `socket.io-client` npm package (which is compatible with React Native) or the `socket_io_client` Dart package for Flutter.
+
+---
+
+## 46.2 API Contract Gaps for Mobile Consumption
+
+**No standardized API response envelope**
+Mobile clients require a consistent `{ success, data, error, meta }` wrapper for deterministic parsing and typed error handling. Without this, every endpoint must be parsed individually.
+
+**No explicit pagination spec**
+Marketplace feeds, order history, and admin lists return unspecified array sizes. Mobile lists need cursor-based pagination with `has_more` and `next_cursor` to implement infinite-scroll UX without excessive data transfer.
+
+**No explicit versioning deprecation policy**
+Mobile apps ship static binaries that cannot be hot-patched. A sunset/deprecation policy with response headers is mandatory so app store builds have a defined runway before an API version is removed.
+
+**No explicit rate-limiting headers**
+Mobile retry logic cannot be correctly implemented without `Retry-After` or `X-RateLimit-*` headers.
+
+**File upload endpoints not explicitly spec'd**
+Bill photos, voice notes, prescriptions, and gate photos are uploaded to R2, but no multipart upload contract (content type, size limits, accepted MIME types, pre-signed URL flow vs. direct multipart POST) is defined in the existing spec.
+
+---
+
+## 46.3 Push Notification Architecture Gaps
+
+**Single FCM token per user**
+Storing one `fcm_token` string per `User`/`Customer` row cannot support multi-device users, token rotation, or APNs (iOS). A dedicated `DeviceRegistration` model is required.
+
+**No `DeviceRegistration` model**
+Required to track platform (`android`/`ios`/`web`), app version, token validity, and last-seen timestamp so stale tokens can be identified and purged.
+
+**No token cleanup strategy**
+When FCM or APNs returns a `registration-token-not-registered` / `BadDeviceToken` error, the system must mark the token inactive and exclude it from future sends. Without this, every campaign accumulates silent failures.
+
+**No deep link payload spec**
+Push notifications for order status changes must include a `data.deep_link` field so the mobile OS can route the user to the correct in-app screen on tap.
+
+---
+
+## 46.4 Offline & Sync Gaps
+
+**No offline-first strategy**
+Rider apps in rural India frequently lose connectivity mid-delivery. Without an offline strategy, GPS events are silently dropped and the customer tracking map freezes.
+
+**No sync endpoint for missed events**
+When a rider reconnects, there is no REST fallback to fetch current order state. The rider app may display stale data until the next Socket.io push.
+
+**No conflict resolution policy**
+Duplicate or out-of-order requests arriving after an offline period (e.g., a delayed delivery confirmation) have no defined handling policy.
+
+---
+
+# 47. Standardized API Response Envelope
+
+All API responses (web and mobile) MUST conform to the following envelope.
+
+**Success response:**
+
+```json
+{
+  "success": true,
+  "data": { },
+  "meta": {
+    "request_id": "550e8400-e29b-41d4-a716-446655440000",
+    "timestamp": "2026-11-11T10:48:13.000Z",
+    "version": "v1"
+  }
+}
+```
+
+**Error response:**
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "ORDER_NOT_FOUND",
+    "message": "Human-readable message",
+    "details": [ { "field": "zone_id", "issue": "required" } ]
+  },
+  "meta": {
+    "request_id": "550e8400-e29b-41d4-a716-446655440000",
+    "timestamp": "2026-11-11T10:48:13.000Z",
+    "version": "v1"
+  }
+}
+```
+
+The `request_id` MUST be generated server-side (UUID v4) and returned in every response body AND as a response header `X-Request-ID`.
+
+## 47.1 Error Code Registry
+
+| Code | HTTP Status | Meaning |
+|---|---|---|
+| `UNAUTHENTICATED` | 401 | Missing or invalid JWT |
+| `TOKEN_EXPIRED` | 401 | JWT expired; client should refresh |
+| `FORBIDDEN` | 403 | Authenticated but insufficient role |
+| `FRANCHISE_INACTIVE` | 403 | Franchise not active or not found |
+| `FRANCHISE_WALLET_LOW` | 403 | Wallet below `min_balance_limit` |
+| `ORDER_NOT_FOUND` | 404 | Order does not exist in this franchise |
+| `ORDER_ALREADY_ACCEPTED` | 409 | Race conflict on acceptance |
+| `ORDER_ALREADY_DELIVERED` | 409 | Idempotent delivery retry |
+| `VALIDATION_ERROR` | 422 | Request body schema error |
+| `CASH_LIMIT_EXCEEDED` | 422 | Rider `cash_in_hand >= max_cash_limit` |
+| `MAX_ORDERS_EXCEEDED` | 422 | Rider at max concurrent orders |
+| `INVALID_TIP_AMOUNT` | 422 | Tip not 10 / 20 / 30 |
+| `GPS_ACCURACY_POOR` | 200 | GPS > 50 m; warning returned alongside data |
+| `APP_UPDATE_REQUIRED` | 403 | Native app version below configured minimum |
+| `INTERNAL_ERROR` | 500 | Unexpected server error |
+
+---
+
+# 48. Pagination Standard
+
+All list endpoints MUST support cursor-based pagination.
+
+## 48.1 Query Parameters
+
+| Parameter | Type | Default | Maximum | Description |
+|---|---|---|---|---|
+| `limit` | integer | 20 | 100 | Number of records per page |
+| `cursor` | string | — | — | Opaque base64-encoded composite key |
+
+## 48.2 Response `meta` Extension for Lists
+
+```json
+{
+  "success": true,
+  "data": { "items": [ ] },
+  "meta": {
+    "request_id": "...",
+    "timestamp": "...",
+    "version": "v1",
+    "pagination": {
+      "limit": 20,
+      "has_more": true,
+      "next_cursor": "eyJpZCI6NDIsImNyZWF0ZWRfYXQiOiIyMDI2In0="
+    }
+  }
+}
+```
+
+When `has_more` is `false`, `next_cursor` MUST be `null`.
+
+## 48.3 Endpoints Requiring Pagination
+
+| Endpoint | Resource |
+|---|---|
+| `GET /api/v1/marketplace/feed` | Vendors / products |
+| `GET /api/v1/orders` | Rider or vendor order history |
+| `GET /api/v1/admin/orders` | Admin order list |
+| `GET /api/v1/admin/settlement` | Settlement entries |
+| `GET /api/v1/admin/wallet-transactions` | Wallet transactions |
+
+---
+
+# 49. Auth & Token Lifecycle (Mobile-Ready)
+
+## 49.1 Staff / Rider Auth — JWT + Refresh Token
+
+**Login endpoint:**
+
+`POST /api/v1/auth/login`
+
+Request:
+
+```json
+{
+  "phone": "9876543210",
+  "pin": "1234",
+  "franchise_slug": "kizhissery"
+}
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "access_token": "eyJ...",
+    "refresh_token": "opaque-random-256-bit-hex",
+    "access_token_expires_in": 900,
+    "refresh_token_expires_in": 2592000,
+    "user": {
+      "id": 1,
+      "name": "Sajan",
+      "role": "RIDER",
+      "franchise_id": 2
+    }
+  },
+  "meta": { "request_id": "...", "timestamp": "...", "version": "v1" }
+}
+```
+
+**Token rules:**
+
+- Access token TTL: **15 minutes** (900 seconds)
+- Refresh token TTL: **30 days** (2,592,000 seconds)
+- Refresh tokens are stored server-side in a `RefreshToken` table, hashed with SHA-256 — never stored in plaintext
+- Refresh tokens are **rotated** on every use (sliding-window invalidation)
+- The previous refresh token is invalidated immediately when a new one is issued
+
+**Refresh endpoint:**
+
+`POST /api/v1/auth/refresh`
+
+Request:
+
+```json
+{ "refresh_token": "opaque-token" }
+```
+
+Response: a new `access_token` + `refresh_token` pair in the same envelope as login.
+
+If the submitted refresh token has already been used (rotation attack), return `401 UNAUTHENTICATED` and invalidate the entire token family for that user.
+
+**Logout endpoint:**
+
+`POST /api/v1/auth/logout`
+
+Auth: Bearer access token.
+
+Revokes the current refresh token server-side. Subsequent refresh attempts with the same token return `401`.
+
+---
+
+## 49.2 Customer Auth — OTP-less Phone Registration
+
+The platform targets rural, semi-literate users. A full OTP flow is deferred.
+
+**Phase 1 (web + mobile MVP):**
+
+Customers are identified by phone number within a franchise. No password. The staff or vendor creates the order on behalf of the customer, or the customer uses the Magic Link (no auth required). Mobile customer registration is performed by an admin or vendor.
+
+Customer registration endpoint (requires `FRANCHISE_ADMIN` or `VENDOR` role):
+
+`POST /api/v1/customers`
+
+```json
+{
+  "phone": "9876543210",
+  "name": "Ravi",
+  "franchise_slug": "kizhissery"
+}
+```
+
+**Phase 2 (future):**
+
+OTP-based customer login via an SMS gateway. The spec for the OTP flow will be added when the SMS provider is selected. No OTP implementation detail is mandated here.
+
+---
+
+## 49.3 Device Registration
+
+Device registration decouples the FCM token from the `User`/`Customer` row and supports multiple devices per user.
+
+**Device registration endpoint:**
+
+`POST /api/v1/device/register`
+
+Auth: JWT (staff/rider) or customer session.
+
+```json
+{
+  "fcm_token": "fcm-registration-token-string",
+  "platform": "android",
+  "app_version": "1.2.3"
+}
+```
+
+Behaviour:
+
+- If the `fcm_token` already exists for this user, upsert: update `app_version`, `platform`, and `last_seen_at`.
+- If the `fcm_token` already exists for a **different** user, deactivate the old record and create a new one (the device was reassigned).
+- The endpoint MUST be idempotent — calling it on every app launch is safe and recommended.
+
+**Token cleanup rule:**
+
+When FCM or APNs returns `messaging/registration-token-not-registered` or `BadDeviceToken`, set `DeviceRegistration.is_active = false` for that token and do not retry it. Do not raise an application error — log and continue sending to remaining tokens.
+
+---
+
+## 49.4 RefreshToken Prisma Model
+
+```prisma
+model RefreshToken {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  token_hash String   @unique
+  expires_at DateTime
+  revoked    Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([token_hash])
+  @@map("refresh_tokens")
+}
+```
+
+Add `refresh_tokens RefreshToken[]` to the `User` model relation list.
+
+---
+
+# 50. Offline Caching & Sync Strategy (Mobile)
+
+## 50.1 Rider App Offline Strategy
+
+The rider app MUST implement a local queue for GPS location events when the network is unavailable.
+
+**1. GPS Queue**
+
+When the Socket.io connection is lost, store `rider_location_move` events locally (SQLite via `expo-sqlite`, or an in-memory ring buffer) in chronological order. The buffer should retain at most 500 events (~40 minutes at 5-second intervals).
+
+**2. On reconnect — Socket.io preferred**
+
+Attempt to reconnect Socket.io. When reconnected, flush queued events by emitting each `rider_location_move` in order. The server MUST accept and process these replayed events normally (timestamp is part of the payload so server-side ordering is preserved).
+
+**3. On reconnect — REST fallback**
+
+If the Socket.io reconnect fails after 3 attempts, flush via:
+
+`POST /api/v1/riders/location-batch`
+
+Auth: Bearer access token.
+
+```json
+{
+  "order_id": 123,
+  "locations": [
+    { "lat": 11.0000000, "lng": 75.0000000, "accuracy": 8.5, "timestamp": 1730000000000 },
+    { "lat": 11.0010000, "lng": 75.0010000, "accuracy": 10.0, "timestamp": 1730000005000 }
+  ]
+}
+```
+
+The server MUST persist each location update and emit `live_bike_position` to the customer's tracking room for each entry in the batch. Duplicate timestamps for the same `order_id` MUST be deduplicated by the server.
+
+**4. State sync on foreground / reconnect**
+
+On app foreground and immediately after any reconnect, the rider app MUST fetch current order state:
+
+`GET /api/v1/riders/me/active-orders`
+
+Returns all orders currently in `RIDER_ASSIGNED`, `PICKED_UP`, or `LOCATION_SHARED` state for the authenticated rider. See Section 52.2 for the full response contract.
+
+---
+
+## 50.2 Customer App Offline Strategy
+
+For the customer-facing Magic Link page and future mobile customer app:
+
+1. Cache the last known rider position in `localStorage` / device storage for display during brief disconnects (< 30 seconds).
+2. Display a "Reconnecting..." overlay when the Socket.io connection drops.
+3. Poll `GET /api/v1/public/drop/:token/status` every **15 seconds** as a REST fallback when Socket.io is unavailable. See Section 52.3 for the response contract.
+4. Stop polling when Socket.io reconnects successfully.
+
+---
+
+## 50.3 Vendor App Offline Strategy
+
+Vendor apps should cache locally:
+
+- Their product catalog (read-only; invalidated when server-side `updated_at` changes)
+- Current open orders (refreshed on foreground)
+
+No write operations (new orders, status updates) are permitted while offline. The vendor app MUST display a prominent offline banner blocking all write interactions.
+
+---
+
+## 50.4 Error Handling for Mobile Networks
+
+All mobile clients MUST implement the following policies:
+
+**Exponential backoff with jitter (5xx errors)**
+
+```
+base = 1 second
+multiplier = 2
+max = 30 seconds
+jitter = random(0, base × 0.3)
+delay(attempt) = min(base × 2^attempt + jitter, max)
+```
+
+**Idempotency keys**
+
+Send an `Idempotency-Key: <uuid-v4>` header on all mutating requests. The server caches the response for **24 hours** for the same key, returning the cached response without re-executing the operation.
+
+The server MUST respect `Idempotency-Key` on:
+
+- `POST /api/v1/orders/quick-call`
+- `POST /api/v1/orders/:id/deliver`
+- `POST /api/v1/public/drop/:token/tip`
+
+The key MUST be a UUID v4 generated fresh per user action (not per session). Reuse of a key from a previous, different action is an application bug.
+
+**Timeout policy**
+
+| Request type | Timeout |
+|---|---|
+| Standard API call | 10 seconds |
+| File upload (R2) | 30 seconds |
+| Socket.io connect | 10 seconds |
+| Socket.io reconnect interval | Exponential 1 s → 30 s |
+
+---
+
+# 51. Push Notification Architecture (FCM / APNs)
+
+## 51.1 Notification Types & Deep Link Payloads
+
+All FCM/APNs notifications MUST include a `data` payload with a `deep_link` field for mobile navigation.
+
+| Event | Recipient | FCM `notification.title` | `data.deep_link` |
+|---|---|---|---|
+| New order request | Rider | `🛵 New Order!` | `dropputt://orders/{order_id}` |
+| Add-on order alert | Rider | `🔥 Add-on Order!` | `dropputt://orders/{order_id}` |
+| Order accepted | Vendor | `✅ Order Accepted` | `dropputt://vendor/orders/{order_id}` |
+| Order picked up | Vendor | `🛵 Rider On The Way` | `dropputt://vendor/orders/{order_id}` |
+| Order delivered | Vendor + Customer | `🎉 Delivered!` | `dropputt://orders/{order_id}/receipt` |
+| Milestone achieved | Rider | `🏆 Milestone Bonus!` | `dropputt://rider/earnings` |
+| 4 PM Chayakadi window | Customer | `☕ 4 PM Snacks Ready!` | `dropputt://marketplace?slot=EVENING_SNACKS_3_TO_6` |
+| Campaign broadcast | Customer | `{campaign.title}` | `dropputt://marketplace?franchise={slug}` |
+
+---
+
+## 51.2 FCM Multicast Payload Standard
+
+All FCM sends MUST use `sendEachForMulticast` in batches of ≤ 500 tokens.
+
+```json
+{
+  "tokens": ["token1", "token2"],
+  "notification": {
+    "title": "🛵 New Order!",
+    "body": "Order #DP-1234 from Hotel Royal"
+  },
+  "data": {
+    "type": "NEW_ORDER",
+    "order_id": "123",
+    "franchise_slug": "kizhissery",
+    "deep_link": "dropputt://orders/123"
+  },
+  "android": {
+    "priority": "high",
+    "notification": {
+      "channel_id": "order_alerts",
+      "sound": "default",
+      "priority": "max",
+      "visibility": "public"
+    }
+  },
+  "apns": {
+    "headers": { "apns-priority": "10" },
+    "payload": {
+      "aps": {
+        "alert": {
+          "title": "🛵 New Order!",
+          "body": "Order #DP-1234 from Hotel Royal"
+        },
+        "sound": "default",
+        "badge": 1,
+        "mutable-content": 1
+      }
+    }
+  }
+}
+```
+
+All `data` values MUST be strings (FCM data payloads are string maps). Numeric IDs must be coerced to strings before sending.
+
+---
+
+## 51.3 Android Notification Channels
+
+Mobile apps MUST register the following Android notification channels on first launch (before any notification is delivered):
+
+| Channel ID | Display Name | Importance | Usage |
+|---|---|---|---|
+| `order_alerts` | Order Alerts | `IMPORTANCE_HIGH` | New / add-on order alerts for riders |
+| `order_updates` | Order Updates | `IMPORTANCE_DEFAULT` | Status-change notifications for all roles |
+| `promotions` | Promotions | `IMPORTANCE_LOW` | 4 PM campaigns, marketing pushes |
+| `earnings` | Earnings | `IMPORTANCE_DEFAULT` | Milestone bonuses, settlement confirmations |
+
+---
+
+## 51.4 Token Invalidation & Cleanup
+
+**On-demand cleanup (per send):**
+
+When FCM returns `messaging/registration-token-not-registered` or APNs returns `BadDeviceToken` for a token:
+
+1. Set `DeviceRegistration.is_active = false`.
+2. Remove the token from future send batches.
+3. Do not raise an application error — log the event and continue.
+
+**Scheduled cleanup (weekly cron):**
+
+```
+Purge DeviceRegistration rows where
+  is_active = false
+  AND last_seen_at < NOW() - INTERVAL '90 days'
+```
+
+This prevents the table from growing unboundedly while preserving recent inactive records for diagnostics.
+
+---
+
+# 52. Mobile API Extensions
+
+## 52.1 New Mobile-Specific Endpoints
+
+| Method | Endpoint | Auth | Purpose |
+|---|---|---|---|
+| `POST` | `/api/v1/auth/login` | None | PIN login → access + refresh token pair |
+| `POST` | `/api/v1/auth/refresh` | Refresh token | Rotate access token silently |
+| `POST` | `/api/v1/auth/logout` | JWT | Revoke refresh token server-side |
+| `POST` | `/api/v1/device/register` | JWT or customer | Register or update FCM token + platform |
+| `GET` | `/api/v1/riders/me/active-orders` | JWT (RIDER) | Offline sync: fetch current active orders |
+| `POST` | `/api/v1/riders/location-batch` | JWT (RIDER) | Offline GPS event flush |
+| `GET` | `/api/v1/public/drop/:token/status` | None | REST fallback for customer tracking |
+| `GET` | `/api/v1/marketplace/feed` | Optional JWT | Paginated vendor / product feed |
+| `GET` | `/api/v1/orders` | JWT | Paginated order history (rider or vendor) |
+
+---
+
+## 52.2 Rider Active Orders Response
+
+`GET /api/v1/riders/me/active-orders`
+
+```json
+{
+  "success": true,
+  "data": {
+    "orders": [
+      {
+        "id": 123,
+        "order_number": "DP-1234",
+        "order_type": "HOTEL_DIRECT",
+        "order_status": "PICKED_UP",
+        "vendor_name": "Hotel Royal",
+        "pickup_address": "Hotel Royal, Main Road, Kizhissery",
+        "drop_address": "Near mosque, North Street",
+        "turning_point": "Near mosque",
+        "drop_lat": "11.0000000",
+        "drop_lng": "75.0000000",
+        "amount_to_collect": "120.00",
+        "payment_method": "COD",
+        "customer_phone": "9876543210",
+        "voice_note_url": null,
+        "house_image_url": null,
+        "rider_delivery_note": "Blue gate",
+        "location_token": "tok_opaque_abc123",
+        "created_at": "2026-11-11T10:30:00.000Z"
+      }
+    ]
+  },
+  "meta": { "request_id": "...", "timestamp": "...", "version": "v1" }
+}
+```
+
+This endpoint MUST scope results to the authenticated rider's `franchise_id`.
+
+---
+
+## 52.3 Public Tracking REST Fallback
+
+`GET /api/v1/public/drop/:token/status`
+
+No authentication required. The opaque `location_token` is the only credential.
+
+```json
+{
+  "success": true,
+  "data": {
+    "order_status": "PICKED_UP",
+    "rider_lat": "11.0001234",
+    "rider_lng": "75.0001234",
+    "rider_last_seen": "2026-11-11T10:35:00.000Z",
+    "estimated_message": "Rider is on the way"
+  },
+  "meta": { "request_id": "...", "timestamp": "...", "version": "v1" }
+}
+```
+
+This endpoint MUST NOT expose:
+
+- Rider identity, name, or phone
+- Rider KYC documents
+- Any financial information (amounts, splits, balances)
+- Any other customer's data
+- Internal franchise configuration
+
+---
+
+# 53. Cross-Platform Integration Guide
+
+## 53.1 Recommended Cross-Platform Stack
+
+| Option | Recommended For | Rationale |
+|---|---|---|
+| **React Native + Expo** | Phase 1 — Rider & Vendor apps | Team already knows React/JS; fastest to market; Expo handles OTA updates and native module abstraction |
+| **Capacitor (Ionic)** | Phase 1 — Customer PWA wrapper | Wraps existing React/Vite web app with minimal code changes; good for MVP; avoids full rewrite |
+| **Flutter** | Phase 2 — If performance issues arise | Better native feel on low-end devices; requires Dart skills; heavier investment |
+
+---
+
+## 53.2 React Native / Expo Integration Points
+
+| Native Capability | Web API Replaced | React Native Library |
+|---|---|---|
+| Geolocation (foreground) | `navigator.geolocation.watchPosition` | `expo-location` or `react-native-geolocation-service` |
+| Background GPS | Not available on web | `expo-task-manager` + `expo-location` background task |
+| Wake lock (screen on during delivery) | `navigator.wakeLock` | `expo-keep-awake` |
+| Audio recording (voice notes) | `MediaRecorder` API | `expo-av` `Audio.Recording` |
+| Push notifications | FCM web push | `expo-notifications` or `@react-native-firebase/messaging` |
+| File / photo picker | `<input type="file">` | `expo-image-picker` or `react-native-image-picker` |
+| Secure token storage | `localStorage` / `sessionStorage` | `expo-secure-store` or `react-native-keychain` |
+| Socket.io | `socket.io-client` (browser) | `socket.io-client` (same npm package; RN-compatible) |
+| HTTP client | Axios | Axios (same npm package; RN-compatible) |
+
+---
+
+## 53.3 Background GPS Task (React Native / Expo)
+
+The rider app MUST implement a background location task to maintain continuous GPS tracking during deliveries even when the app is backgrounded.
+
+```js
+// Registered in the app entry point (before any navigator renders)
+import * as TaskManager from 'expo-task-manager';
+import * as Location from 'expo-location';
+
+const LOCATION_TASK = 'RIDER_LOCATION_TASK';
+
+TaskManager.defineTask(LOCATION_TASK, ({ data, error }) => {
+  if (error) {
+    console.error('Background location task error:', error);
+    return;
+  }
+  const { locations } = data;
+  // Emit via Socket.io if connected, otherwise enqueue for REST flush
+  handleLocationUpdate(locations[0]);
+});
+
+// Called when an order transitions to RIDER_ASSIGNED
+export async function startBackgroundTracking() {
+  const { status } = await Location.requestBackgroundPermissionsAsync();
+  if (status !== 'granted') return;
+
+  await Location.startLocationUpdatesAsync(LOCATION_TASK, {
+    accuracy: Location.Accuracy.High,
+    timeInterval: 5000,          // 5 seconds (matches Socket contract)
+    distanceInterval: 10,        // or every 10 metres, whichever comes first
+    foregroundService: {
+      notificationTitle: 'DropPutt',
+      notificationBody: 'Delivery in progress',
+      notificationColor: '#FF5722',
+    },
+    pausesUpdatesAutomatically: false,
+    showsBackgroundLocationIndicator: true, // iOS only
+  });
+}
+
+// Called when the order is delivered or cancelled
+export async function stopBackgroundTracking() {
+  const isTracking = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK);
+  if (isTracking) {
+    await Location.stopLocationUpdatesAsync(LOCATION_TASK);
+  }
+}
+```
+
+Background permissions MUST be requested before the first delivery is accepted. If permissions are denied, the rider app MUST warn the user that GPS tracking requires background location access.
+
+---
+
+## 53.4 Capacitor Integration Points (Customer PWA)
+
+The existing React/Vite web app can be wrapped with Capacitor with minimal code changes:
+
+1. Replace `navigator.geolocation` calls with `@capacitor/geolocation` (identical API; adds native permission dialogs).
+2. Add `@capacitor/push-notifications` for FCM/APNs token registration.
+3. Add `@capacitor/preferences` for secure local key-value storage (replaces `localStorage` for sensitive data).
+4. Register the `dropputt://` deep link scheme in `AndroidManifest.xml` and iOS `Info.plist`.
+
+No backend changes are required for the Capacitor phase. The web API contract is identical.
+
+---
+
+## 53.5 Deep Link Schema
+
+All mobile apps MUST handle the `dropputt://` URI scheme. The backend MUST NOT send a deep link to a screen the recipient role cannot access.
+
+| URI | Navigates To |
+|---|---|
+| `dropputt://orders/{order_id}` | Rider: order detail screen |
+| `dropputt://orders/{order_id}/receipt` | Order receipt (any role) |
+| `dropputt://vendor/orders/{order_id}` | Vendor: order detail screen |
+| `dropputt://rider/earnings` | Rider earnings dashboard |
+| `dropputt://marketplace` | Customer marketplace home |
+| `dropputt://marketplace?slot=EVENING_SNACKS_3_TO_6` | 4 PM snacks tab |
+| `dropputt://marketplace?franchise={slug}` | Franchise-specific marketplace |
+| `dropputt://track/{location_token}` | Public order tracking (no auth) |
+
+The app MUST validate the `order_id` / `location_token` against the authenticated user's franchise before rendering any data. Invalid or inaccessible deep links MUST navigate to the home screen with a generic "not found" message — they MUST NOT crash or display another user's data.
+
+---
+
+# 54. API Versioning & Deprecation Policy
+
+## 54.1 Versioning Rules
+
+- **Current version:** `v1` — all endpoints under `/api/v1/...`
+- **Future breaking changes** introduce `v2` under `/api/v2/...`
+- Both versions run simultaneously during the transition window (minimum 6 months)
+- Deprecation notice via response header on deprecated endpoints:
+  ```
+  Deprecation: Sat, 01 Jan 2028 00:00:00 GMT
+  ```
+- Sunset date via response header:
+  ```
+  Sunset: Sat, 01 Jul 2028 00:00:00 GMT
+  ```
+- A breaking change is defined as: removing a field, changing a field type, changing an error code, or changing pagination behavior.
+- Adding new optional fields to responses is non-breaking and does not require a version bump.
+
+---
+
+## 54.2 Mobile App Version Enforcement
+
+Native mobile apps MUST send the following request header:
+
+```
+X-App-Version: 1.2.3
+```
+
+(Optional for web clients; required for iOS and Android builds.)
+
+The backend MAY return the following error when the app version is below a configured minimum:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "APP_UPDATE_REQUIRED",
+    "message": "Please update the app to continue.",
+    "details": [
+      {
+        "min_version": "1.1.0",
+        "store_url": "https://play.google.com/store/apps/details?id=in.techkerala.dropputt"
+      }
+    ]
+  },
+  "meta": { "request_id": "...", "timestamp": "...", "version": "v1" }
+}
+```
+
+The minimum version threshold is stored in the franchise configuration or a global admin setting and is not hardcoded in the API server.
+
+---
+
+# 55. Security Extensions for Mobile
+
+## 55.1 JWT Configuration for Mobile
+
+| Property | Value |
+|---|---|
+| Algorithm | `HS256` (single-service) or `RS256` (multi-service) |
+| Access token TTL (`exp`) | 15 minutes |
+| Required payload claims | `sub` (user_id), `role`, `franchise_id`, `iat`, `exp`, `jti` |
+| `jti` purpose | Unique token ID; enables per-token revocation if required |
+| Storage — web | `httpOnly` cookie or in-memory only (never `localStorage`) |
+| Storage — React Native | `expo-secure-store` or `react-native-keychain` (never `AsyncStorage`) |
+| Transport | `Authorization: Bearer <token>` header ONLY — never as a URL query parameter |
+
+---
+
+## 55.2 Certificate Pinning (Optional / Phase 2)
+
+For high-security rider and admin apps (which handle cash and financial data):
+
+- **React Native:** `react-native-ssl-pinning` or `expo-certificate-pinning`
+- **Flutter:** `http_certificate_pinning`
+
+Pin the production API server's leaf certificate and CA intermediate. Update pins before certificate renewal — a certificate update without a pin update will break the app for all users.
+
+---
+
+## 55.3 Jailbreak / Root Detection (Optional / Phase 2)
+
+Rider apps handle cash and financial operations. Consider:
+
+- Use `expo-device`'s `isRootedExperimentalAsync()` for a soft detection check.
+- Do NOT hard-block the app — this causes legitimate false positives on common Android devices.
+- DO log to the audit trail when a potentially rooted/jailbroken device performs a financial operation (delivery confirmation, tip, settlement).
+
+---
+
+## 55.4 Additional Mobile Security Rules
+
+16. Refresh tokens MUST be stored hashed (SHA-256) in the `RefreshToken` table, never in plaintext.
+17. Refresh token rotation MUST invalidate the previous token on the first use of a new token.
+18. FCM tokens MUST be re-registered via `POST /api/v1/device/register` on every app launch if the token has changed (FCM rotates tokens periodically).
+19. The `Idempotency-Key` header on mobile requests MUST be a UUID v4 generated fresh per distinct user action, not per session or per app launch.
+20. Mobile apps MUST NOT cache financial values (amounts, wallet balances, settlement figures) beyond the current screen session. Reload from the API on every navigation to a financial screen.
+21. The `dropputt://` deep link scheme MUST validate the embedded token or ID against the authenticated user's data before rendering any screen. An invalid or unauthorized deep link MUST redirect to the home screen, never to an error screen that exposes internal identifiers.
+
+---
+
+# 56. Updated Architecture Diagram (Mobile-Ready)
+
+```text
+                          Internet
+                             |
+                        TLS (HTTPS / WSS)
+                             |
+                      Nginx / Load Balancer
+                             |
+               ┌─────────────┴─────────────┐
+               │                           │
+          REST API                     Socket.io
+       /api/v1/...             rooms: franchise:N, order:N
+               │                           │
+               └─────────────┬─────────────┘
+                             │
+                        Node.js API
+                             │
+            ┌────────────────┼──────────────────────┐
+            │                │                      │
+       PostgreSQL           Redis              Firebase FCM
+      (Prisma ORM)    (Socket.io adapter,    (push notifications)
+                       refresh token          Android + iOS
+                       revocation cache,      APNs gateway
+                       distributed locks)
+            │
+     Cloudflare R2
+    (media storage:
+     bill photos,
+     voice notes,
+     gate photos,
+     KYC docs)
+
+Clients:
+  Web (React + Vite):             Axios + socket.io-client
+  Rider App (React Native/Expo):  Axios + socket.io-client + expo-location (background GPS)
+                                  + expo-keep-awake + expo-av + expo-secure-store
+  Vendor App (React Native/Expo): Axios + socket.io-client + expo-secure-store
+  Customer App (Capacitor PWA):   Axios + socket.io-client
+                                  + @capacitor/push-notifications
+                                  + @capacitor/geolocation
+                                  + @capacitor/preferences
+```
+
+---
+
+# 57. Updated Prisma Schema Additions (Mobile)
+
+Add the following models to the existing Prisma schema (Section 5). Also add the corresponding relation fields to `User` and `Customer`.
+
+```prisma
+// ─── Mobile: Auth ──────────────────────────────────────────────────────────
+
+model RefreshToken {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  token_hash String   @unique   // SHA-256 hex of the opaque token
+  expires_at DateTime
+  revoked    Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([token_hash])
+  @@map("refresh_tokens")
+}
+
+// ─── Mobile: Device Registration ───────────────────────────────────────────
+
+model DeviceRegistration {
+  id           Int      @id @default(autoincrement())
+  user_id      Int?
+  customer_id  Int?
+  platform     String   // "android" | "ios" | "web"
+  app_version  String?
+  fcm_token    String   @unique
+  is_active    Boolean  @default(true)
+  last_seen_at DateTime @default(now())
+  created_at   DateTime @default(now())
+
+  user     User?     @relation(fields: [user_id], references: [id])
+  customer Customer? @relation(fields: [customer_id], references: [id])
+
+  @@index([user_id])
+  @@index([customer_id])
+  @@index([fcm_token])
+  @@index([is_active, last_seen_at])
+  @@map("device_registrations")
+}
+
+// ─── Mobile: Idempotency ───────────────────────────────────────────────────
+
+model IdempotencyRecord {
+  id           Int      @id @default(autoincrement())
+  key          String   @unique   // client-supplied Idempotency-Key header value
+  franchise_id Int?
+  user_id      Int?
+  response     Json               // cached response body
+  created_at   DateTime @default(now())
+  expires_at   DateTime           // created_at + 24 hours
+
+  @@index([key, expires_at])
+  @@index([franchise_id])
+  @@map("idempotency_records")
+}
+```
+
+**Required `User` model relation additions:**
+
+```prisma
+refresh_tokens       RefreshToken[]
+device_registrations DeviceRegistration[]
+```
+
+**Required `Customer` model relation addition:**
+
+```prisma
+device_registrations DeviceRegistration[]
+```
+
+---
+
+# 58. Mobile Test Cases
+
+Extend Section 42 (Required Test Cases) with the following.
+
+## Auth & Token Lifecycle
+
+- Login with valid PIN and correct franchise slug → returns `access_token` + `refresh_token` pair.
+- Login with invalid PIN → `401 UNAUTHENTICATED`.
+- Login with correct PIN but wrong franchise slug → `403 FRANCHISE_INACTIVE`.
+- Access token expired → `401 TOKEN_EXPIRED`; `code` field MUST be `TOKEN_EXPIRED`, not `UNAUTHENTICATED`.
+- Refresh with valid, unused refresh token → new `access_token` + `refresh_token` issued; old token invalidated.
+- Refresh with an already-used refresh token (rotation attack) → `401`; the entire token family for that user is invalidated.
+- Logout with valid JWT → refresh token revoked; subsequent refresh returns `401`.
+- Requests without `Authorization` header → `401 UNAUTHENTICATED`.
+
+## Device Registration
+
+- Register a new device → `DeviceRegistration` row created with `is_active = true`.
+- Register the same FCM token from the same user again → upserted: `app_version` and `last_seen_at` updated, no duplicate row.
+- Register a known FCM token that FCM reports as `registration-token-not-registered` → `DeviceRegistration.is_active = false`; token not included in next send batch.
+- Campaign send with one stale token in batch → stale token marked inactive; remaining tokens delivered successfully; no exception thrown.
+
+## Offline GPS Flush
+
+- Rider submits a batch of 10 offline GPS events in chronological order → all 10 persisted; `live_bike_position` emitted 10 times to the customer tracking room.
+- Rider submits the same batch twice (network retry) → deduplicated by timestamp; customer tracking room receives each position once.
+
+## Idempotency Key
+
+- `POST /api/v1/orders/quick-call` with `Idempotency-Key: X` → order created; response cached.
+- `POST /api/v1/orders/quick-call` again with the same `Idempotency-Key: X` → cached response returned; no second order created in the database.
+- `POST /api/v1/orders/:id/deliver` with `Idempotency-Key: Y` twice → delivery executed once; second call returns cached `200` without re-running settlement.
+
+## Push Notifications
+
+- New order created → all eligible online riders with `DeviceRegistration.is_active = true` receive FCM notification containing `data.deep_link = "dropputt://orders/{order_id}"`.
+- Milestone bonus granted → rider receives FCM notification with `data.deep_link = "dropputt://rider/earnings"`.
+- Campaign broadcast → all active customer device tokens for the franchise receive the notification; inactive tokens are excluded.
+
+## API Response Envelope
+
+- Every success response contains `success: true`, `data`, and `meta.request_id`.
+- Every error response contains `success: false`, `error.code`, `error.message`, and `meta.request_id`.
+- `X-Request-ID` response header matches `meta.request_id` in body.
+
+## Pagination
+
+- `GET /api/v1/orders?limit=5` → returns at most 5 orders; `meta.pagination.has_more = true` if more exist.
+- `GET /api/v1/orders?cursor={next_cursor}` → returns the next page; `meta.pagination.has_more = false` on last page.
+- `GET /api/v1/orders?limit=200` → capped at 100; response contains at most 100 records.
+
+---
+
+# 59. Final Architectural Invariants — Mobile Extensions
+
+Extend Section 45 with:
+
+```text
+21. Refresh tokens are stored hashed server-side (SHA-256) and rotated on every use;
+    a reuse of an invalidated token triggers revocation of all tokens for that user.
+22. FCM tokens are managed per-device via DeviceRegistration, not as a single
+    field on User or Customer. A user may have multiple active device registrations.
+23. All API responses (web and mobile) conform to the { success, data, error, meta }
+    envelope. No endpoint may return a bare object or bare array.
+24. All list endpoints return cursor-based pagination in meta.pagination.
+    Offset pagination is not permitted.
+25. The Idempotency-Key header is respected server-side for all mutating mobile requests;
+    the server caches the response for 24 hours for the same key.
+26. Background GPS updates on native mobile apps use platform background location APIs
+    (expo-task-manager + expo-location on React Native / Expo). The 5-second Socket.io
+    emission interval is preserved in the background task configuration.
+27. Offline GPS event batches are flushed via REST (POST /api/v1/riders/location-batch)
+    when Socket.io reconnect fails. Duplicate timestamps for the same order are
+    deduplicated server-side.
+28. Push notification payloads always include data.deep_link for mobile navigation.
+    The deep link URI corresponds exactly to the recipient's role and the event type.
+29. Android notification channels are pre-registered on first launch:
+    order_alerts (HIGH), order_updates (DEFAULT), promotions (LOW), earnings (DEFAULT).
+30. JWT access tokens expire in 15 minutes; refresh tokens expire in 30 days with
+    sliding-window rotation.
+31. JWTs are never stored in localStorage (web) or AsyncStorage (React Native).
+    Secure storage (httpOnly cookie / expo-secure-store / react-native-keychain) is mandatory.
+32. The dropputt:// deep link scheme validates token or ID against the authenticated
+    user before rendering data; unauthorized or invalid links redirect to home.
+```
+
+---
 
 This document is the authoritative production specification for the corrected multi-franchise hyperlocal delivery architecture.
