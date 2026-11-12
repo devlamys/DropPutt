@@ -7,7 +7,11 @@ import { z } from "zod";
 import { env } from "../config/env.js";
 import { prisma } from "../config/prisma.js";
 import { authenticate, signAccessToken } from "../middleware/auth.js";
-import { loginLimiter } from "../middleware/rateLimit.js";
+import {
+  loginAccountLimiter,
+  loginIpLimiter,
+  refreshLimiter,
+} from "../middleware/rateLimit.js";
 import { loadActiveFranchise, normalizeSlug } from "../middleware/resolveTenant.js";
 import { normalizePhone } from "../utils/phone.js";
 import { asyncHandler, ok, unauthenticated, validationError } from "../utils/response.js";
@@ -60,7 +64,8 @@ const loginSchema = z.object({
 // "admin" logs in the global Super Admin.
 router.post(
   "/login",
-  loginLimiter,
+  loginIpLimiter,
+  loginAccountLimiter,
   asyncHandler(async (req, res) => {
     const body = parse(loginSchema, req.body);
     const phone = normalizePhone(body.phone);
@@ -106,7 +111,7 @@ const refreshSchema = z.object({ refresh_token: z.string().min(32).max(256) });
 // POST /api/v1/auth/refresh — rotates the refresh token.
 router.post(
   "/refresh",
-  loginLimiter,
+  refreshLimiter,
   asyncHandler(async (req, res) => {
     const { refresh_token } = parse(refreshSchema, req.body);
     const stored = await prisma.refreshToken.findUnique({

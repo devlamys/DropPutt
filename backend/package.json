@@ -37,7 +37,7 @@
     "prisma": "^5.22.0"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.12.0"
   },
   "main": "src/server.js"
 }

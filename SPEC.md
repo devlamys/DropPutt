@@ -58,7 +58,7 @@ Verified local development versions:
 - Node.js v26.13.1
 - npm 11.20.0
 
-The minimum supported runtime remains Node.js 20.
+The minimum supported runtime is Node.js 20.12 (required for `process.loadEnvFile`).
 
 ### Frontend
 

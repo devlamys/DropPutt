@@ -3,14 +3,29 @@
 
 import crypto from "node:crypto";
 
+// process.loadEnvFile() was added in Node 20.12. Failing loudly beats
+// silently ignoring .env on an older runtime.
+if (typeof process.loadEnvFile !== "function") {
+  throw new Error(
+    `Node.js 20.12 or newer is required (running ${process.version}).`
+  );
+}
 try {
   process.loadEnvFile();
-} catch {
-  // No .env file — rely on the real environment.
+} catch (error) {
+  // A missing .env is fine (real environment variables are used instead);
+  // an unreadable or malformed one is not.
+  if (error?.code !== "ENOENT") throw error;
 }
 
 const NODE_ENV = process.env.NODE_ENV || "development";
 const isProduction = NODE_ENV === "production";
+
+if (isProduction && process.env.TRUST_PROXY === undefined) {
+  console.warn(
+    "[env] TRUST_PROXY is not set. Behind Nginx/Cloudflare every client then looks like one IP, so IP rate limits would throttle all users together. Set TRUST_PROXY to the number of proxies in front of the API (0 if none)."
+  );
+}
 
 function resolveJwtSecret() {
   const secret = process.env.JWT_SECRET;

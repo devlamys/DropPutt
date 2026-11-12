@@ -4,14 +4,35 @@ import http from "node:http";
 import { createApp } from "./app.js";
 import { env } from "./config/env.js";
 import { prisma } from "./config/prisma.js";
+import { startMaintenanceScheduler } from "./cron/maintenance.js";
 import { startPushScheduler } from "./cron/pushScheduler.js";
 import { initSocket } from "./socket/socketHandler.js";
+
+// Fail fast with a readable message instead of failing on the first request.
+if (!process.env.DATABASE_URL) {
+  console.error(
+    "[server] DATABASE_URL is not set. Copy .env.example to .env and set it."
+  );
+  process.exit(1);
+}
+try {
+  await prisma.$connect();
+} catch (error) {
+  console.error(
+    "[server] Cannot connect to the database. Check DATABASE_URL and that PostgreSQL is running.\n" +
+      String(error.message).trim().split("\n").pop()
+  );
+  process.exit(1);
+}
 
 const app = createApp();
 const server = http.createServer(app);
 const io = initSocket(server);
 
-if (env.enableCron) startPushScheduler();
+if (env.enableCron) {
+  startPushScheduler();
+  startMaintenanceScheduler();
+}
 
 server.listen(env.port, () => {
   console.log(`[server] DropPutt API listening on :${env.port} (${env.NODE_ENV})`);
