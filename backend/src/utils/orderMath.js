@@ -118,6 +118,29 @@ export function calculateAmountToCollect({
   }
 }
 
+// ─── §16 Vendor ↔ platform ledger ───────────────────────────────────────────
+
+/**
+ * Signed amount added to vendor.admin_payable_balance at settlement.
+ * Positive = the platform owes the vendor; negative = the vendor owes the
+ * platform.
+ *
+ *   COD / UPI_TO_ADMIN  the platform side holds the item money and owes the
+ *                       vendor vendor_earning (never the raw item_total).
+ *   PREPAID_AT_HOTEL    the vendor already holds the full item money, so the
+ *                       vendor owes the platform its commission.
+ */
+export function calculateVendorAdminPayable({
+  payment_method,
+  vendor_earning,
+  vendor_commission,
+}) {
+  if (payment_method === PAYMENT_METHODS.PREPAID_AT_HOTEL) {
+    return money(new Decimal(vendor_commission ?? 0).negated());
+  }
+  return money(vendor_earning);
+}
+
 // ─── §11 / §12 Four-way split ───────────────────────────────────────────────
 
 /**
@@ -238,8 +261,13 @@ export function calculateOrderFinancials({
     franchise_profit,
     super_admin_profit,
     amount_to_collect,
-    // §16: the payable is vendor_earning, never the raw item_total.
-    vendor_admin_payable: vendor_earning,
+    vendor_admin_payable: has_partner_vendor
+      ? calculateVendorAdminPayable({
+          payment_method,
+          vendor_earning,
+          vendor_commission,
+        })
+      : money(0),
   };
 }
 
