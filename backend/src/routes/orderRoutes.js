@@ -10,7 +10,7 @@ import { z } from "zod";
 import { prisma, TX_OPTIONS } from "../config/prisma.js";
 import { authenticate, loadRider, requireRole } from "../middleware/auth.js";
 import { idempotency } from "../middleware/idempotency.js";
-import { billImageUpload } from "../middleware/upload.js";
+import { billImageUpload, gatePhotoUpload } from "../middleware/upload.js";
 import { dispatchOrder } from "../services/dispatchService.js";
 import { emitTo, joinRiderToOrder, rooms } from "../socket/socketHandler.js";
 import { audit } from "../utils/audit.js";
@@ -881,6 +881,195 @@ router.post(
         ? null
         : { cash_collected: result.cash_collected, milestone: result.milestone },
     });
+  })
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Read endpoints for the Vendor and Rider apps
+// ─────────────────────────────────────────────────────────────────────────────
+
+const BOARD_STATUSES = ["RIDER_REQUESTED", ...ACTIVE_ORDER_STATUSES];
+
+const BOARD_INCLUDE = {
+  vendor: { select: { shop_name: true, address: true } },
+  items: { include: { product: { select: { name: true } } } },
+  rider: { select: { vehicle_number: true, user: { select: { name: true } } } },
+};
+
+function boardOrderView(order, role) {
+  const view = {
+    ...orderView(order),
+    shop_name: order.vendor?.shop_name ?? order.custom_shop_name ?? null,
+    items: order.items.map((item) => ({
+      product_id: item.product_id,
+      name: item.product.name,
+      quantity: item.quantity,
+      line_total: moneyStr(item.line_total),
+    })),
+  };
+  if (role === "VENDOR" || role === "FRANCHISE_ADMIN") {
+    // Vendors see who is coming, never what the rider earns.
+    delete view.rider_earning;
+    delete view.rider_tip;
+    view.rider = order.rider
+      ? { name: order.rider.user.name, vehicle_number: order.rider.vehicle_number }
+      : null;
+  }
+  return view;
+}
+
+// GET /api/v1/orders/zones — delivery zones of this franchise.
+router.get(
+  "/zones",
+  asyncHandler(async (req, res) => {
+    const zones = await prisma.zone.findMany({
+      where: { franchise_id: req.franchise_id },
+      orderBy: { delivery_fee: "asc" },
+    });
+    ok(res, {
+      zones: zones.map((zone) => ({
+        id: zone.id,
+        zone_name: zone.zone_name,
+        delivery_fee: moneyStr(zone.delivery_fee),
+      })),
+    });
+  })
+);
+
+// GET /api/v1/orders/active
+//   VENDOR          → this shop's open orders
+//   FRANCHISE_ADMIN → every open order of the franchise
+//   RIDER           → own active orders + unassigned requests to catch up on
+router.get(
+  "/active",
+  requireRole("VENDOR", "FRANCHISE_ADMIN", "RIDER"),
+  asyncHandler(async (req, res) => {
+    const franchise_id = req.franchise_id;
+    const role = req.user.role;
+
+    if (role === "RIDER") {
+      const rider = await prisma.rider.findFirst({
+        where: { user_id: req.user.id, franchise_id },
+      });
+      if (!rider) throw forbidden("Rider profile not found in this franchise");
+
+      const orders = await prisma.order.findMany({
+        where: { franchise_id, rider_id: rider.id, order_status: { in: ACTIVE_ORDER_STATUSES } },
+        orderBy: { created_at: "asc" },
+        include: BOARD_INCLUDE,
+      });
+
+      // Saved navigation aids for the customers on these orders.
+      const phones = [...new Set(orders.map((o) => o.customer_phone).filter(Boolean))];
+      const customers = phones.length
+        ? await prisma.customer.findMany({ where: { franchise_id, phone: { in: phones } } })
+        : [];
+      const byPhone = new Map(customers.map((c) => [c.phone, c]));
+
+      const open_requests =
+        rider.is_online && rider.is_approved && rider.cash_in_hand.lt(rider.max_cash_limit)
+          ? await prisma.order.findMany({
+              where: {
+                franchise_id,
+                order_status: "RIDER_REQUESTED",
+                order_type:
+                  rider.vehicle_type === "MINI_TRUCK" ? "MINI_TRUCK" : { not: "MINI_TRUCK" },
+              },
+              orderBy: { created_at: "asc" },
+              take: 20,
+              include: BOARD_INCLUDE,
+            })
+          : [];
+
+      return ok(res, {
+        orders: orders.map((order) => ({
+          ...boardOrderView(order, role),
+          navigation: order.customer_phone
+            ? navigationView(order, byPhone.get(order.customer_phone))
+            : null,
+        })),
+        open_requests: open_requests.map((order) => ({
+          order_id: order.id,
+          order_number: order.order_number,
+          order_type: order.order_type,
+          shop_name: order.vendor?.shop_name ?? order.custom_shop_name ?? null,
+          pickup_address: order.pickup_address,
+          drop_address: order.drop_address,
+          zone_id: order.zone_id,
+        })),
+      });
+    }
+
+    let vendor_id;
+    if (role === "VENDOR") {
+      const vendor = await prisma.vendor.findFirst({
+        where: { user_id: req.user.id, franchise_id },
+        select: { id: true },
+      });
+      if (!vendor) throw forbidden("Vendor profile not found in this franchise");
+      vendor_id = vendor.id;
+    }
+    const orders = await prisma.order.findMany({
+      where: {
+        franchise_id,
+        order_status: { in: BOARD_STATUSES },
+        ...(vendor_id ? { vendor_id } : {}),
+      },
+      orderBy: { created_at: "desc" },
+      take: 100,
+      include: BOARD_INCLUDE,
+    });
+    ok(res, { orders: orders.map((order) => boardOrderView(order, role)) });
+  })
+);
+
+// GET /api/v1/orders/customer-lookup?phone=... — pickup auto-lookup badge.
+router.get(
+  "/customer-lookup",
+  requireRole("RIDER"),
+  asyncHandler(async (req, res) => {
+    const phone = normalizePhone(req.query.phone);
+    if (!phone) throw fieldError("phone", "must be a valid 10-digit mobile number");
+    const customer = await prisma.customer.findUnique({
+      where: { franchise_id_phone: { franchise_id: req.franchise_id, phone } },
+    });
+    ok(res, {
+      phone,
+      found: Boolean(customer),
+      name: customer?.name ?? null,
+      is_location_verified: Boolean(customer?.is_location_verified),
+      voice_direction_url: customer?.voice_direction_url ?? null,
+      turning_point: customer?.turning_point ?? null,
+      house_image_url: customer?.house_image_url ?? null,
+      rider_delivery_note: customer?.rider_delivery_note ?? null,
+    });
+  })
+);
+
+// POST /api/v1/orders/:id/gate-photo — optional gate photo before delivery.
+router.post(
+  "/:id/gate-photo",
+  requireRole("RIDER"),
+  loadRider,
+  gatePhotoUpload,
+  asyncHandler(async (req, res) => {
+    const orderId = parseId(req.params.id);
+    if (!req.file) throw fieldError("gate_photo", "an image file is required");
+    const order = await prisma.order.findFirst({
+      where: {
+        id: orderId,
+        franchise_id: req.franchise_id,
+        rider_id: req.rider.id,
+        order_status: { in: ACTIVE_ORDER_STATUSES },
+      },
+      select: { id: true },
+    });
+    if (!order) throw orderNotFound();
+    const gate_photo_url = await saveUpload(
+      req.file,
+      `gates/${req.franchise_id}/${orderId}`
+    );
+    ok(res, { gate_photo_url });
   })
 );
 

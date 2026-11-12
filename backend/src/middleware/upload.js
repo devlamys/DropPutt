@@ -33,3 +33,10 @@ export const voiceUpload = uploader({
   mimeTypes: AUDIO_MIME_TYPES,
   maxBytes: 10 * 1024 * 1024,
 });
+
+/** multipart field `gate_photo` — JPEG / PNG / WebP up to 5 MB. */
+export const gatePhotoUpload = uploader({
+  field: "gate_photo",
+  mimeTypes: IMAGE_MIME_TYPES,
+  maxBytes: 5 * 1024 * 1024,
+});

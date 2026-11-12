@@ -118,6 +118,33 @@ async function main() {
     });
   }
 
+  // ─── Demo menus (created once; later availability changes are kept) ──────
+  const menus = {
+    "Farsa Hotel": [
+      { name: "Chicken Biryani", price: "160.00", slot_type: "LUNCH_ONLY" },
+      { name: "Porotta & Beef Curry", price: "120.00", slot_type: "ALL_DAY" },
+      { name: "Kerala Meals", price: "90.00", slot_type: "LUNCH_ONLY" },
+      { name: "Chicken Fried Rice", price: "140.00", slot_type: "DINNER_ONLY" },
+    ],
+    "Kizhissery Bakes": [
+      { name: "Chayakadi Combo (Tea + 2 Snacks)", price: "60.00", slot_type: "EVENING_SNACKS_3_TO_6", is_combo: true },
+      { name: "Banana Fritters (Pazhampori)", price: "30.00", slot_type: "EVENING_SNACKS_3_TO_6" },
+      { name: "Oreo Coolbar Shake", price: "90.00", slot_type: "ALL_DAY" },
+      { name: "Egg Puffs (2 pcs)", price: "40.00", slot_type: "ALL_DAY" },
+    ],
+  };
+  for (const [shop_name, products] of Object.entries(menus)) {
+    const vendor = await prisma.vendor.findFirst({ where: { franchise_id, shop_name } });
+    if (!vendor) continue;
+    for (const product of products) {
+      const exists = await prisma.product.findFirst({
+        where: { vendor_id: vendor.id, name: product.name },
+        select: { id: true },
+      });
+      if (!exists) await prisma.product.create({ data: { ...product, vendor_id: vendor.id } });
+    }
+  }
+
   // ─── Riders ───────────────────────────────────────────────────────────────
   const insurance_expiry = new Date("2027-12-31T00:00:00+05:30");
   const riders = [

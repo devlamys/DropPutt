@@ -10,6 +10,8 @@ import { requestContext } from "./middleware/requestContext.js";
 import { resolveTenant } from "./middleware/resolveTenant.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
+import riderRoutes from "./routes/riderRoutes.js";
+import vendorRoutes from "./routes/vendorRoutes.js";
 import marketplaceRoutes from "./routes/marketplaceRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import publicRoutes from "./routes/publicRoutes.js";
@@ -51,6 +53,8 @@ export function createApp() {
   app.use("/api/v1/orders", resolveTenant, orderRoutes);
   app.use("/api/v1/marketplace", resolveTenant, marketplaceRoutes);
   app.use("/api/v1/admin", resolveTenant, adminRoutes);
+  app.use("/api/v1/rider", resolveTenant, riderRoutes);
+  app.use("/api/v1/vendor", resolveTenant, vendorRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
