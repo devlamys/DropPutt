@@ -7,6 +7,7 @@ import PickupForm from "../components/rider/PickupForm.jsx";
 import RiderTopBar from "../components/rider/RiderTopBar.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useFleetPing } from "../hooks/useFleetPing.js";
 import { useRiderTracking } from "../hooks/useRiderTracking.js";
 import { useSocket } from "../hooks/useSocket.js";
 import api, { getErrorMessage } from "../utils/api.js";
@@ -102,6 +103,7 @@ export default function RiderDashboard() {
   }, [queue.length]);
 
   const { position, tracking, error: trackingError } = useRiderTracking({ socket, orders });
+  useFleetPing({ socket, enabled: online && !tracking });
 
   async function toggleOnline() {
     unlockAlarm(); // this tap is the gesture that lets the alarm make sound

@@ -111,6 +111,55 @@ export async function applyRiderLocation(rider, payload, { authCache, exceptSock
     ? exceptSocket.to(rooms.order(payload.order_id))
     : io?.to(rooms.order(payload.order_id));
   target?.emit("live_bike_position", event);
+  emitFleetMove(rider, payload);
+  return true;
+}
+
+/** Franchise admins' Fleet Radar (franchise:{id} room). */
+function emitFleetMove(rider, payload) {
+  io?.to(rooms.franchise(rider.franchise_id)).emit("fleet_rider_move", {
+    rider_id: rider.id,
+    order_id: payload.order_id ?? null,
+    lat: payload.lat,
+    lng: payload.lng,
+    accuracy: payload.accuracy ?? null,
+    timestamp: payload.timestamp,
+  });
+}
+
+const fleetPingSchema = locationSchema.omit({ order_id: true });
+const FLEET_PING_MIN_MS = 10 * 1000;
+
+/**
+ * Position of an online rider who is not on a delivery (Fleet Radar only;
+ * nothing goes to customers). Throttled per socket.
+ */
+async function applyFleetPing(socket, payload) {
+  const { rider } = socket.data;
+  const now = Date.now();
+  if (socket.data.last_fleet_ping && now - socket.data.last_fleet_ping < FLEET_PING_MIN_MS) {
+    return false;
+  }
+  if (payload.timestamp > now + 60 * 1000 || payload.timestamp < now - 5 * 60 * 1000) {
+    return false;
+  }
+  socket.data.last_fleet_ping = now;
+
+  const seenAt = new Date(payload.timestamp);
+  const { count } = await prisma.rider.updateMany({
+    where: {
+      id: rider.id,
+      is_online: true,
+      OR: [{ last_location_at: null }, { last_location_at: { lte: seenAt } }],
+    },
+    data: {
+      current_lat: payload.lat.toFixed(7),
+      current_lng: payload.lng.toFixed(7),
+      last_location_at: seenAt,
+    },
+  });
+  if (count === 0) return false;
+  emitFleetMove(rider, payload);
   return true;
 }
 
@@ -137,6 +186,13 @@ async function authenticateSocket(socket) {
       });
       if (!vendor) throw new Error("FORBIDDEN");
       socket.data.vendor = vendor;
+    } else if (user.role === "SUPER_ADMIN" && typeof auth.franchise_slug === "string") {
+      // The Super Admin watches whichever franchise they have selected.
+      const franchise = await prisma.franchise.findUnique({
+        where: { slug: auth.franchise_slug.trim().toLowerCase() },
+        select: { id: true },
+      });
+      if (franchise) socket.data.watch_franchise_id = franchise.id;
     }
     return;
   }
@@ -176,6 +232,8 @@ async function joinInitialRooms(socket) {
     socket.join(rooms.vendor(vendor.id));
   } else if (user?.role === "FRANCHISE_ADMIN" && user.franchise_id) {
     socket.join(rooms.franchise(user.franchise_id));
+  } else if (user?.role === "SUPER_ADMIN" && socket.data.watch_franchise_id) {
+    socket.join(rooms.franchise(socket.data.watch_franchise_id));
   }
 }
 
@@ -194,6 +252,24 @@ export function initSocket(httpServer) {
   });
 
   io.on("connection", (socket) => {
+    socket.on("rider_fleet_ping", async (raw, ack) => {
+      const reply = (result) => typeof ack === "function" && ack(result);
+      try {
+        if (!socket.data.rider) return reply({ ok: false, code: "FORBIDDEN" });
+        if (socket.data.token_exp_ms <= Date.now()) {
+          reply({ ok: false, code: "TOKEN_EXPIRED" });
+          socket.emit("auth_error", { code: "TOKEN_EXPIRED" });
+          return socket.disconnect(true);
+        }
+        const parsed = fleetPingSchema.safeParse(raw);
+        if (!parsed.success) return reply({ ok: false, code: "VALIDATION_ERROR" });
+        reply({ ok: await applyFleetPing(socket, parsed.data) });
+      } catch (error) {
+        console.error("[socket] rider_fleet_ping failed:", error.message);
+        reply({ ok: false, code: "INTERNAL_ERROR" });
+      }
+    });
+
     joinInitialRooms(socket).catch((error) => {
       console.error("[socket] failed to join rooms:", error.message);
       socket.disconnect(true);

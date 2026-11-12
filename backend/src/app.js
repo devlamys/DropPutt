@@ -11,6 +11,7 @@ import { resolveTenant } from "./middleware/resolveTenant.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import riderRoutes from "./routes/riderRoutes.js";
+import superRoutes from "./routes/superRoutes.js";
 import vendorRoutes from "./routes/vendorRoutes.js";
 import marketplaceRoutes from "./routes/marketplaceRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
@@ -55,6 +56,7 @@ export function createApp() {
   app.use("/api/v1/admin", resolveTenant, adminRoutes);
   app.use("/api/v1/rider", resolveTenant, riderRoutes);
   app.use("/api/v1/vendor", resolveTenant, vendorRoutes);
+  app.use("/api/v1/super", superRoutes); // cross-franchise, Super Admin only
 
   app.use(notFoundHandler);
   app.use(errorHandler);

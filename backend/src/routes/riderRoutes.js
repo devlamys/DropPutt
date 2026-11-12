@@ -4,6 +4,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../config/prisma.js";
 import { authenticate, loadRider, requireRole } from "../middleware/auth.js";
+import { emitTo, rooms } from "../socket/socketHandler.js";
 import { AppError, asyncHandler, ok } from "../utils/response.js";
 import { moneyStr } from "../utils/serializers.js";
 import { istDayRange } from "../utils/time.js";
@@ -78,6 +79,10 @@ router.patch(
     const rider = await prisma.rider.update({
       where: { id: req.rider.id },
       data: { is_online },
+    });
+    emitTo(rooms.franchise(req.franchise_id), "fleet_rider_status", {
+      rider_id: rider.id,
+      is_online,
     });
     ok(res, await statusView(rider, req.franchise_id));
   })

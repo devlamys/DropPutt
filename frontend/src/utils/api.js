@@ -13,7 +13,8 @@ const DEFAULT_SLUG = (import.meta.env.VITE_DEFAULT_FRANCHISE_SLUG || "kizhissery
   .toLowerCase();
 const API_ORIGIN = (import.meta.env.VITE_API_ORIGIN || "").replace(/\/+$/, "");
 export const API_BASE_URL = `${API_ORIGIN}/api/v1`;
-export const SOCKET_URL = API_ORIGIN || undefined; // same origin in dev (proxied)
+export const SOCKET_URL = API_ORIGIN || "/"; // same origin (proxied by Vite / tunnel)
+export const SOCKET_PATH = "/socket.io";
 
 const STORAGE_KEY = "dropputt.session";
 const ACTING_KEY = "dropputt.acting_slug";
@@ -93,6 +94,7 @@ export function getRequestSlug() {
 }
 
 export const setActingSlug = (slug) => writeJSON(ACTING_KEY, slug || null);
+export const getActingSlug = () => readJSON(ACTING_KEY);
 
 // ---- axios instance -------------------------------------------------------
 

@@ -7,7 +7,9 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     server: {
+      host: true, // listen on all interfaces (phones / tunnels)
       port: 5173,
+      allowedHosts: true, // Vite 5+ blocks unknown Host headers, e.g. *.trycloudflare.com
       // Same-origin in development: no CORS, and sockets/uploads work too.
       proxy: {
         "/api": { target: backend, changeOrigin: true },

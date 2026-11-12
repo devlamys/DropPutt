@@ -3,7 +3,12 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { getRequestSlug } from "../utils/api.js";
 
-const HOME_BY_ROLE = { VENDOR: "/vendor", RIDER: "/rider" };
+const HOME_BY_ROLE = {
+  VENDOR: "/vendor",
+  RIDER: "/rider",
+  FRANCHISE_ADMIN: "/admin",
+  SUPER_ADMIN: "/admin",
+};
 
 const ROLE_LABELS = {
   SUPER_ADMIN: "Super Admin",

@@ -64,7 +64,16 @@ router.get(
   asyncHandler(async (req, res) => {
     const order = await prisma.order.findUnique({
       where: { location_token: requireToken(req) },
-      include: { vendor: { select: { shop_name: true } }, rider: riderPositionSelect },
+      include: {
+        vendor: { select: { shop_name: true } },
+        rider: {
+          select: {
+            ...riderPositionSelect.select,
+            vehicle_type: true,
+            user: { select: { name: true } },
+          },
+        },
+      },
     });
     if (!order) throw orderNotFound();
 
@@ -81,6 +90,16 @@ router.get(
       grand_total: moneyStr(order.grand_total),
       amount_to_collect: moneyStr(order.amount_to_collect),
       has_drop_location: order.drop_lat !== null && order.drop_lng !== null,
+      // The customer's own pin, so the page can show "home" on the map.
+      drop_lat: coordStr(order.drop_lat),
+      drop_lng: coordStr(order.drop_lng),
+      // First name and vehicle only — never phone, KYC or vehicle number (§28).
+      rider: order.rider
+        ? {
+            first_name: order.rider.user.name.trim().split(/\s+/)[0],
+            vehicle_type: order.rider.vehicle_type,
+          }
+        : null,
       turning_point: order.turning_point,
       has_voice_note: Boolean(order.voice_note_url),
       tip_options: ALLOWED_TIP_AMOUNTS,

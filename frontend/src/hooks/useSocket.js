@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
-import { SOCKET_URL, ensureFreshToken } from "../utils/api.js";
+import { SOCKET_PATH, SOCKET_URL, ensureFreshToken } from "../utils/api.js";
 
 /**
  * One authenticated Socket.io connection for the signed-in user.
@@ -11,15 +11,16 @@ import { SOCKET_URL, ensureFreshToken } from "../utils/api.js";
  * every (re)connect, and a server-side disconnect for an expired token
  * triggers a reconnect.
  */
-export function useSocket(handlers) {
+export function useSocket(handlers, { auth: extraAuth } = {}) {
   const [state, setState] = useState({ socket: null, connected: false });
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
 
   useEffect(() => {
     const socket = io(SOCKET_URL, {
+      path: SOCKET_PATH,
       auth: (callback) => {
-        ensureFreshToken().then((token) => callback({ token }));
+        ensureFreshToken().then((token) => callback({ ...extraAuth, token }));
       },
       transports: ["websocket", "polling"],
       reconnectionDelayMax: 10_000,

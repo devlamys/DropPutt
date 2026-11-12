@@ -8,6 +8,10 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma, TX_OPTIONS } from "../config/prisma.js";
 import { authenticate, requireRole } from "../middleware/auth.js";
+import { emitTo, rooms } from "../socket/socketHandler.js";
+import { ACTIVE_ORDER_STATUSES } from "../utils/constants.js";
+import { coordStr } from "../utils/serializers.js";
+import { istDayRange } from "../utils/time.js";
 import { idempotency } from "../middleware/idempotency.js";
 import { audit } from "../utils/audit.js";
 import { addMoney, money, subtractMoney } from "../utils/orderMath.js";
@@ -220,6 +224,147 @@ router.get(
       },
       { pagination: page.pagination }
     );
+  })
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin dashboard
+// ─────────────────────────────────────────────────────────────────────────────
+
+const franchiseSettingsView = (franchise) => ({
+  id: franchise.id,
+  name: franchise.name,
+  slug: franchise.slug,
+  is_active: franchise.is_active,
+  wallet_balance: moneyStr(franchise.wallet_balance),
+  min_balance_limit: moneyStr(franchise.min_balance_limit),
+  royalty_per_order: moneyStr(franchise.royalty_per_order),
+  is_launch_promo_active: franchise.is_launch_promo_active,
+  rain_surge_fee: moneyStr(franchise.rain_surge_fee),
+  daily_milestone_target: franchise.daily_milestone_target,
+  daily_milestone_bonus: moneyStr(franchise.daily_milestone_bonus),
+});
+
+// GET /api/v1/admin/overview — settings, fleet positions, nightly ledger.
+router.get(
+  "/overview",
+  requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
+  asyncHandler(async (req, res) => {
+    const franchise_id = req.franchise_id;
+    const day = istDayRange();
+    const [franchise, riders, active, deliveredToday, openRequests, cashToday] =
+      await Promise.all([
+        prisma.franchise.findUnique({ where: { id: franchise_id } }),
+        prisma.rider.findMany({
+          where: { franchise_id },
+          orderBy: { id: "asc" },
+          include: { user: { select: { name: true, phone: true, is_active: true } } },
+        }),
+        prisma.order.groupBy({
+          by: ["rider_id"],
+          where: { franchise_id, order_status: { in: ACTIVE_ORDER_STATUSES } },
+          _count: { _all: true },
+        }),
+        prisma.order.groupBy({
+          by: ["rider_id"],
+          where: {
+            franchise_id,
+            order_status: "DELIVERED",
+            delivered_at: { gte: day.start, lt: day.end },
+          },
+          _count: { _all: true },
+        }),
+        prisma.order.count({ where: { franchise_id, order_status: "RIDER_REQUESTED" } }),
+        prisma.settlementEntry.groupBy({
+          by: ["rider_id"],
+          where: {
+            franchise_id,
+            party: "RIDER_CASH",
+            created_at: { gte: day.start, lt: day.end },
+          },
+          _sum: { amount: true },
+        }),
+      ]);
+    const count = (rows, riderId) =>
+      rows.find((row) => row.rider_id === riderId)?._count._all ?? 0;
+
+    ok(res, {
+      franchise: franchiseSettingsView(franchise),
+      date: day.date,
+      open_requests: openRequests,
+      riders: riders.map((rider) => ({
+        id: rider.id,
+        name: rider.user.name,
+        phone: rider.user.phone,
+        is_active: rider.user.is_active,
+        is_online: rider.is_online,
+        is_approved: rider.is_approved,
+        vehicle_type: rider.vehicle_type,
+        vehicle_number: rider.vehicle_number,
+        cash_in_hand: moneyStr(rider.cash_in_hand),
+        max_cash_limit: moneyStr(rider.max_cash_limit),
+        // At the limit a rider cannot accept orders or go online (§15).
+        is_cash_locked: rider.cash_in_hand.gte(rider.max_cash_limit),
+        wallet_earnings: moneyStr(rider.wallet_earnings),
+        active_orders: count(active, rider.id),
+        delivered_today: count(deliveredToday, rider.id),
+        cash_collected_today: moneyStr(
+          cashToday.find((row) => row.rider_id === rider.id)?._sum.amount ?? 0
+        ),
+        lat: coordStr(rider.current_lat),
+        lng: coordStr(rider.current_lng),
+        last_location_at: rider.last_location_at,
+      })),
+    });
+  })
+);
+
+// PATCH /api/v1/admin/franchise/settings — launch promo and rain surge.
+const settingsSchema = z
+  .object({
+    is_launch_promo_active: z.boolean().optional(),
+    rain_surge_fee: zMoney.optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, { message: "nothing to update" })
+  .refine((body) => body.rain_surge_fee === undefined || Number(body.rain_surge_fee) <= 200, {
+    message: "rain_surge_fee must be at most 200",
+    path: ["rain_surge_fee"],
+  });
+
+router.patch(
+  "/franchise/settings",
+  requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
+  asyncHandler(async (req, res) => {
+    const body = parse(settingsSchema, req.body);
+    const before = await prisma.franchise.findUnique({ where: { id: req.franchise_id } });
+    const franchise = await prisma.franchise.update({
+      where: { id: req.franchise_id },
+      data: {
+        ...(body.is_launch_promo_active !== undefined
+          ? { is_launch_promo_active: body.is_launch_promo_active }
+          : {}),
+        ...(body.rain_surge_fee !== undefined
+          ? { rain_surge_fee: moneyStr(body.rain_surge_fee) }
+          : {}),
+      },
+    });
+    audit("franchise.settings", {
+      franchise_id: req.franchise_id,
+      by_user_id: req.user.id,
+      before: {
+        is_launch_promo_active: before.is_launch_promo_active,
+        rain_surge_fee: moneyStr(before.rain_surge_fee),
+      },
+      after: {
+        is_launch_promo_active: franchise.is_launch_promo_active,
+        rain_surge_fee: moneyStr(franchise.rain_surge_fee),
+      },
+    });
+    emitTo(rooms.franchise(req.franchise_id), "franchise_settings_changed", {
+      is_launch_promo_active: franchise.is_launch_promo_active,
+      rain_surge_fee: moneyStr(franchise.rain_surge_fee),
+    });
+    ok(res, { franchise: franchiseSettingsView(franchise) });
   })
 );
 

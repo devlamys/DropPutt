@@ -1,7 +1,9 @@
 export const inr = (value) => {
   const n = Number(value);
   if (!Number.isFinite(n)) return "₹0";
-  return `₹${n.toLocaleString("en-IN", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
+  const abs = Math.abs(n);
+  const text = abs.toLocaleString("en-IN", { minimumFractionDigits: abs % 1 ? 2 : 0, maximumFractionDigits: 2 });
+  return `${n < 0 ? "−" : ""}₹${text}`;
 };
 
 export function minutesAgo(iso, now = Date.now()) {
