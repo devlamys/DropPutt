@@ -1,8 +1,9 @@
-import { Building2, Gauge, Loader2, LogOut, Radar, Settings2, Wallet } from "lucide-react";
+import { Building2, Gauge, Loader2, LogOut, Radar, Receipt, Settings2, Wallet } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ControlsPanel from "../components/admin/ControlsPanel.jsx";
 import FleetRadar from "../components/admin/FleetRadar.jsx";
 import FranchisesPanel from "../components/admin/FranchisesPanel.jsx";
+import ReconciliationPanel from "../components/admin/ReconciliationPanel.jsx";
 import SettlementLedger from "../components/admin/SettlementLedger.jsx";
 import WalletPassbook from "../components/admin/WalletPassbook.jsx";
 import { useToast } from "../components/Toast.jsx";
@@ -15,6 +16,7 @@ const TABS = [
   { key: "ledger", label: "Settlement", icon: Gauge },
   { key: "controls", label: "Promo & Surge", icon: Settings2 },
   { key: "wallet", label: "Wallet", icon: Wallet },
+  { key: "reconcile", label: "Reconcile", icon: Receipt },
   { key: "franchises", label: "Franchises", icon: Building2, superOnly: true },
 ];
 
@@ -218,6 +220,7 @@ function FranchiseWorkspace({ slug, tab, isSuper, franchises, onSelectFranchise,
           toast={toast}
         />
       )}
+      {tab === "reconcile" && <ReconciliationPanel toast={toast} />}
       {tab === "franchises" && isSuper && (
         <FranchisesPanel
           franchises={franchises}

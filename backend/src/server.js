@@ -4,6 +4,8 @@ import http from "node:http";
 import { createApp } from "./app.js";
 import { env } from "./config/env.js";
 import { prisma } from "./config/prisma.js";
+import { closeRedis, connectRedis, createPubSub } from "./config/redis.js";
+import { createAdapter } from "@socket.io/redis-adapter";
 import { startMaintenanceScheduler } from "./cron/maintenance.js";
 import { startPushScheduler } from "./cron/pushScheduler.js";
 import { initSocket } from "./socket/socketHandler.js";
@@ -25,9 +27,24 @@ try {
   process.exit(1);
 }
 
+// Redis is optional (one replica needs none). In production a configured but
+// unreachable Redis stops the process rather than splitting Socket.io rooms.
+try {
+  await connectRedis();
+} catch (error) {
+  console.error(`[server] ${error.message}`);
+  process.exit(1);
+}
+
 const app = createApp();
 const server = http.createServer(app);
 const io = initSocket(server);
+
+const pubsub = await createPubSub();
+if (pubsub) {
+  io.adapter(createAdapter(pubsub.pub, pubsub.sub));
+  console.log("[server] Socket.io Redis adapter enabled");
+}
 
 if (env.enableCron) {
   startPushScheduler();
@@ -48,6 +65,7 @@ async function shutdown(signal) {
   const forceExit = setTimeout(() => process.exit(1), 10_000);
   forceExit.unref();
   io.close(async () => {
+    await closeRedis();
     await prisma.$disconnect().catch(() => {});
     process.exit(0);
   });

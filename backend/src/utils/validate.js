@@ -14,10 +14,17 @@ export function parse(schema, input) {
   );
 }
 
+// Database ids are 32-bit integers: anything larger would reach Prisma and
+// come back as an internal error instead of a clean validation error.
+export const MAX_ID = 2_147_483_647;
+
+/** Positive database id in a request body or query. */
+export const zId = z.coerce.number().int().positive().max(MAX_ID);
+
 /** Positive integer route param (":id"). */
 export function parseId(value, name = "id") {
   const id = Number(value);
-  if (!Number.isInteger(id) || id <= 0) {
+  if (!Number.isInteger(id) || id <= 0 || id > MAX_ID) {
     throw validationError("Request validation failed", [
       { field: name, issue: "must be a positive integer" },
     ]);

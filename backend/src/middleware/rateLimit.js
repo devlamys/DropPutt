@@ -62,3 +62,12 @@ export const publicWriteLimiter = limiter({
   limit: 20,
   keyGenerator: (req) => `link:${req.params.token}`,
 });
+
+// Customer checkout creates real rider requests: limit per phone number
+// (the identity) on top of a broad per-IP flood limit.
+export const checkoutIpLimiter = limiter({ windowMs: 10 * MINUTE, limit: 60 });
+export const checkoutPhoneLimiter = limiter({
+  windowMs: 10 * MINUTE,
+  limit: 5,
+  keyGenerator: (req) => `checkout:${normalizePhone(req.body?.customer_phone) || req.ip}`,
+});

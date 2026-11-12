@@ -1,10 +1,11 @@
 // Housekeeping jobs (SPEC §51.4 and §50.4). All times are Asia/Kolkata.
 //
-// Every job is an idempotent DELETE, so running on several replicas is
-// harmless (ENABLE_CRON=false still limits it to one).
+// Every job is an idempotent DELETE, and the schedules also take a run-once
+// lock (jobLock.js), so several replicas do not repeat the work.
 
 import cron from "node-cron";
 import { prisma } from "../config/prisma.js";
+import { runOnce } from "./jobLock.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -71,7 +72,7 @@ export function startMaintenanceScheduler() {
   started = true;
 
   const options = { timezone: "Asia/Kolkata" };
-  cron.schedule("30 3 * * *", () => void runDailyMaintenance(), options); // daily 03:30
-  cron.schedule("45 3 * * 0", () => void runWeeklyMaintenance(), options); // Sundays 03:45
+  cron.schedule("30 3 * * *", () => void runOnce("maintenance-daily", runDailyMaintenance), options); // daily 03:30
+  cron.schedule("45 3 * * 0", () => void runOnce("maintenance-weekly", runWeeklyMaintenance), options); // Sundays 03:45
   console.log("[cron] maintenance scheduler started (03:30 daily, Sun 03:45 weekly, Asia/Kolkata)");
 }

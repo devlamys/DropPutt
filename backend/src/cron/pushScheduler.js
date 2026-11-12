@@ -6,6 +6,7 @@
 
 import cron from "node-cron";
 import { prisma } from "../config/prisma.js";
+import { runOnce } from "./jobLock.js";
 import { sendToTokens } from "../utils/push.js";
 
 const CRON_TIME = "0 16 * * *";
@@ -68,11 +69,8 @@ export function startPushScheduler() {
 
   cron.schedule(
     CRON_TIME,
-    () => {
-      runCampaigns().catch((error) =>
-        console.error("[cron] push scheduler run failed:", error.message)
-      );
-    },
+    // Run-once lock: with several replicas only one sends the campaigns.
+    () => void runOnce("push-campaigns", () => runCampaigns()),
     { timezone: "Asia/Kolkata" }
   );
   console.log("[cron] push scheduler started (16:00 Asia/Kolkata)");

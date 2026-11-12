@@ -102,7 +102,7 @@ export default function RiderDashboard() {
     return stopAlarm;
   }, [queue.length]);
 
-  const { position, tracking, error: trackingError } = useRiderTracking({ socket, orders });
+  const { position, tracking, error: trackingError, queued } = useRiderTracking({ socket, orders });
   useFleetPing({ socket, enabled: online && !tracking });
 
   async function toggleOnline() {
@@ -157,6 +157,11 @@ export default function RiderDashboard() {
           </div>
         ) : (
           <>
+            {tracking && queued > 0 && (
+              <p className="rounded-xl bg-sky-50 px-3 py-2 text-sm text-sky-800">
+                Offline — {queued} location point{queued === 1 ? "" : "s"} saved, will upload when you are back online.
+              </p>
+            )}
             {trackingError && tracking && (
               <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">{trackingError}</p>
             )}

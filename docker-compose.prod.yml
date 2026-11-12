@@ -1,0 +1,118 @@
+# DropPutt production stack.
+#
+#   cp deploy/compose.env.example deploy/compose.env      # then edit
+#   cp deploy/api.env.example     deploy/api.env          # then edit
+#   docker compose -f docker-compose.prod.yml --env-file deploy/compose.env up -d --build
+#
+# See DEPLOY.md for DNS, TLS certificates, Firebase, R2 and first-run steps.
+
+name: dropputt
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dropputt
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/compose.env}
+      POSTGRES_DB: dropputt
+      TZ: Asia/Kolkata
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dropputt -d dropputt"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # Not published: only the other containers can reach the database.
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Cache-like use only (Socket.io adapter, GPS replay keys): nothing here is precious.
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # One-shot: applies pending migrations, then exits. The API waits for it.
+  migrate:
+    build: ./backend
+    image: dropputt-api:${APP_VERSION:-latest}
+    command: ["npx", "prisma", "migrate", "deploy"]
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://dropputt:${POSTGRES_PASSWORD}@postgres:5432/dropputt?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    image: dropputt-api:${APP_VERSION:-latest}
+    restart: unless-stopped
+    env_file: ./deploy/api.env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: postgresql://dropputt:${POSTGRES_PASSWORD}@postgres:5432/dropputt?schema=public
+      REDIS_URL: redis://redis:6379
+      # Scheduled jobs take a database run-once lock, so every replica may
+      # keep ENABLE_CRON on without sending campaigns twice.
+    volumes:
+      # Firebase service account JSON (see DEPLOY.md); optional until push is set up.
+      - ./deploy/secrets:/run/secrets:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    # Scale out with:  docker compose ... up -d --scale api=3   (then restart web)
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: dropputt-web:${APP_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in deploy/compose.env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/certs:/etc/nginx/certs:ro        # fullchain.pem + privkey.pem
+      - acme:/var/www/acme
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # Nightly compressed dump into ./backups, keeping BACKUP_KEEP_DAYS days.
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGUSER: dropputt
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: dropputt
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      TZ: Asia/Kolkata
+    volumes:
+      - ./backups:/backups
+      - ./deploy/backup.sh:/backup.sh:ro
+    entrypoint: ["/bin/sh", "-c", "while true; do /bin/sh /backup.sh; sleep 86400; done"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully   # first dump should contain the schema
+
+volumes:
+  pgdata:
+  acme:

@@ -7,7 +7,10 @@ import Login from "./pages/Login.jsx";
 // One chunk per app, so the customer's Magic Link page stays light on rural data.
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard.jsx"));
 const CustomerDropPage = lazy(() => import("./pages/CustomerDropPage.jsx"));
+const ShopPage = lazy(() => import("./pages/ShopPage.jsx"));
 const RiderDashboard = lazy(() => import("./pages/RiderDashboard.jsx"));
+const RiderEarnings = lazy(() => import("./pages/RiderEarnings.jsx"));
+const VendorHistory = lazy(() => import("./pages/VendorHistory.jsx"));
 const VendorDashboard = lazy(() => import("./pages/VendorDashboard.jsx"));
 
 function PageLoader() {
@@ -42,6 +45,8 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       {/* Public Magic Link — the token is the credential, no login. */}
+      {/* Public storefront: customers order without an account. */}
+      <Route path="/shop" element={<ShopPage />} />
       <Route path="/drop/:token" element={<CustomerDropPage />} />
       <Route
         path="/admin"
@@ -56,6 +61,22 @@ export default function App() {
         element={
           <RequireAuth roles={["VENDOR"]}>
             <VendorDashboard />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/vendor/history"
+        element={
+          <RequireAuth roles={["VENDOR"]}>
+            <VendorHistory />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/rider/earnings"
+        element={
+          <RequireAuth roles={["RIDER"]}>
+            <RiderEarnings />
           </RequireAuth>
         }
       />

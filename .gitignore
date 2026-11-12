@@ -1,0 +1,9 @@
+
+# Deployment secrets and generated files
+deploy/compose.env
+deploy/api.env
+deploy/certs/*
+!deploy/certs/.gitkeep
+deploy/secrets/*
+!deploy/secrets/.gitkeep
+backups/

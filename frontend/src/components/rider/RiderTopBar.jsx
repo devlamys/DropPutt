@@ -1,4 +1,5 @@
-import { Loader2, LogOut, Power, Wifi, WifiOff } from "lucide-react";
+import { IndianRupee, Loader2, LogOut, Power, Wifi, WifiOff } from "lucide-react";
+import { Link } from "react-router-dom";
 import { inr } from "../../utils/format.js";
 
 function ProgressBar({ label, value, max, right, tone }) {
@@ -67,6 +68,13 @@ export default function RiderTopBar({
             {toggling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}
             {online ? "Online" : "Offline"}
           </button>
+          <Link
+            to="/rider/earnings"
+            aria-label="My earnings"
+            className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
+          >
+            <IndianRupee className="h-5 w-5" />
+          </Link>
           <button
             type="button"
             onClick={onSignOut}

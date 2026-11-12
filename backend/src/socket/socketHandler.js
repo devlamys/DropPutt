@@ -15,8 +15,10 @@ import { Server } from "socket.io";
 import { z } from "zod";
 import { env } from "../config/env.js";
 import { prisma } from "../config/prisma.js";
+import { getRedis } from "../config/redis.js";
 import { resolveUserFromToken } from "../middleware/auth.js";
 import { ACTIVE_ORDER_STATUSES } from "../utils/constants.js";
+import { MAX_ID } from "../utils/validate.js";
 
 export const rooms = Object.freeze({
   franchise: (id) => `franchise:${id}`,
@@ -43,8 +45,48 @@ export function joinRiderToOrder(riderId, orderId) {
 const LOCATION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
 const ORDER_AUTH_CACHE_MS = 15 * 1000;
 
+// Replay protection (SPEC §50.1): a timestamp already applied for an order is
+// ignored. Shared through Redis when several replicas run; otherwise a
+// bounded in-process set.
+const SEEN_MAX_ORDERS = 500;
+const SEEN_MAX_PER_ORDER = 1000;
+const SEEN_TTL_SECONDS = 2 * 60 * 60; // points older than 2 h are rejected anyway
+const seenTimestamps = new Map(); // order_id -> Set<timestamp>
+
+function markSeenInMemory(orderId, timestamp) {
+  let seen = seenTimestamps.get(orderId);
+  if (!seen) {
+    if (seenTimestamps.size >= SEEN_MAX_ORDERS) {
+      seenTimestamps.delete(seenTimestamps.keys().next().value);
+    }
+    seen = new Set();
+    seenTimestamps.set(orderId, seen);
+  }
+  if (seen.has(timestamp)) return false;
+  if (seen.size >= SEEN_MAX_PER_ORDER) seen.delete(seen.values().next().value);
+  seen.add(timestamp);
+  return true;
+}
+
+/** true = first time this point is seen. */
+async function markSeen(orderId, timestamp) {
+  const redis = getRedis();
+  if (redis) {
+    try {
+      const stored = await redis.set(`dp:loc:${orderId}:${timestamp}`, "1", {
+        NX: true,
+        EX: SEEN_TTL_SECONDS,
+      });
+      return stored === "OK";
+    } catch (error) {
+      console.error("[socket] redis dedupe failed, using memory:", error.message);
+    }
+  }
+  return markSeenInMemory(orderId, timestamp);
+}
+
 const locationSchema = z.object({
-  order_id: z.number().int().positive(),
+  order_id: z.number().int().positive().max(MAX_ID),
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   accuracy: z.number().min(0).max(100000).optional(),
@@ -56,7 +98,9 @@ const locationSchema = z.object({
  * `live_bike_position` to the order room. Shared by the socket event and
  * (later) the REST offline-flush endpoint.
  *
- * `rider` is server-derived: { id, franchise_id }. Returns true if emitted.
+ * `rider` is server-derived: { id, franchise_id }.
+ * Returns true if emitted, "duplicate" if that timestamp was already applied,
+ * false if rejected.
  */
 export async function applyRiderLocation(rider, payload, { authCache, exceptSocket } = {}) {
   const now = Date.now();
@@ -83,6 +127,8 @@ export async function applyRiderLocation(rider, payload, { authCache, exceptSock
     }
     authCache?.set(payload.order_id, now + ORDER_AUTH_CACHE_MS);
   }
+
+  if (!(await markSeen(payload.order_id, payload.timestamp))) return "duplicate";
 
   const seenAt = new Date(payload.timestamp);
   // Replayed (older) points are still broadcast but never move the stored
@@ -296,7 +342,7 @@ export function initSocket(httpServer) {
           authCache: order_auth,
           exceptSocket: socket,
         });
-        reply(emitted ? { ok: true } : { ok: false, code: "ORDER_NOT_FOUND" });
+        reply(emitted ? { ok: true } : { ok: false, code: "ORDER_NOT_FOUND" }); // "duplicate" counts as ok
       } catch (error) {
         console.error("[socket] rider_location_move failed:", error.message);
         reply({ ok: false, code: "INTERNAL_ERROR" });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, LogOut, ShieldAlert, Wifi, WifiOff } from "lucide-react";
+import { History, Loader2, LogOut, ShieldAlert, Wifi, WifiOff } from "lucide-react";
+import { Link } from "react-router-dom";
 import Modal from "../components/Modal.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useToast } from "../components/Toast.jsx";
@@ -148,6 +149,13 @@ export default function VendorDashboard() {
               {shop.is_open ? "● Shop open" : "○ Shop closed"}
             </button>
           )}
+          <Link
+            to="/vendor/history"
+            aria-label="Orders and payments"
+            className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
+          >
+            <History className="h-5 w-5" />
+          </Link>
           <button
             type="button"
             onClick={signOut}

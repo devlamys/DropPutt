@@ -8,6 +8,13 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma, TX_OPTIONS } from "../config/prisma.js";
 import { authenticate, requireRole } from "../middleware/auth.js";
+import {
+  buildReconciliation,
+  checkOrders,
+  orderRow,
+  parseRange,
+  reconciliationOrders,
+} from "../services/reconciliationService.js";
 import { emitTo, rooms } from "../socket/socketHandler.js";
 import { ACTIVE_ORDER_STATUSES } from "../utils/constants.js";
 import { coordStr } from "../utils/serializers.js";
@@ -222,6 +229,35 @@ router.get(
           created_at: row.created_at,
         })),
       },
+      { pagination: page.pagination }
+    );
+  })
+);
+
+// GET /api/v1/admin/reconciliation?from=&to= — SPEC §41. Totals, payment
+// split, order-level discrepancies and stored-balance-vs-ledger checks.
+router.get(
+  "/reconciliation",
+  requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
+  asyncHandler(async (req, res) => {
+    ok(res, await buildReconciliation(req.franchise_id, parseRange(req.query)));
+  })
+);
+
+// GET /api/v1/admin/reconciliation/orders?from=&to=&limit=&cursor= — one
+// page of delivered orders with the four-way split and their check result.
+router.get(
+  "/reconciliation/orders",
+  requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
+  asyncHandler(async (req, res) => {
+    const range = parseRange(req.query);
+    const { limit, cursorId } = parsePagination(req.query);
+    const rows = await reconciliationOrders(req.franchise_id, range, { limit, cursorId });
+    const page = buildPage(rows, limit);
+    const checked = await checkOrders(page.items);
+    ok(
+      res,
+      { orders: page.items.map((order) => orderRow(order, checked.get(order.id))) },
       { pagination: page.pagination }
     );
   })

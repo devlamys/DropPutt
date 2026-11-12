@@ -11,12 +11,12 @@ import { prisma, TX_OPTIONS } from "../config/prisma.js";
 import { authenticate, loadRider, requireRole } from "../middleware/auth.js";
 import { idempotency } from "../middleware/idempotency.js";
 import { billImageUpload, gatePhotoUpload } from "../middleware/upload.js";
+import { buildCart, fieldError } from "../services/cartService.js";
 import { dispatchOrder } from "../services/dispatchService.js";
 import { emitTo, joinRiderToOrder, rooms } from "../socket/socketHandler.js";
 import { audit } from "../utils/audit.js";
 import {
   ACTIVE_ORDER_STATUSES,
-  SNACK_MIN_ORDER_VALUE,
 } from "../utils/constants.js";
 import {
   addMoney,
@@ -26,6 +26,7 @@ import {
   money,
   subtractMoney,
 } from "../utils/orderMath.js";
+import { buildPage, parsePagination } from "../utils/pagination.js";
 import { normalizePhone } from "../utils/phone.js";
 import { pushToUsers } from "../utils/push.js";
 import {
@@ -37,16 +38,12 @@ import {
   validationError,
 } from "../utils/response.js";
 import { moneyStr, orderView } from "../utils/serializers.js";
-import { isProductInSlot } from "../utils/slots.js";
 import { saveUpload } from "../utils/storage.js";
-import { isChayakadiWindow, istDayRange, istMinutesOfDay } from "../utils/time.js";
-import { parse, parseId, zBoolean, zLat, zLng, zMoney } from "../utils/validate.js";
+import { istDayRange } from "../utils/time.js";
+import { parse, parseId, zBoolean, zId, zLat, zLng, zMoney } from "../utils/validate.js";
 
 const router = Router();
 router.use(authenticate);
-
-const fieldError = (field, issue) =>
-  validationError("Request validation failed", [{ field, issue }]);
 
 const CATEGORY_BY_SHOP = Object.freeze({
   HOTEL: "FOOD",
@@ -61,12 +58,12 @@ const CATEGORY_BY_SHOP = Object.freeze({
 // ─────────────────────────────────────────────────────────────────────────────
 
 const quickCallSchema = z.object({
-  vendor_id: z.coerce.number().int().positive().optional(), // admin only
+  vendor_id: zId.optional(), // admin only
   order_type: z.enum(["CUSTOM_BUY", "PICK_DROP", "MINI_TRUCK"]).optional(),
   order_category: z
     .enum(["FOOD", "EVENING_SNACKS", "GROCERY", "FISH_MEAT", "MEDICAL", "PICK_DROP"])
     .optional(),
-  zone_id: z.coerce.number().int().positive().optional(),
+  zone_id: zId.optional(),
   customer_phone: z.union([z.string(), z.number()]).optional(),
   customer_name: z.string().trim().min(1).max(100).optional(),
   custom_shop_name: z.string().trim().min(1).max(150).optional(),
@@ -77,7 +74,7 @@ const quickCallSchema = z.object({
   items: z
     .array(
       z.object({
-        product_id: z.coerce.number().int().positive(),
+        product_id: zId,
         quantity: z.coerce.number().int().min(1).max(99),
       })
     )
@@ -86,55 +83,6 @@ const quickCallSchema = z.object({
     .optional(),
 });
 
-/**
- * Validates a cart against PostgreSQL and returns authoritative lines.
- * Repeated products are merged into one line.
- */
-async function buildCart(tx, vendor, items, now) {
-  const quantities = new Map();
-  for (const item of items) {
-    quantities.set(item.product_id, (quantities.get(item.product_id) || 0) + item.quantity);
-  }
-
-  // vendor_id pins the products to this vendor, and the vendor row was
-  // already loaded with the tenant's franchise_id.
-  const products = await tx.product.findMany({
-    where: { id: { in: [...quantities.keys()] }, vendor_id: vendor.id },
-  });
-  if (products.length !== quantities.size) {
-    throw fieldError("items", "one or more products do not belong to this vendor");
-  }
-
-  const minutes = istMinutesOfDay(now);
-  const lines = products.map((product) => {
-    if (!product.is_available || !isProductInSlot(product, minutes)) {
-      throw fieldError("items", `"${product.name}" is not available right now`);
-    }
-    const quantity = quantities.get(product.id);
-    return {
-      product_id: product.id,
-      quantity,
-      unit_price: moneyStr(product.price),
-      line_total: moneyStr(calculateLineTotal(product.price, quantity)),
-      slot_type: product.slot_type,
-    };
-  });
-  const item_total = addMoney(...lines.map((line) => line.line_total));
-
-  // 15:00–18:00 IST: an all-snacks cart uses the ₹80 snack minimum (§26).
-  const snackCart =
-    isChayakadiWindow(now) &&
-    lines.every((line) => line.slot_type === "EVENING_SNACKS_3_TO_6");
-  const minimum = money(snackCart ? SNACK_MIN_ORDER_VALUE : vendor.min_order_value);
-  if (item_total.lt(minimum)) {
-    throw fieldError("items", `minimum order value is ₹${minimum.toFixed(2)}`);
-  }
-
-  return {
-    item_total,
-    lines: lines.map(({ slot_type, ...line }) => line),
-  };
-}
 
 router.post(
   "/quick-call",
@@ -386,7 +334,7 @@ router.post(
 const pickupSchema = z.object({
   customer_phone: z.union([z.string(), z.number()]).optional(),
   customer_name: z.string().trim().min(1).max(100).optional(),
-  zone_id: z.coerce.number().int().positive().optional(),
+  zone_id: zId.optional(),
   payment_method: z.enum(["COD", "PREPAID_AT_HOTEL", "UPI_TO_ADMIN"]).optional(),
   item_total: zMoney.optional(),
   rider_paid_at_shop: zBoolean.optional(),
@@ -888,6 +836,14 @@ router.post(
 // Read endpoints for the Vendor and Rider apps
 // ─────────────────────────────────────────────────────────────────────────────
 
+const ALL_ORDER_STATUSES = [
+  "RIDER_REQUESTED",
+  "RIDER_ASSIGNED",
+  "PICKED_UP",
+  "LOCATION_SHARED",
+  "DELIVERED",
+  "CANCELLED",
+];
 const BOARD_STATUSES = ["RIDER_REQUESTED", ...ACTIVE_ORDER_STATUSES];
 
 const BOARD_INCLUDE = {
@@ -917,6 +873,57 @@ function boardOrderView(order, role) {
   }
   return view;
 }
+
+// GET /api/v1/orders — paginated history (SPEC §48), newest first.
+//   RIDER → own orders, VENDOR → own shop, FRANCHISE_ADMIN → whole franchise.
+//   Optional ?status=DELIVERED (any OrderStatus).
+router.get(
+  "/",
+  requireRole("VENDOR", "FRANCHISE_ADMIN", "RIDER"),
+  asyncHandler(async (req, res) => {
+    const franchise_id = req.franchise_id;
+    const role = req.user.role;
+    const { limit, cursorId } = parsePagination(req.query);
+
+    const where = { franchise_id };
+    if (req.query.status) {
+      const status = String(req.query.status).toUpperCase();
+      if (!ALL_ORDER_STATUSES.includes(status)) {
+        throw validationError("Request validation failed", [
+          { field: "status", issue: "unknown order status" },
+        ]);
+      }
+      where.order_status = status;
+    }
+    if (role === "RIDER") {
+      const rider = await prisma.rider.findFirst({
+        where: { user_id: req.user.id, franchise_id },
+        select: { id: true },
+      });
+      if (!rider) throw forbidden("Rider profile not found in this franchise");
+      where.rider_id = rider.id;
+    } else if (role === "VENDOR") {
+      const vendor = await prisma.vendor.findFirst({
+        where: { user_id: req.user.id, franchise_id },
+        select: { id: true },
+      });
+      if (!vendor) throw forbidden("Vendor profile not found in this franchise");
+      where.vendor_id = vendor.id;
+    }
+    if (cursorId) where.id = { lt: cursorId };
+
+    const rows = await prisma.order.findMany({
+      where,
+      orderBy: { id: "desc" },
+      take: limit + 1,
+      include: BOARD_INCLUDE,
+    });
+    const page = buildPage(rows, limit);
+    ok(res, { orders: page.items.map((order) => boardOrderView(order, role)) }, {
+      pagination: page.pagination,
+    });
+  })
+);
 
 // GET /api/v1/orders/zones — delivery zones of this franchise.
 router.get(

@@ -1,0 +1,9 @@
+**/node_modules
+**/.env
+**/.env.*
+backend
+deploy/certs
+deploy/secrets
+deploy/*.env
+.git
+frontend/dist

@@ -60,9 +60,25 @@ export const env = Object.freeze({
   // Slug that selects the global Super Admin on login (admin.techkerala.in).
   adminSlug: "admin",
   corsOrigins: list(process.env.CORS_ORIGINS),
+  // Reject plain-HTTP requests (SPEC §37.11). On by default in production;
+  // set REQUIRE_HTTPS=false only if TLS is terminated before a proxy that
+  // cannot forward X-Forwarded-Proto.
+  requireHttps: isProduction && process.env.REQUIRE_HTTPS !== "false",
   trustProxy: process.env.TRUST_PROXY ? Number(process.env.TRUST_PROXY) : 0,
   enableCron: process.env.ENABLE_CRON !== "false",
+  // Shared state for several API replicas: Socket.io adapter + GPS replay
+  // protection. Optional with a single instance.
+  redisUrl: process.env.REDIS_URL || "",
   firebaseServiceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || "",
+  // Native-app version gate (SPEC §54.2). Unset = no minimum enforced.
+  minAppVersion: {
+    android: process.env.MIN_APP_VERSION_ANDROID || process.env.MIN_APP_VERSION || "",
+    ios: process.env.MIN_APP_VERSION_IOS || process.env.MIN_APP_VERSION || "",
+  },
+  appStoreUrl: {
+    android: process.env.APP_STORE_URL_ANDROID || "",
+    ios: process.env.APP_STORE_URL_IOS || "",
+  },
   uploadDir: process.env.UPLOAD_DIR || "uploads",
   r2: {
     endpoint: process.env.R2_ENDPOINT || "",

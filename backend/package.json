@@ -2,7 +2,7 @@
   "name": "dropputt-backend",
   "version": "1.0.0",
   "private": true,
-  "description": "Multi-franchise hyperlocal delivery platform — Node.js backend",
+  "description": "Multi-franchise hyperlocal delivery platform \u2014 Node.js backend",
   "type": "module",
   "scripts": {
     "db:generate": "prisma generate",
@@ -12,7 +12,11 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "dev": "node --watch src/server.js",
+    "test:db": "node scripts/prepare-test-db.mjs",
+    "test": "node scripts/prepare-test-db.mjs && node --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "test:unit": "node --test \"test/unit/*.test.js\"",
+    "admin:create": "node scripts/create-super-admin.mjs"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
@@ -20,6 +24,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1167.0",
     "@prisma/client": "^5.22.0",
+    "@socket.io/redis-adapter": "^8.3.0",
     "argon2": "^0.41.1",
     "cors": "^2.8.6",
     "decimal.js": "^10.4.3",
@@ -30,11 +35,13 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.5.0",
     "node-cron": "^3.0.3",
+    "prisma": "^5.22.0",
+    "redis": "^4.7.1",
     "socket.io": "^4.8.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "prisma": "^5.22.0"
+    "socket.io-client": "^4.8.4"
   },
   "engines": {
     "node": ">=20.12.0"

@@ -15,6 +15,11 @@ const DEAD_TOKEN_CODES = new Set([
 
 let messaging; // undefined = not tried yet, null = disabled
 
+/** Test seam: inject a fake messaging client (or null to disable push). */
+export function setMessagingClientForTests(client) {
+  messaging = client;
+}
+
 function getMessagingClient() {
   if (messaging !== undefined) return messaging;
   try {

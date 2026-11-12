@@ -4,6 +4,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../config/prisma.js";
 import { authenticate, requireRole } from "../middleware/auth.js";
+import { buildPage, parsePagination } from "../utils/pagination.js";
 import { AppError, asyncHandler, forbidden, ok } from "../utils/response.js";
 import { moneyStr } from "../utils/serializers.js";
 import { parse, parseId } from "../utils/validate.js";
@@ -83,6 +84,49 @@ router.patch(
       data: { is_open },
     });
     ok(res, { shop: shopView(vendor) });
+  })
+);
+
+// GET /api/v1/vendor/ledger — what the platform owes the shop (or the shop
+// owes the platform), one row per delivered order, newest first.
+//   Positive = platform owes the shop; negative = shop owes the platform
+//   (e.g. commission on an order the shop was paid for directly).
+router.get(
+  "/ledger",
+  asyncHandler(async (req, res) => {
+    const { limit, cursorId } = parsePagination(req.query);
+    const rows = await prisma.settlementEntry.findMany({
+      where: {
+        franchise_id: req.franchise_id,
+        vendor_id: req.vendor.id,
+        party: "VENDOR_PAYABLE",
+        ...(cursorId ? { id: { lt: cursorId } } : {}),
+      },
+      orderBy: { id: "desc" },
+      take: limit + 1,
+      include: {
+        order: {
+          select: { order_number: true, payment_method: true, item_total: true, delivered_at: true },
+        },
+      },
+    });
+    const page = buildPage(rows, limit);
+    ok(
+      res,
+      {
+        admin_payable_balance: moneyStr(req.vendor.admin_payable_balance),
+        items: page.items.map((row) => ({
+          id: row.id,
+          order_number: row.order.order_number,
+          payment_method: row.order.payment_method,
+          item_total: moneyStr(row.order.item_total),
+          amount: moneyStr(row.amount),
+          delivered_at: row.order.delivered_at,
+          created_at: row.created_at,
+        })),
+      },
+      { pagination: page.pagination }
+    );
   })
 );
 

@@ -274,7 +274,11 @@ export function calculateOrderFinancials({
 // ─── §13 / §20 Rider-side additions (tip, rain surge) ───────────────────────
 
 export function isAllowedTipAmount(value) {
-  return ALLOWED_TIP_AMOUNTS.some((allowed) => new Decimal(allowed).eq(value ?? 0));
+  try {
+    return ALLOWED_TIP_AMOUNTS.some((allowed) => new Decimal(allowed).eq(value ?? 0));
+  } catch {
+    return false; // not a number at all
+  }
 }
 
 /**

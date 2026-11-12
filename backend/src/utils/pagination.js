@@ -2,6 +2,7 @@
 // last row's id; lists are ordered by id.
 
 import { validationError } from "./response.js";
+import { MAX_ID } from "./validate.js";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
@@ -17,7 +18,7 @@ export function parsePagination(query) {
       const decoded = JSON.parse(
         Buffer.from(String(query.cursor), "base64").toString("utf8")
       );
-      if (!Number.isInteger(decoded.id) || decoded.id <= 0) throw new Error();
+      if (!Number.isInteger(decoded.id) || decoded.id <= 0 || decoded.id > MAX_ID) throw new Error();
       cursorId = decoded.id;
     } catch {
       throw validationError("Request validation failed", [
