@@ -1,0 +1,478 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  FRANCHISE_ADMIN
+  VENDOR
+  RIDER
+  CUSTOMER
+}
+
+enum ShopCategory {
+  HOTEL
+  BAKERY_COOLBAR
+  GROCERY
+  FISH_MEAT
+  MEDICAL_PHARMACY
+}
+
+enum TimeSlot {
+  ALL_DAY
+  LUNCH_ONLY
+  EVENING_SNACKS_3_TO_6
+  DINNER_ONLY
+}
+
+enum VehicleType {
+  BIKE
+  SCOOTER
+  AUTO
+  MINI_TRUCK
+}
+
+enum OrderType {
+  HOTEL_DIRECT
+  FOOD_MARKETPLACE
+  CUSTOM_BUY
+  PICK_DROP
+  MINI_TRUCK
+}
+
+enum OrderCategory {
+  FOOD
+  EVENING_SNACKS
+  GROCERY
+  FISH_MEAT
+  MEDICAL
+  PICK_DROP
+}
+
+enum DeliveryHandledBy {
+  PLATFORM_RIDER
+  VENDOR_STAFF
+}
+
+enum PaymentMethod {
+  COD
+  PREPAID_AT_HOTEL
+  UPI_TO_ADMIN
+}
+
+enum OrderStatus {
+  RIDER_REQUESTED
+  RIDER_ASSIGNED
+  PICKED_UP
+  LOCATION_SHARED
+  DELIVERED
+  CANCELLED
+}
+
+enum WalletTxType {
+  CREDIT
+  DEBIT
+}
+
+enum SettlementParty {
+  RIDER_CASH
+  RIDER_EARNING
+  VENDOR_PAYABLE
+  FRANCHISE_PROFIT
+  SUPER_ADMIN_ROYALTY
+}
+
+enum SettlementType {
+  ORDER_PAYMENT
+  ORDER_DELIVERY
+  RIDER_TIP
+  RAIN_SURGE
+  VENDOR_PAYABLE
+  ROYALTY
+  MILESTONE_BONUS
+  REVERSAL
+}
+
+model Franchise {
+  id                     Int      @id @default(autoincrement())
+  name                   String
+  slug                   String   @unique
+  wallet_balance         Decimal  @default(0) @db.Decimal(12, 2)
+  min_balance_limit      Decimal  @default(-50) @db.Decimal(12, 2)
+  royalty_per_order      Decimal  @default(3) @db.Decimal(12, 2)
+  is_launch_promo_active Boolean  @default(false)
+  rain_surge_fee         Decimal  @default(0) @db.Decimal(12, 2)
+  daily_milestone_target Int      @default(20)
+  daily_milestone_bonus  Decimal  @default(50) @db.Decimal(12, 2)
+  is_active              Boolean  @default(true)
+  created_at             DateTime @default(now())
+
+  users               User[]
+  vendors             Vendor[]
+  riders              Rider[]
+  customers           Customer[]
+  zones               Zone[]
+  orders              Order[]
+  wallet_transactions WalletTransaction[]
+  push_campaigns      PushCampaign[]
+  settlement_entries  SettlementEntry[]
+
+  @@map("franchises")
+}
+
+model WalletTransaction {
+  id            Int      @id @default(autoincrement())
+  franchise_id  Int
+  order_id      Int?
+  type          WalletTxType
+  amount        Decimal  @db.Decimal(12, 2)
+  balance_after Decimal  @db.Decimal(12, 2)
+  description   String
+  created_at    DateTime @default(now())
+
+  franchise Franchise @relation(fields: [franchise_id], references: [id])
+  order     Order?    @relation(fields: [order_id], references: [id])
+
+  @@index([franchise_id, created_at])
+  @@index([order_id])
+  @@map("wallet_transactions")
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  franchise_id Int?
+  name         String
+  phone        String
+  pin_hash     String
+  role         UserRole
+  is_active    Boolean   @default(true)
+  fcm_token    String?
+  created_at   DateTime  @default(now())
+
+  franchise Franchise? @relation(fields: [franchise_id], references: [id])
+  vendor    Vendor?
+  rider     Rider?
+  refresh_tokens       RefreshToken[]
+  device_registrations DeviceRegistration[]
+
+  @@unique([franchise_id, phone])
+  @@index([franchise_id, role])
+  @@map("users")
+}
+
+model Vendor {
+  id                    Int          @id @default(autoincrement())
+  franchise_id          Int
+  user_id               Int          @unique
+  shop_name             String
+  shop_category         ShopCategory @default(HOTEL)
+  address               String
+  lat                   Decimal      @db.Decimal(10, 7)
+  lng                   Decimal      @db.Decimal(10, 7)
+  commission_rate       Decimal      @default(10) @db.Decimal(5, 2)
+  min_order_value       Decimal      @default(150) @db.Decimal(12, 2)
+  upi_id                String?
+  is_open               Boolean      @default(true)
+  admin_payable_balance Decimal      @default(0) @db.Decimal(12, 2)
+  created_at            DateTime     @default(now())
+  updated_at            DateTime     @updatedAt
+
+  franchise Franchise @relation(fields: [franchise_id], references: [id])
+  user      User      @relation(fields: [user_id], references: [id])
+  products  Product[]
+  orders    Order[]
+  settlement_entries SettlementEntry[]
+
+  @@unique([franchise_id, shop_name])
+  @@index([franchise_id, shop_category, is_open])
+  @@map("vendors")
+}
+
+model Product {
+  id             Int      @id @default(autoincrement())
+  vendor_id      Int
+  name           String
+  price          Decimal  @db.Decimal(12, 2)
+  image_url      String?
+  slot_type      TimeSlot @default(ALL_DAY)
+  available_from String?
+  available_to   String?
+  is_combo       Boolean  @default(false)
+  is_available   Boolean  @default(true)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  vendor Vendor      @relation(fields: [vendor_id], references: [id])
+  order_items OrderItem[]
+
+  @@index([vendor_id, is_available])
+  @@index([vendor_id, slot_type, is_available])
+  @@map("products")
+}
+
+model Rider {
+  id                 Int         @id @default(autoincrement())
+  franchise_id       Int
+  user_id            Int         @unique
+  vehicle_type       VehicleType @default(BIKE)
+  vehicle_number     String
+  license_number     String
+  kyc_document_url   String?
+  insurance_expiry   DateTime
+  emergency_contact  String
+  is_online          Boolean     @default(false)
+  is_approved        Boolean     @default(false)
+  max_active_orders  Int         @default(2)
+  cash_in_hand       Decimal     @default(0) @db.Decimal(12, 2)
+  max_cash_limit     Decimal     @default(1500) @db.Decimal(12, 2)
+  wallet_earnings    Decimal     @default(0) @db.Decimal(12, 2)
+  security_deposit   Decimal     @default(0) @db.Decimal(12, 2)
+  current_lat        Decimal?    @db.Decimal(10, 7)
+  current_lng        Decimal?    @db.Decimal(10, 7)
+  last_location_at   DateTime?
+  created_at         DateTime    @default(now())
+  updated_at         DateTime    @updatedAt
+
+  franchise Franchise @relation(fields: [franchise_id], references: [id])
+  user      User      @relation(fields: [user_id], references: [id])
+  orders    Order[]
+  settlement_entries SettlementEntry[]
+
+  @@index([franchise_id, is_online, is_approved])
+  @@map("riders")
+}
+
+model Customer {
+  id                   Int      @id @default(autoincrement())
+  franchise_id         Int
+  phone                String
+  name                 String?
+  turning_point        String?
+  lat                  Decimal? @db.Decimal(10, 7)
+  lng                  Decimal? @db.Decimal(10, 7)
+  gps_accuracy         Decimal? @db.Decimal(8, 2)
+  verified_lat         Decimal? @db.Decimal(10, 7)
+  verified_lng         Decimal? @db.Decimal(10, 7)
+  is_location_verified Boolean  @default(false)
+  voice_direction_url  String?
+  house_image_url      String?
+  rider_delivery_note  String?
+  fcm_token            String?
+  created_at           DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  franchise Franchise @relation(fields: [franchise_id], references: [id])
+  device_registrations DeviceRegistration[]
+
+  @@unique([franchise_id, phone])
+  @@index([franchise_id, updated_at])
+  @@map("customers")
+}
+
+model Zone {
+  id               Int      @id @default(autoincrement())
+  franchise_id     Int
+  zone_name        String
+  delivery_fee     Decimal  @db.Decimal(12, 2)
+  rider_commission Decimal  @db.Decimal(12, 2)
+  franchise_profit Decimal  @db.Decimal(12, 2)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  franchise Franchise @relation(fields: [franchise_id], references: [id])
+  orders    Order[]
+
+  @@unique([franchise_id, zone_name])
+  @@index([franchise_id])
+  @@map("zones")
+}
+
+model Order {
+  id                   Int               @id @default(autoincrement())
+  franchise_id         Int
+  order_number         String
+  order_type           OrderType         @default(HOTEL_DIRECT)
+  order_category       OrderCategory     @default(FOOD)
+  delivery_handled_by  DeliveryHandledBy @default(PLATFORM_RIDER)
+  vendor_id            Int?
+  rider_id             Int?
+  zone_id              Int?
+  customer_phone       String?
+  customer_name        String?
+
+  custom_shop_name     String?
+  custom_items_text    String?
+  rider_paid_at_shop   Boolean           @default(false)
+  shop_markup_profit   Decimal           @default(0) @db.Decimal(12, 2)
+
+  bill_image_url       String?
+  prescription_img_url String?
+  voice_note_url       String?
+  location_token       String            @unique
+  pickup_address       String?
+  pickup_lat           Decimal?          @db.Decimal(10, 7)
+  pickup_lng           Decimal?          @db.Decimal(10, 7)
+  drop_address         String?
+  turning_point        String?
+  drop_lat             Decimal?          @db.Decimal(10, 7)
+  drop_lng             Decimal?          @db.Decimal(10, 7)
+
+  item_total           Decimal           @default(0) @db.Decimal(12, 2)
+  delivery_fee         Decimal           @default(0) @db.Decimal(12, 2)
+  rider_tip            Decimal           @default(0) @db.Decimal(12, 2)
+  discount_amount      Decimal           @default(0) @db.Decimal(12, 2)
+  grand_total          Decimal           @default(0) @db.Decimal(12, 2)
+  vendor_commission    Decimal           @default(0) @db.Decimal(12, 2)
+  vendor_earning       Decimal           @default(0) @db.Decimal(12, 2)
+  rider_earning        Decimal           @default(0) @db.Decimal(12, 2)
+  franchise_profit     Decimal           @default(0) @db.Decimal(12, 2)
+  super_admin_profit   Decimal           @default(0) @db.Decimal(12, 2)
+  amount_to_collect    Decimal           @default(0) @db.Decimal(12, 2)
+  vendor_admin_payable Decimal           @default(0) @db.Decimal(12, 2)
+
+  rain_surge_applied   Boolean           @default(false)
+  royalty_deducted     Boolean           @default(false)
+  settlement_completed Boolean           @default(false)
+  is_batched_addon     Boolean           @default(false)
+
+  payment_method       PaymentMethod     @default(COD)
+  order_status         OrderStatus       @default(RIDER_REQUESTED)
+  created_at           DateTime          @default(now())
+  delivered_at         DateTime?
+
+  franchise Franchise @relation(fields: [franchise_id], references: [id])
+  vendor    Vendor?   @relation(fields: [vendor_id], references: [id])
+  rider     Rider?    @relation(fields: [rider_id], references: [id])
+  zone      Zone?     @relation(fields: [zone_id], references: [id])
+  items     OrderItem[]
+  wallet_transactions WalletTransaction[]
+  settlement_entries SettlementEntry[]
+
+  @@unique([franchise_id, order_number])
+  @@index([franchise_id, order_status, created_at])
+  @@index([franchise_id, rider_id, order_status])
+  @@index([franchise_id, vendor_id, order_status])
+  @@index([franchise_id, customer_phone])
+  @@index([franchise_id, zone_id, order_status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id         Int      @id @default(autoincrement())
+  order_id   Int
+  product_id Int
+  quantity   Int
+  unit_price Decimal  @db.Decimal(12, 2)
+  line_total Decimal  @db.Decimal(12, 2)
+  created_at DateTime @default(now())
+
+  order   Order   @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [product_id], references: [id])
+
+  @@unique([order_id, product_id])
+  @@index([order_id])
+  @@index([product_id])
+  @@map("order_items")
+}
+
+model PushCampaign {
+  id           Int      @id @default(autoincrement())
+  franchise_id Int
+  title        String
+  body         String
+  cron_time    String   @default("0 16 * * *")
+  target_slot  TimeSlot @default(EVENING_SNACKS_3_TO_6)
+  is_active    Boolean  @default(true)
+  created_at   DateTime @default(now())
+
+  franchise Franchise @relation(fields: [franchise_id], references: [id])
+
+  @@index([franchise_id, is_active])
+  @@map("push_campaigns")
+}
+
+model SettlementEntry {
+  id            Int             @id @default(autoincrement())
+  franchise_id  Int
+  order_id      Int
+  vendor_id     Int?
+  rider_id      Int?
+  party         SettlementParty
+  type          SettlementType
+  amount        Decimal         @db.Decimal(12, 2)
+  reference_key String          @unique
+  description   String
+  created_at    DateTime        @default(now())
+
+  franchise Franchise @relation(fields: [franchise_id], references: [id])
+  order     Order     @relation(fields: [order_id], references: [id])
+  vendor    Vendor?   @relation(fields: [vendor_id], references: [id])
+  rider     Rider?    @relation(fields: [rider_id], references: [id])
+
+  @@index([franchise_id, created_at])
+  @@index([order_id, type])
+  @@index([vendor_id, created_at])
+  @@index([rider_id, created_at])
+  @@map("settlement_entries")
+}
+
+// ─── Mobile: Auth ──────────────────────────────────────────────────────────
+
+model RefreshToken {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  token_hash String   @unique   // SHA-256 hex of the opaque token
+  expires_at DateTime
+  revoked    Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([token_hash])
+  @@map("refresh_tokens")
+}
+
+// ─── Mobile: Device Registration ───────────────────────────────────────────
+
+model DeviceRegistration {
+  id           Int      @id @default(autoincrement())
+  user_id      Int?
+  customer_id  Int?
+  platform     String   // "android" | "ios" | "web"
+  app_version  String?
+  fcm_token    String   @unique
+  is_active    Boolean  @default(true)
+  last_seen_at DateTime @default(now())
+  created_at   DateTime @default(now())
+
+  user     User?     @relation(fields: [user_id], references: [id])
+  customer Customer? @relation(fields: [customer_id], references: [id])
+
+  @@index([user_id])
+  @@index([customer_id])
+  @@index([fcm_token])
+  @@index([is_active, last_seen_at])
+  @@map("device_registrations")
+}
+
+// ─── Mobile: Idempotency ───────────────────────────────────────────────────
+
+model IdempotencyRecord {
+  id           Int      @id @default(autoincrement())
+  key          String   @unique   // client-supplied Idempotency-Key header value
+  franchise_id Int?
+  user_id      Int?
+  response     Json               // cached response body
+  created_at   DateTime @default(now())
+  expires_at   DateTime           // created_at + 24 hours
+
+  @@index([key, expires_at])
+  @@index([franchise_id])
+  @@map("idempotency_records")
+}

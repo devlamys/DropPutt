@@ -50,6 +50,16 @@ The system MUST be tenant-safe: a customer, user, vendor, rider, order, product,
 - bcrypt/argon2 for PIN/password hashing
 - JSON Web Tokens for authenticated staff/rider sessions
 
+### Development toolchain
+
+Verified local development versions:
+
+- nvm 0.41.0
+- Node.js v26.13.1
+- npm 11.20.0
+
+The minimum supported runtime remains Node.js 20.
+
 ### Frontend
 
 - React + Vite
