@@ -104,6 +104,11 @@ describe("marketplace cart rules (§7, §42)", () => {
     const names = feed.body.data.items[0].products.map((p) => p.name);
     assert.ok(!names.includes("Never"));
     assert.ok(!names.includes("Sold out"));
+    // ...but the menu can still show them greyed out, with the reason.
+    const greyed = Object.fromEntries(feed.body.data.items[0].unavailable.map((p) => [p.name, p]));
+    assert.equal(greyed["Sold out"].reason, "SOLD_OUT");
+    assert.equal(greyed.Never.reason, "OUT_OF_SLOT");
+    assert.equal(greyed.Never.available_window, "10 AM – 10 AM");
   });
 
   it("below the shop's minimum order is rejected", async () => {

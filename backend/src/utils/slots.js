@@ -26,3 +26,19 @@ export function isProductInSlot(product, minutesOfDay) {
   const window = SLOT_WINDOWS[product.slot_type];
   return !window || (minutesOfDay >= window[0] && minutesOfDay < window[1]);
 }
+
+const clock = (minutes) => {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const suffix = h >= 12 ? "PM" : "AM";
+  const hour = h % 12 === 0 ? 12 : h % 12;
+  return m ? `${hour}:${String(m).padStart(2, "0")} ${suffix}` : `${hour} ${suffix}`;
+};
+
+/** Human-readable availability window, e.g. "11 AM – 3 PM"; null for all-day products. */
+export function slotWindowLabel(product) {
+  const from = parseHHMM(product.available_from);
+  const to = parseHHMM(product.available_to);
+  const window = from !== null && to !== null ? [from, to] : SLOT_WINDOWS[product.slot_type];
+  return window ? `${clock(window[0])} – ${clock(window[1])}` : null;
+}

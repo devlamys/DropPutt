@@ -66,11 +66,30 @@ export function useCart() {
     });
   }, []);
 
+  /**
+   * Drops lines that can no longer be ordered (shop closed, item sold out or
+   * out of its time slot) and refreshes names / prices from the live menu.
+   */
+  const sync = useCallback((vendors) => {
+    setCart((current) => {
+      if (!current.vendor_id) return current;
+      const shop = vendors.find((v) => v.id === current.vendor_id);
+      const byId = new Map((shop?.products ?? []).map((p) => [p.id, p]));
+      const lines = current.lines
+        .filter((l) => byId.has(l.product_id))
+        .map((l) => ({ ...l, name: byId.get(l.product_id).name, price: byId.get(l.product_id).price }));
+      const next = lines.length
+        ? { vendor_id: current.vendor_id, shop_name: shop.shop_name, lines }
+        : { vendor_id: null, shop_name: "", lines: [] };
+      return JSON.stringify(next) === JSON.stringify(current) ? current : next;
+    });
+  }, []);
+
   const totals = useMemo(() => {
     const count = cart.lines.reduce((n, l) => n + l.quantity, 0);
     const subtotal = cart.lines.reduce((sum, l) => sum + Math.round(Number(l.price) * 100) * l.quantity, 0) / 100;
     return { count, subtotal };
   }, [cart]);
 
-  return { cart, totals, add, setQuantity, clear, replaceWith };
+  return { cart, totals, add, setQuantity, clear, replaceWith, sync };
 }

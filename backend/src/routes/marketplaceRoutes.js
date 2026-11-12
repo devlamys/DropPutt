@@ -15,7 +15,7 @@ import { normalizePhone } from "../utils/phone.js";
 import { buildPage, parsePagination } from "../utils/pagination.js";
 import { AppError, asyncHandler, ok } from "../utils/response.js";
 import { moneyStr } from "../utils/serializers.js";
-import { isProductInSlot } from "../utils/slots.js";
+import { isProductInSlot, slotWindowLabel } from "../utils/slots.js";
 import { isChayakadiWindow, istDayRange, istMinutesOfDay } from "../utils/time.js";
 import { parse, zId } from "../utils/validate.js";
 
@@ -76,16 +76,24 @@ router.get(
         shop_category: true,
         address: true,
         min_order_value: true,
-        products: {
-          where: { is_available: true },
-          orderBy: [{ is_combo: "desc" }, { id: "asc" }],
-        },
+        products: { orderBy: [{ is_combo: "desc" }, { id: "asc" }] },
       },
     });
     const page = buildPage(vendors, limit);
 
     const items = page.items.map((vendor) => {
-      const products = vendor.products.filter((product) => isProductInSlot(product, minutes));
+      const products = vendor.products.filter(
+        (product) => product.is_available && isProductInSlot(product, minutes)
+      );
+      // Shown greyed-out on the menu ("Sold out" / "Available 11 AM – 3 PM").
+      // They are display-only: checkout rejects them.
+      const unavailable = vendor.products
+        .filter((product) => !products.includes(product))
+        .map((product) => ({
+          ...productView(product),
+          reason: product.is_available ? "OUT_OF_SLOT" : "SOLD_OUT",
+          available_window: product.is_available ? slotWindowLabel(product) : null,
+        }));
       // During the window, snack products are listed first.
       if (chayakadi) {
         products.sort(
@@ -101,6 +109,7 @@ router.get(
         address: vendor.address,
         min_order_value: moneyStr(vendor.min_order_value),
         products: products.map(productView),
+        unavailable,
       };
     });
 

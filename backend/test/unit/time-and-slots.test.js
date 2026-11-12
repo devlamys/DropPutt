@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isProductInSlot } from "../../src/utils/slots.js";
+import { isProductInSlot, slotWindowLabel } from "../../src/utils/slots.js";
 import { isChayakadiWindow, istDayRange, istMinutesOfDay } from "../../src/utils/time.js";
 
 // 2026-11-12 at the given IST clock time.
@@ -45,5 +45,11 @@ describe("product time slots (§40)", () => {
     assert.equal(isProductInSlot(night, at("23:30")), true);
     assert.equal(isProductInSlot(night, at("01:00")), true);
     assert.equal(isProductInSlot(night, at("12:00")), false);
+  });
+  it("describes when a product is available", () => {
+    assert.equal(slotWindowLabel({ slot_type: "ALL_DAY" }), null);
+    assert.equal(slotWindowLabel({ slot_type: "LUNCH_ONLY" }), "11 AM – 3 PM");
+    assert.equal(slotWindowLabel({ slot_type: "EVENING_SNACKS_3_TO_6" }), "3 PM – 6 PM");
+    assert.equal(slotWindowLabel({ slot_type: "ALL_DAY", available_from: "06:30", available_to: "00:15" }), "6:30 AM – 12:15 AM");
   });
 });
