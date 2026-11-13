@@ -24,6 +24,7 @@ process.env.ENABLE_CRON = "false";
 process.env.JWT_SECRET = "test-secret-test-secret-test-secret-1234567890";
 process.env.FIREBASE_SERVICE_ACCOUNT_PATH = "";
 process.env.R2_ENDPOINT = "";
+process.env.CHECKOUT_IP_LIMIT = "100000"; // the per-phone limit is still tested for real
 process.env.REDIS_URL = ""; // tests never use the developer's Redis
 process.env.UPLOAD_DIR = path.join(os.tmpdir(), "dropputt-test-uploads");
 process.env.MIN_APP_VERSION_ANDROID = "";

@@ -65,7 +65,9 @@ export const publicWriteLimiter = limiter({
 
 // Customer checkout creates real rider requests: limit per phone number
 // (the identity) on top of a broad per-IP flood limit.
-export const checkoutIpLimiter = limiter({ windowMs: 10 * MINUTE, limit: 60 });
+// CHECKOUT_IP_LIMIT exists so test runs, which place hundreds of orders from
+// one address, can raise it. Leave it unset in production.
+export const checkoutIpLimiter = limiter({ windowMs: 10 * MINUTE, limit: Number(process.env.CHECKOUT_IP_LIMIT) || 60 });
 export const checkoutPhoneLimiter = limiter({
   windowMs: 10 * MINUTE,
   limit: 5,

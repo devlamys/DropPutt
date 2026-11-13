@@ -203,7 +203,7 @@ flowchart TD
 
 | Screen | Highlights |
 |---|---|
-| `/shop` | Storefront home: sticky nav with search, delivery-area picker and cart; category filter; 4 PM Chayakadi combos pinned 15:00–18:00 IST; items orderable now; open shops; one-shop cart with cash-on-delivery checkout. |
+| `/shop` | Storefront home: sticky header with town, area picker, search and **My Orders**; live 4 PM banner; Order Food / Buy Anything / Pick & Drop cards; category pills; shop cards. Tapping a shop opens its **menu drawer** (all items or only 4 PM snack combos); the one-shop cart and **checkout** take phone, turning-point landmark, delivery area and payment (cash on delivery or UPI), then go straight to live tracking. |
 | `/shop/:vendorId` | One shop's full menu with in-menu search: what can be ordered now, plus sold-out and out-of-slot items greyed out with when they return. |
 | `/drop/:token` | Hotel and rider details, bill breakdown, **Share My Current Location**, hold-to-record voice route, turning-point landmark, tips (+₹10/20/30), live map with the rider's bike gliding toward the home pin. |
 | `/vendor` | Giant pulsing **Call Rider Now**, live order board, menu and shop toggles. |

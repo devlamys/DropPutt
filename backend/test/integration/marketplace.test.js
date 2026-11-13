@@ -382,3 +382,71 @@ describe("custom orders: Buy Anything, Pick & Drop, Mini Truck", () => {
     assert.equal(await prisma.order.count(), 0);
   });
 });
+
+describe("checkout: payment method and turning point", () => {
+  const place = (extra = {}) =>
+    api("POST", "/marketplace/checkout", {
+      body: {
+        vendor_id: w.vendor.id,
+        zone_id: w.zones[0].id,
+        customer_phone: nextPhone(),
+        drop_address: "Blue gate house",
+        items: [{ product_id: w.products.biryani.id, quantity: 2 }],
+        ...extra,
+      },
+    });
+
+  it("defaults to cash on delivery", async () => {
+    const res = await place();
+    assert.equal(res.status, 201);
+    assert.equal(res.body.data.payment_method, "COD");
+    assert.equal(res.body.data.cash_to_rider, "230.00");
+    assert.equal((await prisma.order.findFirst()).payment_method, "COD");
+  });
+
+  it("UPI_TO_ADMIN is stored, and the rider then collects nothing", async () => {
+    const res = await place({ payment_method: "UPI_TO_ADMIN" });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    assert.equal(res.body.data.payment_method, "UPI_TO_ADMIN");
+    assert.equal(res.body.data.cash_to_rider, "0.00");
+    const order = await prisma.order.findFirst();
+    assert.equal(order.payment_method, "UPI_TO_ADMIN");
+
+    // The rider's pickup keeps the customer's choice: full bill, no cash due.
+    await accept(api, w.riders[0], order.id);
+    const picked = await api("PUT", `/orders/${order.id}/rider-pickup`, {
+      token: w.riders[0].token,
+      body: { customer_phone: order.customer_phone, zone_id: w.zones[0].id },
+    });
+    assert.equal(picked.status, 200, JSON.stringify(picked.body));
+    assert.equal(picked.body.data.order.payment_method, "UPI_TO_ADMIN");
+    assert.equal(picked.body.data.order.grand_total, "230.00");
+    assert.equal(picked.body.data.order.amount_to_collect, "0.00");
+  });
+
+  it("customers cannot pick any other payment method", async () => {
+    for (const payment_method of ["PREPAID_AT_HOTEL", "BITCOIN", ""]) {
+      assert.equal((await place({ payment_method })).status, 422, payment_method);
+    }
+    assert.equal(await prisma.order.count(), 0);
+  });
+
+  it("the turning point lands on the order and is remembered for the customer", async () => {
+    const phone = nextPhone();
+    const res = await place({ customer_phone: phone, turning_point: "Opposite the old mosque, blue gate" });
+    assert.equal(res.status, 201);
+    const order = await prisma.order.findFirst();
+    assert.equal(order.turning_point, "Opposite the old mosque, blue gate");
+    const customer = await prisma.customer.findFirst({ where: { phone } });
+    assert.equal(customer.turning_point, "Opposite the old mosque, blue gate");
+
+    // The rider sees it before pickup.
+    await accept(api, w.riders[0], order.id);
+    const active = await api("GET", "/orders/active", { token: w.riders[0].token });
+    assert.equal(active.body.data.orders[0].turning_point, "Opposite the old mosque, blue gate");
+  });
+
+  it("a one-character turning point is rejected", async () => {
+    assert.equal((await place({ turning_point: "x" })).status, 422);
+  });
+});

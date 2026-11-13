@@ -190,6 +190,11 @@ const checkoutSchema = z.object({
   customer_phone: z.union([z.string(), z.number()]),
   customer_name: z.string().trim().min(1).max(100).optional(),
   drop_address: z.string().trim().min(3).max(300),
+  // Nearest landmark / where the road turns off: how riders find rural houses.
+  turning_point: z.string().trim().min(2).max(300).optional(),
+  // What the customer pays with. PREPAID_AT_HOTEL is a shop-side arrangement,
+  // never offered to customers.
+  payment_method: z.enum(["COD", "UPI_TO_ADMIN"]).default("COD"),
   // Prices and totals are never accepted from the client (SPEC §7).
   items: z
     .array(
@@ -244,8 +249,16 @@ router.post(
 
         await tx.customer.upsert({
           where: { franchise_id_phone: { franchise_id, phone: customer_phone } },
-          create: { franchise_id, phone: customer_phone, name: body.customer_name ?? null },
-          update: body.customer_name ? { name: body.customer_name } : {},
+          create: {
+            franchise_id,
+            phone: customer_phone,
+            name: body.customer_name ?? null,
+            turning_point: body.turning_point ?? null,
+          },
+          update: {
+            ...(body.customer_name ? { name: body.customer_name } : {}),
+            ...(body.turning_point ? { turning_point: body.turning_point } : {}),
+          },
         });
 
         const datePart = istDayRange().date.replaceAll("-", "").slice(2);
@@ -254,6 +267,8 @@ router.post(
             franchise_id,
             order_number: `DP-${datePart}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`,
             location_token: crypto.randomBytes(24).toString("base64url"),
+            payment_method: body.payment_method,
+            turning_point: body.turning_point ?? null,
             order_type: "FOOD_MARKETPLACE",
             order_category: CATEGORY_BY_SHOP[vendor.shop_category] ?? "FOOD",
             order_status: "RIDER_REQUESTED",
@@ -310,6 +325,9 @@ router.post(
         item_total: moneyStr(cart.item_total),
         delivery_fee: moneyStr(zone.delivery_fee),
         estimated_total: moneyStr(addMoney(cart.item_total, money(zone.delivery_fee))),
+        payment_method: order.payment_method,
+        // Cash the rider will ask for: nothing when the customer pays by UPI.
+        cash_to_rider: order.payment_method === "UPI_TO_ADMIN" ? "0.00" : moneyStr(addMoney(cart.item_total, money(zone.delivery_fee))),
       },
       { status: 201 }
     );
