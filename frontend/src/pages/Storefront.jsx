@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import CartBar from "../components/shop/CartBar.jsx";
 import CartSheet, { OrderPlaced } from "../components/shop/CartSheet.jsx";
+import CustomBuyModal from "../components/CustomBuyModal.jsx";
 import CustomOrderSheet from "../components/shop/CustomOrderSheet.jsx";
 import OrdersDrawer from "../components/shop/OrdersDrawer.jsx";
 import { StorefrontContext, readOrders, readProfile, saveLastOrder, saveProfile } from "../components/shop/StorefrontContext.jsx";
@@ -203,7 +204,19 @@ export default function Storefront() {
           />
         )}
 
-        {customKind && (
+        {customKind === "CUSTOM_BUY" && (
+          <CustomBuyModal
+            zones={zones}
+            zoneId={zoneId}
+            onZone={(id) => {
+              setZoneId(id);
+              saveProfile({ zone_id: id });
+            }}
+            onClose={() => setCustomKind(null)}
+            onPlaced={onPlaced}
+          />
+        )}
+        {customKind && customKind !== "CUSTOM_BUY" && (
           <CustomOrderSheet
             kind={customKind}
             zones={zones}

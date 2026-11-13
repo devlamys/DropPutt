@@ -1,6 +1,7 @@
 import { MessageCircle, Phone, Radio } from "lucide-react";
 import StatusBadge from "../StatusBadge.jsx";
 import { PAYMENT_LABELS, inr } from "../../utils/format.js";
+import RequestDetails from "./RequestDetails.jsx";
 import RouteMap from "./RouteMap.jsx";
 
 function whatsappUrl(order) {
@@ -38,6 +39,8 @@ export default function ActiveDeliveryCard({ order, riderPosition, tracking, onD
         <p className="text-3xl font-extrabold text-orange-700">{inr(order.amount_to_collect)}</p>
         <p className="text-xs text-slate-600">{PAYMENT_LABELS[order.payment_method]}</p>
       </div>
+
+      <RequestDetails order={order} />
 
       {order.customer_phone && (
         <a

@@ -1,4 +1,4 @@
-import { Bike, Loader2, MapPin, ShoppingBasket, Truck, X } from "lucide-react";
+import { Bike, Loader2, MapPin, Truck, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import api, { getErrorMessage, idempotencyHeaders } from "../../utils/api.js";
 import { inr } from "../../utils/format.js";
@@ -13,15 +13,6 @@ const validPhone = (value) => {
 };
 
 const KINDS = {
-  CUSTOM_BUY: {
-    icon: ShoppingBasket,
-    title: "Buy Anything",
-    ml: "എന്തും വാങ്ങാം",
-    hint: "Tell us what to buy. The rider buys it, you pay the bill plus delivery.",
-    detailsLabel: "What should we buy?",
-    detailsPlaceholder: "e.g. 1 kg rice, 2 packets milk, paracetamol strip",
-    needsPickup: false,
-  },
   PICK_DROP: {
     icon: Bike,
     title: "Pick & Drop",
@@ -42,12 +33,11 @@ const KINDS = {
   },
 };
 
-/** Request sheet for orders that are not from a listed shop. */
+/** Pick & Drop / Mini Truck request sheet. ("Buy Anything" has its own modal.) */
 export default function CustomOrderSheet({ kind: initialKind, zones, zoneId, onZone, onClose, onPlaced }) {
   const profile = readProfile();
   const [kind, setKind] = useState(initialKind);
   const [details, setDetails] = useState("");
-  const [shop, setShop] = useState("");
   const [pickup, setPickup] = useState("");
   const [address, setAddress] = useState(profile.address || "");
   const [phone, setPhone] = useState(profile.phone || "");
@@ -73,7 +63,7 @@ export default function CustomOrderSheet({ kind: initialKind, zones, zoneId, onZ
 
   const zone = zones.find((z) => String(z.id) === String(zoneId));
   const problems = [];
-  if (details.trim().length < 3) problems.push(`Tell us ${kind === "CUSTOM_BUY" ? "what to buy" : "what to move"}`);
+  if (details.trim().length < 3) problems.push("Tell us what needs to be moved");
   if (cfg.needsPickup && pickup.trim().length < 3) problems.push("Where should the rider collect it?");
   if (!zone) problems.push("Choose your delivery area");
   if (address.trim().length < 3) problems.push("Add your address or a landmark");
@@ -89,15 +79,14 @@ export default function CustomOrderSheet({ kind: initialKind, zones, zoneId, onZ
     attempt.current ??= idempotencyHeaders();
     try {
       const { data } = await api.post(
-        "/marketplace/custom-order",
+        "/marketplace/orders",
         {
-          kind,
+          order_type: kind,
           zone_id: Number(zoneId),
           customer_phone: phone,
           customer_name: name.trim() || undefined,
           drop_address: address.trim(),
           pickup_address: cfg.needsPickup ? pickup.trim() : undefined,
-          shop_name: kind === "CUSTOM_BUY" && shop.trim() ? shop.trim() : undefined,
           details: details.trim(),
         },
         { skipAuth: true, headers: attempt.current }
@@ -135,33 +124,25 @@ export default function CustomOrderSheet({ kind: initialKind, zones, zoneId, onZ
         </header>
 
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
-          {kind !== "CUSTOM_BUY" && (
-            <div className="grid grid-cols-2 gap-2 rounded-2xl bg-white p-1.5 ring-1 ring-slate-200" role="radiogroup" aria-label="Type of pickup">
-              {["PICK_DROP", "MINI_TRUCK"].map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  role="radio"
-                  aria-checked={kind === k}
-                  onClick={() => setKind(k)}
-                  className={`h-12 rounded-xl text-sm font-bold transition-transform active:scale-[0.98] ${kind === k ? "bg-emerald-600 text-white shadow" : "text-slate-600"}`}
-                >
-                  {KINDS[k].title}
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="grid grid-cols-2 gap-2 rounded-2xl bg-white p-1.5 ring-1 ring-slate-200" role="radiogroup" aria-label="Type of pickup">
+            {["PICK_DROP", "MINI_TRUCK"].map((k) => (
+              <button
+                key={k}
+                type="button"
+                role="radio"
+                aria-checked={kind === k}
+                onClick={() => setKind(k)}
+                className={`h-12 rounded-xl text-sm font-bold transition-transform active:scale-[0.98] ${kind === k ? "bg-emerald-600 text-white shadow" : "text-slate-600"}`}
+              >
+                {KINDS[k].title}
+              </button>
+            ))}
+          </div>
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-semibold text-slate-700">{cfg.detailsLabel}</span>
             <textarea className={field} rows={3} placeholder={cfg.detailsPlaceholder} value={details} onChange={(e) => setDetails(e.target.value)} maxLength={2000} />
           </label>
-          {kind === "CUSTOM_BUY" && (
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-semibold text-slate-700">Buy from a particular shop? <span className="font-normal text-slate-400">(optional)</span></span>
-              <input className={field} placeholder="Shop name or place" value={shop} onChange={(e) => setShop(e.target.value)} maxLength={150} />
-            </label>
-          )}
           {cfg.needsPickup && (
             <label className="block">
               <span className="mb-1.5 block text-sm font-semibold text-slate-700">Collect from</span>
@@ -203,7 +184,7 @@ export default function CustomOrderSheet({ kind: initialKind, zones, zoneId, onZ
 
           <p className="rounded-2xl bg-amber-50 px-4 py-3 text-xs font-medium text-amber-900 ring-1 ring-amber-200">
             Delivery from <b className="tabular-nums">{zone ? inr(zone.delivery_fee) : "₹30"}</b>
-            {kind === "CUSTOM_BUY" ? " + the shop bill" : ""}. The rider confirms the final amount with you before pickup. Pay cash on delivery.
+. The rider confirms the final amount with you before pickup. Pay cash on delivery.
           </p>
           {error && (
             <p role="alert" className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700 ring-1 ring-red-200">{error}</p>

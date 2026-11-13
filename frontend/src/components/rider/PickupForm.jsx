@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import api, { MULTIPART, getErrorMessage } from "../../utils/api.js";
 import { PAYMENT_LABELS, inr } from "../../utils/format.js";
 import { compressImage } from "../../utils/image.js";
+import RequestDetails from "./RequestDetails.jsx";
 
 /** Badge under the phone field: what we already know about this customer. */
 function LookupBadge({ lookup, loading }) {
@@ -125,6 +126,8 @@ export default function PickupForm({ order, zones, onPickedUp, onError }) {
         </h2>
         {order.pickup_address && <p className="text-sm text-slate-500">📍 {order.pickup_address}</p>}
       </div>
+
+      <RequestDetails order={order} />
 
       {/* 1 — bill photo */}
       <div>
