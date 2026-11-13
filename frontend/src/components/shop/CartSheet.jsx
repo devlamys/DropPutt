@@ -17,7 +17,7 @@ function Section({ title, children, action }) {
   return (
     <section className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-black/5">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-extrabold uppercase tracking-wide text-slate-500">{title}</h3>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h3>
         {action}
       </div>
       {children}
@@ -95,21 +95,21 @@ export default function CartSheet({ cart, totals, shop, zones, zoneId, onZone, m
   };
 
   const field =
-    "w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100";
+    "w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base outline-none transition placeholder:text-slate-400 focus:border-flame-500 focus:bg-white focus:ring-4 focus:ring-flame-100";
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 motion-safe:animate-fade-in sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label="Your cart">
       <form
         onSubmit={submit}
         noValidate
-        className="flex max-h-[94vh] w-full max-w-lg flex-col overflow-hidden rounded-t-[2rem] bg-[#FFF9F2] shadow-2xl motion-safe:animate-sheet-up sm:rounded-[2rem]"
+        className="flex max-h-[94vh] w-full max-w-lg flex-col overflow-hidden rounded-t-[2rem] bg-[#F3F3F0] font-display shadow-2xl motion-safe:animate-sheet-up sm:rounded-[2rem]"
       >
-        <header className="flex items-center justify-between gap-3 bg-white px-5 py-4 shadow-sm">
+        <header className="flex items-center justify-between gap-3 bg-pine-900 px-5 py-4 text-white">
           <div className="min-w-0">
-            <h2 className="text-lg font-extrabold">Your cart</h2>
-            <p className="truncate text-sm text-slate-500">{cart.shop_name}</p>
+            <h2 className="text-lg font-semibold">Your cart</h2>
+            <p className="truncate text-sm text-pine-200">{cart.shop_name}</p>
           </div>
-          <button type="button" onClick={onClose} disabled={busy} aria-label="Close cart" className="rounded-full bg-slate-100 p-2 text-slate-600 hover:bg-slate-200">
+          <button type="button" onClick={onClose} disabled={busy} aria-label="Close cart" className="rounded-full bg-white/10 p-2 text-white hover:bg-white/20">
             <X className="h-5 w-5" />
           </button>
         </header>
@@ -118,7 +118,7 @@ export default function CartSheet({ cart, totals, shop, zones, zoneId, onZone, m
           <Section
             title={`${totals.count} item${totals.count === 1 ? "" : "s"}`}
             action={
-              <button type="button" onClick={onAddMore} className="flex items-center gap-1 text-sm font-bold text-emerald-700">
+              <button type="button" onClick={onAddMore} className="flex items-center gap-1 text-sm font-bold text-flame-700">
                 <Plus className="h-4 w-4" strokeWidth={3} /> Add more
               </button>
             }
@@ -126,7 +126,7 @@ export default function CartSheet({ cart, totals, shop, zones, zoneId, onZone, m
             <ul className="divide-y divide-slate-100">
               {cart.lines.map((line) => (
                 <li key={line.product_id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                  <ProductImage product={line} shopCategory={shop?.shop_category} className="h-12 w-12 shrink-0 rounded-xl" emojiClass="text-2xl" />
+                  <ProductImage product={line} shopCategory={shop?.shop_category} className="h-12 w-12 shrink-0 rounded-xl" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{line.name}</p>
                     <p className="text-xs text-slate-500">{inr(line.price)} each</p>
@@ -143,7 +143,7 @@ export default function CartSheet({ cart, totals, shop, zones, zoneId, onZone, m
               ))}
             </ul>
             {short > 0 && (
-              <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">
+              <p className="mt-3 rounded-xl bg-flame-50 px-3 py-2 text-sm font-medium text-flame-900">
                 Minimum order here is {inr(minOrder)}. Add {inr(short)} more.
               </p>
             )}
@@ -162,7 +162,7 @@ export default function CartSheet({ cart, totals, shop, zones, zoneId, onZone, m
                     aria-label={`${z.zone_name}, delivery ${inr(z.delivery_fee)}`}
                     onClick={() => onZone(z.id)}
                     className={`flex items-center gap-1.5 rounded-full border-2 px-3 py-2 text-left text-sm font-semibold transition ${
-                      active ? "border-emerald-600 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-white text-slate-700"
+                      active ? "border-flame-600 bg-flame-50 text-pine-900" : "border-slate-200 bg-white text-slate-700"
                     }`}
                   >
                     <MapPin className="h-4 w-4 shrink-0" />
@@ -204,12 +204,12 @@ export default function CartSheet({ cart, totals, shop, zones, zoneId, onZone, m
                 <dd className="font-semibold tabular-nums">{fee == null ? "Choose area" : inr(fee)}</dd>
               </div>
               <div className="mt-2 flex justify-between border-t border-dashed border-slate-300 pt-2 text-base">
-                <dt className="font-extrabold">To pay</dt>
-                <dd className="font-extrabold tabular-nums">{fee == null ? "—" : inr(totals.subtotal + fee)}</dd>
+                <dt className="font-semibold">To pay</dt>
+                <dd className="font-semibold tabular-nums">{fee == null ? "—" : inr(totals.subtotal + fee)}</dd>
               </div>
             </dl>
             <p className="mt-3 flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
-              <Banknote className="h-4 w-4 shrink-0 text-emerald-600" />
+              <Banknote className="h-4 w-4 shrink-0 text-flame-600" />
               Cash on delivery. The rider confirms the final bill at the shop.
             </p>
           </Section>
@@ -222,14 +222,14 @@ export default function CartSheet({ cart, totals, shop, zones, zoneId, onZone, m
         </div>
 
         <footer className="bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
-          {touched && blocked && <p className="mb-2 text-center text-sm font-medium text-amber-800">{problems[0]}</p>}
+          {touched && blocked && <p className="mb-2 text-center text-sm font-medium text-flame-800">{problems[0]}</p>}
           <button
             type="submit"
             disabled={busy}
             aria-disabled={blocked}
             aria-label={busy ? "Placing order" : `Place order, ${fee == null ? inr(totals.subtotal) : inr(totals.subtotal + fee)}`}
-            className={`flex w-full items-center justify-between rounded-2xl px-5 py-4 text-base font-extrabold text-white transition active:scale-[0.99] ${
-              blocked ? "bg-slate-400" : "bg-emerald-600 shadow-lg shadow-emerald-900/20"
+            className={`flex w-full items-center justify-between rounded-full px-6 py-4 text-base font-semibold text-white transition active:scale-[0.99] ${
+              blocked ? "bg-slate-400" : "bg-flame-600 shadow-lg shadow-black/25"
             }`}
           >
             <span className="tabular-nums">{fee == null ? inr(totals.subtotal) : inr(totals.subtotal + fee)}</span>
@@ -247,16 +247,16 @@ export default function CartSheet({ cart, totals, shop, zones, zoneId, onZone, m
 /** Shown for a moment after the order is accepted, before tracking opens. */
 export function OrderPlaced({ order }) {
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-emerald-600 px-6 text-center text-white motion-safe:animate-fade-in" role="status">
+    <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center pine-texture px-6 text-center text-white motion-safe:animate-fade-in" role="status">
       <svg viewBox="0 0 72 72" className="h-24 w-24 motion-safe:animate-scale-in" aria-hidden="true">
         <circle cx="36" cy="36" r="33" fill="white" />
-        <path d="M22 37l10 10 19-21" fill="none" stroke="#059669" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="48" strokeDashoffset="48" className="motion-safe:animate-check-draw motion-reduce:[stroke-dashoffset:0]" />
+        <path d="M22 37l10 10 19-21" fill="none" stroke="#D96A08" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="48" strokeDashoffset="48" className="motion-safe:animate-check-draw motion-reduce:[stroke-dashoffset:0]" />
       </svg>
-      <h2 className="mt-6 text-2xl font-extrabold">Order placed!</h2>
-      <p className="mt-1 text-emerald-50">
+      <h2 className="mt-6 text-2xl font-semibold">Order placed!</h2>
+      <p className="mt-1 text-pine-100">
         {order.order_number} · {order.shop_name}
       </p>
-      <p className="mt-4 text-sm text-emerald-100">Finding a rider — opening your tracking page…</p>
+      <p className="mt-4 text-sm text-pine-200">Finding a rider — opening your tracking page…</p>
     </div>
   );
 }

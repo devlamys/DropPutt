@@ -17,10 +17,10 @@ export default function ZoneSheet({ zones, value, onPick, onClose }) {
                 onClick={() => onPick(zone.id)}
                 aria-pressed={active}
                 className={`flex w-full items-center gap-3 rounded-2xl border-2 p-3 text-left transition ${
-                  active ? "border-emerald-600 bg-emerald-50" : "border-slate-200 bg-white hover:border-slate-300"
+                  active ? "border-flame-600 bg-flame-50" : "border-slate-200 bg-white hover:border-slate-300"
                 }`}
               >
-                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${active ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"}`}>
+                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${active ? "bg-flame-600 text-white" : "bg-slate-100 text-slate-500"}`}>
                   {active ? <Check className="h-5 w-5" /> : <MapPin className="h-5 w-5" />}
                 </span>
                 <span className="min-w-0 flex-1 font-semibold">{zone.zone_name}</span>

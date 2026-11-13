@@ -6,3 +6,27 @@
 body {
   @apply bg-slate-50 text-slate-900 antialiased;
 }
+
+/* ── Storefront plated illustrations ─────────────────────────────────────
+   The tile is a size container so the plate's emoji scales with it.
+   Old browsers without container units keep the fixed fallback size. */
+.plate-art {
+  container-type: size;
+}
+.plate-art .plate-emoji {
+  font-size: 2rem;
+  line-height: 1;
+}
+@supports (font-size: 1cqmin) {
+  .plate-art .plate-emoji {
+    font-size: 44cqmin;
+  }
+}
+/* Chalkboard-like texture for the dark storefront bands. */
+.pine-texture {
+  background-color: #2a4237;
+  background-image:
+    radial-gradient(ellipse at 20% 0%, rgba(255, 255, 255, 0.07), transparent 55%),
+    radial-gradient(ellipse at 85% 30%, rgba(0, 0, 0, 0.22), transparent 60%),
+    radial-gradient(ellipse at 50% 100%, rgba(255, 255, 255, 0.04), transparent 50%);
+}

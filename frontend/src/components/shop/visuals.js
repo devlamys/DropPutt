@@ -1,5 +1,6 @@
-// Illustrations for products without a photo: an emoji picked from the name
-// on a soft tint. Deterministic, so a product always looks the same.
+// Illustrations for products without a photo: an emoji picked from the name,
+// served on a plate over a moody table background. Deterministic, so a
+// product always looks the same.
 
 const RULES = [
   [/biry|biriy|mandi/i, "🍛"],
@@ -25,32 +26,26 @@ const RULES = [
 ];
 
 export const CATEGORY = {
-  HOTEL: { label: "Food", emoji: "🍛", cover: "from-orange-200 via-amber-100 to-rose-100" },
-  BAKERY_COOLBAR: { label: "Snacks & Coolbar", emoji: "🧁", cover: "from-pink-200 via-rose-100 to-amber-100" },
-  GROCERY: { label: "Grocery", emoji: "🛒", cover: "from-lime-200 via-emerald-100 to-teal-100" },
-  FISH_MEAT: { label: "Fish & Meat", emoji: "🐟", cover: "from-sky-200 via-cyan-100 to-blue-100" },
-  MEDICAL_PHARMACY: { label: "Medical", emoji: "💊", cover: "from-violet-200 via-indigo-100 to-sky-100" },
+  HOTEL: { label: "Food", emoji: "🍛", blurb: "Meals, biryani and curries from local hotels." },
+  BAKERY_COOLBAR: { label: "Snacks & Coolbar", emoji: "🧁", blurb: "Tea-time snacks, shakes and bakes." },
+  GROCERY: { label: "Grocery", emoji: "🛒", blurb: "Daily essentials from nearby stores." },
+  FISH_MEAT: { label: "Fish & Meat", emoji: "🐟", blurb: "Fresh catch and cuts for today's cooking." },
+  MEDICAL_PHARMACY: { label: "Medical", emoji: "💊", blurb: "Medicines from your local pharmacy." },
 };
-export const categoryOf = (key) => CATEGORY[key] ?? { label: "Shop", emoji: "🏪", cover: "from-slate-200 to-slate-100" };
+export const categoryOf = (key) => CATEGORY[key] ?? { label: "Shop", emoji: "🏪", blurb: "" };
 
-const TINTS = [
-  "bg-amber-100",
-  "bg-orange-100",
-  "bg-rose-100",
-  "bg-lime-100",
-  "bg-sky-100",
-  "bg-violet-100",
-  "bg-emerald-100",
-  "bg-yellow-100",
-];
+// Table surfaces behind the plate: slate, wood, deep green, linen, walnut, blue slate.
+const TABLES = ["bg-[#2B2F33]", "bg-[#3A2A1F]", "bg-[#1F2E27]", "bg-[#E9E3D6]", "bg-[#43352B]", "bg-[#22303A]"];
+
+const hash = (text) => {
+  let h = 0;
+  for (let i = 0; i < text.length; i += 1) h = (h * 31 + text.charCodeAt(i)) >>> 0;
+  return h;
+};
 
 export function productEmoji(name, shopCategory) {
   for (const [pattern, emoji] of RULES) if (pattern.test(name)) return emoji;
   return categoryOf(shopCategory).emoji;
 }
 
-export function productTint(name) {
-  let hash = 0;
-  for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  return TINTS[hash % TINTS.length];
-}
+export const tableFor = (name) => TABLES[hash(name) % TABLES.length];

@@ -147,13 +147,18 @@ export default function Storefront() {
     addProduct,
     removeOne,
     openZones: () => setZoneOpen(true),
+    pickZone,
+    totals,
+    openCart: () => setCartOpen(true),
   };
 
   return (
     <StorefrontContext.Provider value={value}>
-      <div className="min-h-screen bg-[#FFF9F2] pb-32">
+      <div className="min-h-screen bg-[#F3F3F0] font-display text-pine-950">
         {toastNode}
         <Outlet />
+        {/* room for the floating cart bar so it never covers the footer text */}
+        {totals.count > 0 && <div className="h-24 bg-pine-950" aria-hidden="true" />}
 
         {!cartOpen && !placed && (
           <CartBar cart={cart} totals={totals} minOrder={minOrder} shopCategory={cartShop?.shop_category} onOpen={() => setCartOpen(true)} />
@@ -186,12 +191,12 @@ export default function Storefront() {
         {switching && (
           <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/50 p-4 motion-safe:animate-fade-in sm:items-center" role="alertdialog" aria-modal="true" aria-label="Start a new cart?">
             <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl motion-safe:animate-sheet-up">
-              <p className="text-lg font-extrabold">Start a new cart?</p>
+              <p className="text-lg font-semibold text-pine-950">Start a new cart?</p>
               <p className="mt-1 text-sm text-slate-600">
                 One order comes from one shop. Adding this will clear your items from <b>{cart.shop_name}</b>.
               </p>
               <div className="mt-4 flex gap-2">
-                <button type="button" onClick={() => setSwitching(null)} className="flex-1 rounded-2xl bg-slate-100 py-3 font-bold text-slate-700">
+                <button type="button" onClick={() => setSwitching(null)} className="flex-1 rounded-full bg-slate-100 py-3 text-sm font-semibold text-slate-700">
                   Keep cart
                 </button>
                 <button
@@ -200,7 +205,7 @@ export default function Storefront() {
                     replaceWith(switching.product, switching.shopName);
                     setSwitching(null);
                   }}
-                  className="flex-1 rounded-2xl bg-emerald-600 py-3 font-extrabold text-white"
+                  className="flex-1 rounded-full bg-flame-600 py-3 text-sm font-semibold text-white hover:bg-flame-700"
                 >
                   New cart
                 </button>

@@ -27,6 +27,36 @@ export default {
       },
       fontFamily: {
         sans: ["Inter", "Noto Sans Malayalam", "system-ui", "sans-serif"],
+        // Customer storefront only.
+        display: ["Poppins", "Inter", "Noto Sans Malayalam", "system-ui", "sans-serif"],
+      },
+      colors: {
+        // Storefront palette: deep kitchen green + warm orange.
+        pine: {
+          50: "#F2F6F3",
+          100: "#DFE9E3",
+          200: "#BFD2C7",
+          300: "#94B3A2",
+          400: "#6A9480",
+          500: "#4D7763",
+          600: "#3C5F4F",
+          700: "#324E41",
+          800: "#2A4237",
+          900: "#1C3027",
+          950: "#0F2018",
+        },
+        flame: {
+          50: "#FFF5EA",
+          100: "#FFE7CF",
+          200: "#FFCF9F",
+          300: "#FFB066",
+          400: "#FA9535",
+          500: "#F27F1B",
+          600: "#D96A08",
+          700: "#B45607",
+          800: "#8C440A",
+          900: "#6E370C",
+        },
       },
     },
   },
