@@ -1,7 +1,7 @@
-import { ChevronDown, ClipboardList, Clock, MapPin, Minus, Plus, Search, ShoppingBag, ShoppingBasket, Truck, Utensils, X } from "lucide-react";
+import { ChevronDown, ClipboardList, Clock, MapPin, Search, ShoppingBag, ShoppingBasket, Truck, Utensils, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { placeName, zoneLabel } from "../components/shop/chrome.jsx";
+import Stepper from "../components/shop/Stepper.jsx";
 import { useStorefront } from "../components/shop/StorefrontContext.jsx";
 import { categoryOf, productEmoji } from "../components/shop/visuals.js";
 import { inr } from "../utils/format.js";
@@ -66,30 +66,13 @@ function HomeSkeleton() {
   );
 }
 
-function Stepper({ quantity, onAdd, onRemove, label }) {
-  if (!quantity) {
-    return (
-      <button type="button" onClick={onAdd} aria-label={`Add ${label}`} className={`h-12 min-w-[5.5rem] rounded-2xl border-2 border-emerald-600 bg-white px-4 text-sm font-bold text-emerald-700 ${press}`}>
-        ADD
-      </button>
-    );
-  }
-  return (
-    <div className="flex h-12 min-w-[7rem] items-center justify-between rounded-2xl bg-emerald-600 text-white motion-safe:animate-pop">
-      <button type="button" onClick={onRemove} aria-label={`Remove one ${label}`} className="flex h-12 w-12 items-center justify-center"><Minus className="h-4 w-4" strokeWidth={3} /></button>
-      <span className="tabular-nums font-bold" aria-live="polite">{quantity}</span>
-      <button type="button" onClick={onAdd} aria-label={`Add one more ${label}`} className="flex h-12 w-12 items-center justify-center"><Plus className="h-4 w-4" strokeWidth={3} /></button>
-    </div>
-  );
-}
-
-function ShopCard({ shop, inCart }) {
+function ShopCard({ shop, inCart, onOpen }) {
   const cat = categoryOf(shop.shop_category);
   const menu = [...shop.products, ...(shop.unavailable ?? [])];
   const preview = shop.products.slice(0, 2).map((p) => p.name);
   const snacks = shop.shop_category === "BAKERY_COOLBAR";
   return (
-    <Link to={`/shop/${shop.id}`} className={`flex min-h-12 gap-3 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm ${press}`}>
+    <button type="button" onClick={() => onOpen(shop.id)} aria-label={`Open ${shop.shop_name} menu`} className={`flex min-h-12 w-full gap-3 rounded-2xl border border-slate-200/80 bg-white p-3 text-left shadow-sm ${press}`}>
       <span className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl text-4xl ${snacks ? "bg-amber-100" : "bg-emerald-50"}`} aria-hidden="true">
         {productEmoji(menu[0]?.name ?? shop.shop_name, shop.shop_category)}
       </span>
@@ -111,14 +94,14 @@ function ShopCard({ shop, inCart }) {
           {inCart && <span className="rounded-full bg-emerald-600 px-2 py-1 text-white">In your cart</span>}
         </div>
       </div>
-    </Link>
+    </button>
   );
 }
 
 export default function StorefrontHome() {
   const {
     feed, vendors, zone, loading, error, reload, cart, quantityOf, addProduct, removeOne, openZones,
-    totals, minOrder, cartShop, openCart, openCustom, openOrders, orderCount, franchiseName, toast,
+    totals, minOrder, cartShop, openCart, openCustom, openOrders, openVendor, orderCount, franchiseName, toast,
   } = useStorefront();
   const [query, setQuery] = useState("");
   const [pill, setPill] = useState("all");
@@ -253,7 +236,7 @@ export default function StorefrontHome() {
               {results.shops.length > 0 && (
                 <section>
                   <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">Shops</h2>
-                  <div className="space-y-3">{results.shops.map((s) => <ShopCard key={s.id} shop={s} inCart={cart.vendor_id === s.id} />)}</div>
+                  <div className="space-y-3">{results.shops.map((s) => <ShopCard key={s.id} shop={s} inCart={cart.vendor_id === s.id} onOpen={openVendor} />)}</div>
                 </section>
               )}
             </>
@@ -356,7 +339,7 @@ export default function StorefrontHome() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-3">{shops.map((s) => <ShopCard key={s.id} shop={s} inCart={cart.vendor_id === s.id} />)}</div>
+              <div className="space-y-3">{shops.map((s) => <ShopCard key={s.id} shop={s} inCart={cart.vendor_id === s.id} onOpen={openVendor} />)}</div>
             )}
           </section>
 

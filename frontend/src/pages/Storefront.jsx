@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import CartBar from "../components/shop/CartBar.jsx";
-import CartSheet, { OrderPlaced } from "../components/shop/CartSheet.jsx";
+import CartCheckoutModal from "../components/CartCheckoutModal.jsx";
+import OrderPlaced from "../components/shop/OrderPlaced.jsx";
+import VendorMenuDrawer from "../components/VendorMenuDrawer.jsx";
 import CustomBuyModal from "../components/CustomBuyModal.jsx";
 import CustomOrderSheet from "../components/shop/CustomOrderSheet.jsx";
 import OrdersDrawer from "../components/shop/OrdersDrawer.jsx";
@@ -35,6 +37,7 @@ export default function Storefront() {
   const [placed, setPlaced] = useState(null);
   const [customKind, setCustomKind] = useState(null); // "CUSTOM_BUY" | "PICK_DROP" | "MINI_TRUCK"
   const [ordersOpen, setOrdersOpen] = useState(false);
+  const [vendorId, setVendorId] = useState(null); // shop whose menu drawer is open
   const [orderCount, setOrderCount] = useState(() => readOrders().length);
   const location = useLocation();
   // The home page draws its own cart bar; every other page uses the shared one.
@@ -140,7 +143,8 @@ export default function Storefront() {
     setCartOpen(false);
     setCustomKind(null);
     setPlaced(order);
-    setTimeout(() => navigate(`/drop/${order.location_token}`), 1600);
+    // Straight to live tracking after a brief confirmation.
+    setTimeout(() => navigate(`/drop/${order.location_token}`), 900);
   };
 
   const zone = zones.find((z) => String(z.id) === String(zoneId)) ?? null;
@@ -164,6 +168,7 @@ export default function Storefront() {
     franchiseName: feed?.franchise?.name ?? null,
     openCustom: (kind) => setCustomKind(kind),
     openOrders: () => setOrdersOpen(true),
+    openVendor: (id) => setVendorId(id),
     orderCount,
     minOrder,
     cartShop,
@@ -183,10 +188,9 @@ export default function Storefront() {
         )}
 
         {cartOpen && totals.count > 0 && (
-          <CartSheet
+          <CartCheckoutModal
             cart={cart}
             totals={totals}
-            shop={cartShop}
             zones={zones}
             zoneId={zoneId}
             onZone={(id) => {
@@ -197,10 +201,21 @@ export default function Storefront() {
             onQuantity={setQuantity}
             onAddMore={() => {
               setCartOpen(false);
-              navigate(`/shop/${cart.vendor_id}`);
+              setVendorId(cart.vendor_id);
             }}
             onClose={() => setCartOpen(false)}
             onPlaced={onPlaced}
+          />
+        )}
+
+        {vendorId != null && (
+          <VendorMenuDrawer
+            shopId={vendorId}
+            onClose={() => setVendorId(null)}
+            onViewCart={() => {
+              setVendorId(null);
+              setCartOpen(true);
+            }}
           />
         )}
 
