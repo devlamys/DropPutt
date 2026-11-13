@@ -60,6 +60,24 @@ A wildcard needs a DNS challenge. Pick one:
   `deploy/secrets/firebase.json` (never commit it).
 * **R2:** fill the `R2_*` values in `deploy/api.env`. Without R2 in production
   uploads have nowhere to go, so set it before real use.
+* **Road routes on the maps (OSRM):** without it the maps draw a straight
+  dashed line from rider to house. To turn it on:
+
+  ```bash
+  sudo apt install -y osmium-tool
+  deploy/osrm/build.sh malappuram          # later: kerala, or southern
+  docker compose -f docker-compose.prod.yml --env-file deploy/compose.env --profile routing up -d osrm
+  ```
+
+  then set `ROUTING_URL=http://osrm:5000` in `deploy/api.env` and
+  `docker compose … up -d api`. The script downloads OpenStreetMap data,
+  clips it to the region, builds into a new folder, test-routes it, and only
+  then switches `osrm-data/current` — a failed build never affects the live
+  server. **Refresh monthly** by re-running the script (it restarts `osrm`), so
+  roads added to OpenStreetMap reach the app. Rollback:
+  `ln -sfn <older build-…> osrm-data/current` and restart `osrm`. Watch the
+  first build with `docker stats`; `osrm-extract` needs the most memory.
+  Never point `ROUTING_URL` at a public demo server.
 
 ## 5. First start
 

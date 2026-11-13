@@ -94,6 +94,22 @@ services:
       api:
         condition: service_healthy
 
+  # Road routes for the live maps (optional). Off until you build the data:
+  #   deploy/osrm/build.sh malappuram        # or: kerala | southern
+  #   docker compose ... --profile routing up -d osrm
+  # and set ROUTING_URL=http://osrm:5000 in deploy/api.env. See DEPLOY.md §4.
+  osrm:
+    image: ${OSRM_IMAGE:-ghcr.io/project-osrm/osrm-backend:v5.27.1}
+    profiles: ["routing"]
+    restart: unless-stopped
+    command: ["osrm-routed", "--algorithm", "mld", "/data/current/region.osrm"]
+    volumes:
+      - ${OSRM_DATA_DIR:-./osrm-data}:/data:ro
+    # Hard cap so a bigger region can never starve Postgres or the API.
+    mem_limit: ${OSRM_MEM_LIMIT:-1g}
+    # Not published: only the API calls it (http://osrm:5000). The API falls
+    # back to straight lines whenever it is down or restarting.
+
   # Nightly compressed dump into ./backups, keeping BACKUP_KEEP_DAYS days.
   backup:
     image: postgres:16-alpine

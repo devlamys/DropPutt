@@ -11,6 +11,7 @@ import { idempotency } from "../middleware/idempotency.js";
 import { publicLimiter, publicWriteLimiter } from "../middleware/rateLimit.js";
 import { voiceUpload } from "../middleware/upload.js";
 import { cancelOrder } from "../services/orderCancelService.js";
+import { refreshRouteFromRider, routeView } from "../services/routeService.js";
 import { emitTo, rooms } from "../socket/socketHandler.js";
 import { audit } from "../utils/audit.js";
 import {
@@ -105,6 +106,8 @@ router.get(
       has_voice_note: Boolean(order.voice_note_url),
       tip_options: ALLOWED_TIP_AMOUNTS,
       can_tip: Boolean(order.rider_id) && ACTIVE_ORDER_STATUSES.includes(order.order_status),
+      // Road route rider → home while the rider is on the way (null = draw a straight line).
+      route: routeView(order),
       // The customer may withdraw only until a rider has taken the order.
       can_cancel: order.order_status === "RIDER_REQUESTED",
       cancel_reason: order.order_status === "CANCELLED" ? order.cancel_reason : null,
@@ -244,6 +247,7 @@ router.post(
     }, TX_OPTIONS);
 
     if (order.rider_id) {
+      refreshRouteFromRider(order.id);
       emitTo(rooms.rider(order.rider_id), "customer_location_shared", {
         order_id: order.id,
         order_status: order.order_status,

@@ -350,6 +350,9 @@ model Order {
   cancelled_at         DateTime?
   cancelled_by_role    String?
   cancel_reason        String?
+  // Road route rider → drop (OSRM). { coords: [[lat,lng]...], distance_m, duration_s, dest: [lat,lng] }
+  route                Json?
+  route_updated_at     DateTime?
 
   franchise Franchise @relation(fields: [franchise_id], references: [id])
   vendor    Vendor?   @relation(fields: [vendor_id], references: [id])

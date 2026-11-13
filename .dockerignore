@@ -7,3 +7,5 @@ deploy/secrets
 deploy/*.env
 .git
 frontend/dist
+osrm-data
+backups
