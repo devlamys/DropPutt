@@ -36,3 +36,18 @@ body {
 .leaflet-container {
   isolation: isolate;
 }
+
+/* Road route: dashes march from the rider towards the house. */
+@keyframes dp-route-flow {
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+.dp-route-flow {
+  animation: dp-route-flow 1.2s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dp-route-flow {
+    animation: none;
+  }
+}

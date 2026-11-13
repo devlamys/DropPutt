@@ -8,3 +8,6 @@ deploy/secrets/*
 !deploy/secrets/.gitkeep
 backups/
 .claude/launch.json
+
+# Road-routing data built by deploy/osrm/build.sh (hundreds of MB)
+osrm-data/

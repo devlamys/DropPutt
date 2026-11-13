@@ -17,6 +17,7 @@ import { env } from "../config/env.js";
 import { prisma } from "../config/prisma.js";
 import { getRedis } from "../config/redis.js";
 import { resolveUserFromToken } from "../middleware/auth.js";
+import { maybeRefreshRoute } from "../services/routeService.js";
 import { ACTIVE_ORDER_STATUSES } from "../utils/constants.js";
 import { MAX_ID } from "../utils/validate.js";
 
@@ -84,6 +85,9 @@ async function markSeen(orderId, timestamp) {
   }
   return markSeenInMemory(orderId, timestamp);
 }
+
+// A point newer than this may (re)draw the road route; older replays never do.
+const ROUTE_FRESH_MS = 60 * 1000;
 
 const locationSchema = z.object({
   order_id: z.number().int().positive().max(MAX_ID),
@@ -158,6 +162,10 @@ export async function applyRiderLocation(rider, payload, { authCache, exceptSock
     : io?.to(rooms.order(payload.order_id));
   target?.emit("live_bike_position", event);
   emitFleetMove(rider, payload);
+  // Live points only: an old replayed point must not redraw the road route.
+  if (now - payload.timestamp < ROUTE_FRESH_MS) {
+    void maybeRefreshRoute(payload.order_id, [payload.lat, payload.lng]);
+  }
   return true;
 }
 
@@ -237,6 +245,9 @@ export async function applyRiderLocationBatch(rider, orderId, points) {
       timestamp: p.timestamp,
     });
     emitFleetMove(rider, { order_id: orderId, ...p });
+  }
+  if (now - newest.timestamp < ROUTE_FRESH_MS) {
+    void maybeRefreshRoute(orderId, [newest.lat, newest.lng]);
   }
   return result;
 }

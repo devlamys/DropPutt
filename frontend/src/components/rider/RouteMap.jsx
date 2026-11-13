@@ -1,6 +1,7 @@
 import L from "leaflet";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
+import { GATE_GAP_METRES, ROUTE_STYLE, etaMinutes, formatDistance, metresBetween, remainingRoute } from "../../utils/route.js";
 
 // Emoji pins: Leaflet's default PNG icons do not survive bundling.
 const pin = (emoji) =>
@@ -32,6 +33,11 @@ export default function RouteMap({ order, riderPosition }) {
   const drop = toPoint(order.drop_lat, order.drop_lng);
   const rider = riderPosition ? [riderPosition.lat, riderPosition.lng] : null;
 
+  const ahead = useMemo(() => remainingRoute(order.route, rider), [order.route, rider?.[0], rider?.[1]]);
+  const roadEnd = ahead?.coords[ahead.coords.length - 1];
+  const showWalk = ahead && drop && metresBetween(roadEnd, drop) >= GATE_GAP_METRES;
+  const eta = ahead ? etaMinutes(order.route, ahead.metres) : null;
+
   const points = [shop, drop, rider].filter(Boolean);
   const guideFrom = rider || shop;
   const center = points[0] || [11.0, 76.0];
@@ -56,11 +62,28 @@ export default function RouteMap({ order, riderPosition }) {
             </Marker>
           )}
           {rider && <Marker position={rider} icon={ICONS.rider} />}
-          {guideFrom && drop && (
-            <Polyline positions={[guideFrom, drop]} pathOptions={{ color: "#ea580c", weight: 4, dashArray: "8 8" }} />
+          {ahead ? (
+            <>
+              <Polyline positions={ahead.coords} pathOptions={ROUTE_STYLE.casing} />
+              <Polyline positions={ahead.coords} pathOptions={ROUTE_STYLE.line} />
+              <Polyline positions={ahead.coords} pathOptions={ROUTE_STYLE.flow} />
+              {showWalk && <Polyline positions={[roadEnd, drop]} pathOptions={ROUTE_STYLE.walk} />}
+              {rider && ahead.offRoute >= GATE_GAP_METRES && (
+                <Polyline positions={[rider, ahead.coords[0]]} pathOptions={ROUTE_STYLE.walk} />
+              )}
+            </>
+          ) : (
+            guideFrom &&
+            drop && <Polyline positions={[guideFrom, drop]} pathOptions={ROUTE_STYLE.straight} />
           )}
         </MapContainer>
       </div>
+      {eta && (
+        <p className="text-center text-sm font-semibold text-slate-700">
+          {formatDistance(ahead.metres)} by road · about {eta} min
+          {showWalk && <span className="font-normal text-slate-500"> · last {formatDistance(metresBetween(roadEnd, drop))} off-road</span>}
+        </p>
+      )}
       {drop ? (
         <a
           href={`https://www.google.com/maps/dir/?api=1&destination=${drop[0]},${drop[1]}&travelmode=two-wheeler`}

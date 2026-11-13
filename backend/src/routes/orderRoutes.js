@@ -14,6 +14,7 @@ import { billImageUpload, gatePhotoUpload } from "../middleware/upload.js";
 import { buildCart } from "../services/cartService.js";
 import { dispatchOrder } from "../services/dispatchService.js";
 import { cancelOrder } from "../services/orderCancelService.js";
+import { refreshRouteFromRider, routeView } from "../services/routeService.js";
 import { emitTo, joinRiderToOrder, rooms } from "../socket/socketHandler.js";
 import { audit } from "../utils/audit.js";
 import {
@@ -543,6 +544,7 @@ router.put(
 
     const { order, customer, already_picked_up } = result;
     if (!already_picked_up) {
+      refreshRouteFromRider(order.id);
       const event = { order_id: order.id, order_status: order.order_status };
       emitTo(rooms.order(order.id), "order_status_changed", event);
       if (order.vendor_id) {
@@ -1041,6 +1043,7 @@ router.get(
       return ok(res, {
         orders: orders.map((order) => ({
           ...boardOrderView(order, role),
+          route: routeView(order),
           navigation: order.customer_phone
             ? navigationView(order, byPhone.get(order.customer_phone))
             : null,

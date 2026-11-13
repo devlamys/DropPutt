@@ -93,6 +93,10 @@ export default function RiderDashboard() {
       toast("📍 Customer shared their location", "success");
       loadOrders().catch(() => {});
     },
+    route_updated: ({ order_id, coords, distance_m, duration_s }) =>
+      setOrders((list) =>
+        list.map((o) => (o.id === order_id ? { ...o, route: { coords, distance_m, duration_s } } : o))
+      ),
     tip_added: () => {
       toast("💚 Customer added a tip!", "success");
       loadOrders().catch(() => {});

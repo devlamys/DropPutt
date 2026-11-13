@@ -7,6 +7,7 @@ import VoiceRecorder from "../components/customer/VoiceRecorder.jsx";
 import { useToast } from "../components/Toast.jsx";
 import api, { MULTIPART, SOCKET_PATH, SOCKET_URL, getErrorMessage } from "../utils/api.js";
 import { inr } from "../utils/format.js";
+import { etaMinutes, formatDistance, remainingRoute } from "../utils/route.js";
 
 // SPEC §21 — exact wording (the server sends the same text).
 const INDOOR_GPS_WARNING_ML =
@@ -79,6 +80,10 @@ export default function CustomerDropPage() {
     socket.on("disconnect", () => setConnected(false));
     socket.on("live_bike_position", ({ lat, lng }) => setBike([lat, lng]));
     socket.on("order_status_changed", () => load());
+    // The server re-routes when the rider leaves the road or the pin moves.
+    socket.on("route_updated", ({ coords, distance_m, duration_s }) =>
+      setOrder((current) => current && { ...current, route: { coords, distance_m, duration_s } })
+    );
     return () => {
       socket.removeAllListeners();
       socket.disconnect();
@@ -107,6 +112,9 @@ export default function CustomerDropPage() {
   }, [connected, token, load]);
 
   const home = useMemo(() => (order ? point(order.drop_lat, order.drop_lng) : null), [order]);
+  // Road distance and time left, measured along the route from the bike.
+  const ahead = useMemo(() => remainingRoute(order?.route, bike), [order?.route, bike]);
+  const eta = ahead ? etaMinutes(order.route, ahead.metres) : null;
 
   const submitLocation = useCallback(
     async (reading) => {
@@ -389,7 +397,12 @@ export default function CustomerDropPage() {
         {/* live map */}
         {(active || delivered) && (
           <section className="space-y-2">
-            <LiveTrackingMap home={home} bike={active ? bike : null} />
+            {active && eta && (
+              <p className="flex items-center justify-center gap-2 rounded-2xl bg-orange-50 py-2.5 text-center font-bold text-orange-800 ring-1 ring-orange-200">
+                🛵 About {eta} min away <span className="font-medium text-orange-700">· {formatDistance(ahead.metres)} by road</span>
+              </p>
+            )}
+            <LiveTrackingMap home={home} bike={active ? bike : null} route={active ? order.route : null} />
             <p className="text-center text-xs text-slate-500">
               {active
                 ? bike
