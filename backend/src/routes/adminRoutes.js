@@ -27,6 +27,22 @@ import { AppError, asyncHandler, ok, validationError } from "../utils/response.j
 import { moneyStr } from "../utils/serializers.js";
 import { parse, parseId, zMoney } from "../utils/validate.js";
 
+/**
+ * Throws a validation error if x-franchise-slug header is missing.
+ * Prevents financial mutations from silently targeting the default franchise
+ * when a Super Admin forgets the header during development or testing.
+ */
+function requireFranchiseHeader(req) {
+  if (!req.get("x-franchise-slug")) {
+    throw validationError("Request validation failed", [
+      {
+        field: "x-franchise-slug",
+        issue: "header is required for financial operations",
+      },
+    ]);
+  }
+}
+
 const router = Router();
 router.use(authenticate);
 
@@ -85,6 +101,7 @@ router.post(
   requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
   idempotency(),
   asyncHandler(async (req, res) => {
+    requireFranchiseHeader(req);
     const riderId = parseId(req.params.id);
     const franchise_id = req.franchise_id;
     const body = parse(cashSettlementSchema, req.body);
@@ -150,6 +167,7 @@ router.post(
   requireRole("SUPER_ADMIN"),
   idempotency(),
   asyncHandler(async (req, res) => {
+    requireFranchiseHeader(req);
     const franchise_id = req.franchise_id;
     const body = parse(topUpSchema, req.body);
     const amount = money(body.amount);

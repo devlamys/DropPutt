@@ -18,6 +18,9 @@ export const orderNotFound = () =>
   new AppError(404, "ORDER_NOT_FOUND", "Order not found");
 export const validationError = (message, details) =>
   new AppError(422, "VALIDATION_ERROR", message, details);
+/** Shorthand for a single-field validation error. */
+export const fieldError = (field, issue) =>
+  validationError("Request validation failed", [{ field, issue }]);
 
 export function buildMeta(res, extra) {
   return {

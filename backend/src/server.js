@@ -37,6 +37,17 @@ try {
 }
 
 const app = createApp();
+
+// Safety check: REQUIRE_HTTPS only works correctly if TRUST_PROXY is set
+// when the app runs behind a reverse proxy or load balancer.
+if (env.requireHttps && env.trustProxy === 0) {
+  console.warn(
+    "[server] WARNING: REQUIRE_HTTPS is enabled but TRUST_PROXY is 0. " +
+      "Behind a load balancer req.secure will always be false, blocking all requests. " +
+      "Set TRUST_PROXY=1 (or the number of proxy hops in front of this server)."
+  );
+}
+
 const server = http.createServer(app);
 const io = initSocket(server);
 

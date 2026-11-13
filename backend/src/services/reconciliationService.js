@@ -304,6 +304,8 @@ export async function buildReconciliation(franchise_id, range) {
   };
 }
 
+const BALANCE_CHECK_CAP = 500;
+
 /** Stored balances vs. their ledger rows (all time). */
 async function balanceChecks(franchise_id) {
   const [franchise, lastTx, riders, vendors, riderLedger, vendorLedger] = await Promise.all([
@@ -316,10 +318,14 @@ async function balanceChecks(franchise_id) {
     prisma.rider.findMany({
       where: { franchise_id },
       select: { id: true, wallet_earnings: true, user: { select: { name: true } } },
+      orderBy: { id: "asc" },
+      take: BALANCE_CHECK_CAP, // safety cap; SQL aggregation refactor tracked separately
     }),
     prisma.vendor.findMany({
       where: { franchise_id },
       select: { id: true, shop_name: true, admin_payable_balance: true },
+      orderBy: { id: "asc" },
+      take: BALANCE_CHECK_CAP,
     }),
     // RIDER_TIP / RAIN_SURGE rows are informational: the amount reaches the
     // wallet inside the ORDER_DELIVERY entry, so they are left out.
@@ -360,6 +366,10 @@ async function balanceChecks(franchise_id) {
       shop_name: vendor.shop_name,
       ...compare(vendor.admin_payable_balance, vendorSums.get(vendor.id) ?? 0),
     })),
+    _warning:
+      riders.length >= BALANCE_CHECK_CAP || vendors.length >= BALANCE_CHECK_CAP
+        ? `Balance check capped at ${BALANCE_CHECK_CAP} riders/vendors. Full audit requires SQL aggregation.`
+        : undefined,
   };
 }
 

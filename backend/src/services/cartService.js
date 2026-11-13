@@ -2,13 +2,11 @@
 
 import { SNACK_MIN_ORDER_VALUE } from "../utils/constants.js";
 import { addMoney, calculateLineTotal, money } from "../utils/orderMath.js";
-import { validationError } from "../utils/response.js";
+import { fieldError } from "../utils/response.js";
 import { moneyStr } from "../utils/serializers.js";
 import { isProductInSlot } from "../utils/slots.js";
 import { isChayakadiWindow, istMinutesOfDay } from "../utils/time.js";
 
-export const fieldError = (field, issue) =>
-  validationError("Request validation failed", [{ field, issue }]);
 
 /**
  * Validates a cart against PostgreSQL and returns authoritative lines.

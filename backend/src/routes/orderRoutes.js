@@ -11,7 +11,7 @@ import { prisma, TX_OPTIONS } from "../config/prisma.js";
 import { authenticate, loadRider, requireRole } from "../middleware/auth.js";
 import { idempotency } from "../middleware/idempotency.js";
 import { billImageUpload, gatePhotoUpload } from "../middleware/upload.js";
-import { buildCart, fieldError } from "../services/cartService.js";
+import { buildCart } from "../services/cartService.js";
 import { dispatchOrder } from "../services/dispatchService.js";
 import { emitTo, joinRiderToOrder, rooms } from "../socket/socketHandler.js";
 import { audit } from "../utils/audit.js";
@@ -32,6 +32,7 @@ import { pushToUsers } from "../utils/push.js";
 import {
   AppError,
   asyncHandler,
+  fieldError,
   forbidden,
   ok,
   orderNotFound,

@@ -35,7 +35,13 @@ export async function runCampaigns(cronTime = CRON_TIME) {
           select: { fcm_token: true },
         }),
       ]);
-      const tokens = [...customers, ...devices].map((row) => row.fcm_token);
+      const tokens = [
+        ...new Set(
+          [...customers, ...devices]
+            .map((row) => row.fcm_token)
+            .filter(Boolean)
+        ),
+      ];
       if (tokens.length === 0) continue;
 
       const snackSlot = campaign.target_slot === "EVENING_SNACKS_3_TO_6";

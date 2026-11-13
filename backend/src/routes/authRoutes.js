@@ -23,8 +23,12 @@ const REFRESH_TTL_SECONDS = env.refreshTokenTtlDays * 24 * 60 * 60;
 
 const sha256 = (value) => crypto.createHash("sha256").update(value).digest("hex");
 
-// Verified when the user does not exist, so a missing account costs the
-// same time as a wrong PIN.
+// Computed once at module init and re-awaited on every missing-user login attempt.
+// This equalises response timing between "user not found" and "wrong PIN" so that
+// an attacker cannot enumerate valid phone numbers by measuring response time.
+// The promise resolves once and subsequent awaits return immediately — the timing
+// benefit comes from argon2.verify() on a real hash taking the same wall-clock
+// time regardless of whether the user exists.
 const dummyHashPromise = argon2.hash(crypto.randomBytes(16).toString("hex"));
 
 /** Creates a refresh-token row and returns the token pair. */
@@ -90,6 +94,9 @@ router.post(
       });
     } else {
       const franchise = await loadActiveFranchise(rawSlug); // 403 FRANCHISE_INACTIVE
+      // Attach to req so any middleware added later has the tenant available.
+      req.franchise_id = franchise.id;
+      req.franchise = franchise;
       user = await prisma.user.findUnique({
         where: { franchise_id_phone: { franchise_id: franchise.id, phone } },
       });
