@@ -251,6 +251,42 @@ describe("delivery settlement (§23–§25)", () => {
     assert.equal(await prisma.walletTransaction.count({ where: { order_id: order.id } }), 1);
   });
 
+  it("concurrent deliveries keep the wallet ledger chained", async () => {
+    const [a, b] = [await readyToDeliver(api, w, w.riders[0]), await readyToDeliver(api, w, w.riders[1])];
+    const before = (await prisma.franchise.findUnique({ where: { id: w.franchise.id } })).wallet_balance;
+    const [r1, r2] = await Promise.all([deliver(api, w.riders[0], a.id), deliver(api, w.riders[1], b.id)]);
+    assert.equal(r1.status, 200);
+    assert.equal(r2.status, 200);
+    const txs = await prisma.walletTransaction.findMany({
+      where: { franchise_id: w.franchise.id, type: "DEBIT" },
+      orderBy: { id: "asc" },
+    });
+    assert.equal(txs.length, 2);
+    assert.ok(before.minus(txs[0].amount).eq(txs[0].balance_after));
+    assert.ok(txs[0].balance_after.minus(txs[1].amount).eq(txs[1].balance_after));
+    const after = await prisma.franchise.findUnique({ where: { id: w.franchise.id } });
+    assert.ok(after.wallet_balance.eq(txs[1].balance_after));
+  });
+
+  it("pickup snapshots the vendor's commission rate on the order", async () => {
+    const order = await readyToDeliver(api, w);
+    const row = await orderRow(order.id);
+    const vendor = await prisma.vendor.findUnique({ where: { id: row.vendor_id } });
+    assert.ok(row.commission_rate.eq(vendor.commission_rate));
+    await prisma.vendor.update({ where: { id: vendor.id }, data: { commission_rate: 25 } });
+    assert.ok((await orderRow(order.id)).commission_rate.eq(vendor.commission_rate));
+  });
+
+  it("a malformed Idempotency-Key is rejected with an accurate message", async () => {
+    const res = await api("POST", "/orders/quick-call", {
+      token: w.vendorToken,
+      headers: { "Idempotency-Key": "bad key!" },
+      body: { items: [{ product_id: w.products.biryani.id, quantity: 1 }] },
+    });
+    assert.equal(res.status, 422);
+    assert.ok(JSON.stringify(res.body).includes("letters, digits or hyphens"));
+  });
+
   it("a rider cannot deliver someone else's order", async () => {
     const order = await readyToDeliver(api, w, w.riders[0]);
     const res = await deliver(api, w.riders[1], order.id);

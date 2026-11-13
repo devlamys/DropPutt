@@ -9,7 +9,8 @@ import { prisma } from "../config/prisma.js";
 import { AppError, asyncHandler, validationError } from "../utils/response.js";
 
 const TTL_MS = 24 * 60 * 60 * 1000;
-// A "pending" record older than this is treated as a crashed request.
+// A "pending" record older than this is treated as a crashed request. If the
+// final save failed repeatedly, a retry after this window can re-run the handler.
 const PENDING_STALE_MS = 60 * 1000;
 const KEY_PATTERN = /^[A-Za-z0-9-]{8,128}$/;
 
@@ -19,7 +20,7 @@ export function idempotency() {
     if (!clientKey) return next();
     if (!KEY_PATTERN.test(clientKey)) {
       throw validationError("Request validation failed", [
-        { field: "Idempotency-Key", issue: "must be a UUID" },
+        { field: "Idempotency-Key", issue: "must be 8-128 characters: letters, digits or hyphens" },
       ]);
     }
 
@@ -91,17 +92,33 @@ export function idempotency() {
     const sendJson = res.json.bind(res);
     res.json = (body) => {
       const success = res.statusCode >= 200 && res.statusCode < 300;
-      const persist = success
-        ? prisma.idempotencyRecord.update({
-            where: { key },
-            data: { response: { status: res.statusCode, body } },
-          })
-        : prisma.idempotencyRecord.deleteMany({ where: { key } });
-      persist
-        .catch((error) =>
-          console.error("[idempotency] failed to persist record:", error.message)
-        )
-        .finally(() => sendJson(body));
+      const status = res.statusCode;
+      const persist = () =>
+        success
+          ? prisma.idempotencyRecord.update({
+              where: { key },
+              data: { response: { status, body } },
+            })
+          : prisma.idempotencyRecord.deleteMany({ where: { key } });
+      // Retry briefly: a record left "pending" blocks the client's retry with
+      // a 409 and, after PENDING_STALE_MS, lets the handler run a second time.
+      (async () => {
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            await persist();
+            return;
+          } catch (error) {
+            if (attempt === 2) {
+              console.error(
+                `[idempotency] failed to persist record ${key.slice(0, 12)}:`,
+                error.message
+              );
+              return;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 100 * 3 ** attempt));
+          }
+        }
+      })().finally(() => sendJson(body));
       return res;
     };
 

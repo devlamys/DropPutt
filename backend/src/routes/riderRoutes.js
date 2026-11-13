@@ -5,7 +5,7 @@ import { z } from "zod";
 import { prisma } from "../config/prisma.js";
 import { authenticate, loadRider, requireRole } from "../middleware/auth.js";
 import { idempotency } from "../middleware/idempotency.js";
-import { applyRiderLocation, emitTo, rooms } from "../socket/socketHandler.js";
+import { applyRiderLocationBatch, emitTo, rooms } from "../socket/socketHandler.js";
 import { ACTIVE_ORDER_STATUSES } from "../utils/constants.js";
 import { addMoney, money } from "../utils/orderMath.js";
 import { AppError, asyncHandler, ok, orderNotFound } from "../utils/response.js";
@@ -91,8 +91,6 @@ router.patch(
   })
 );
 
-export default router;
-
 // GET /api/v1/riders/me/active-orders — offline sync (SPEC §52.2).
 router.get(
   "/me/active-orders",
@@ -166,19 +164,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const body = parse(batchSchema, req.body);
     const points = [...body.locations].sort((a, b) => a.timestamp - b.timestamp);
-    const authCache = new Map();
-    const result = { accepted: 0, duplicates: 0, rejected: 0 };
-
-    for (const point of points) {
-      const outcome = await applyRiderLocation(
-        req.rider,
-        { order_id: body.order_id, ...point },
-        { authCache }
-      );
-      if (outcome === true) result.accepted += 1;
-      else if (outcome === "duplicate") result.duplicates += 1;
-      else result.rejected += 1;
-    }
+    const result = await applyRiderLocationBatch(req.rider, body.order_id, points);
     // The order is not this rider's (or no longer active): nothing was stored.
     if (result.accepted + result.duplicates === 0) throw orderNotFound();
     ok(res, result);
@@ -257,3 +243,5 @@ router.get(
     });
   })
 );
+
+export default router;

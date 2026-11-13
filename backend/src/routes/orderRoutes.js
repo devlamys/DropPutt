@@ -494,6 +494,8 @@ router.put(
             : {}),
           turning_point: order.turning_point ?? customer.turning_point,
           voice_note_url: order.voice_note_url ?? customer.voice_direction_url,
+          // Rate fixed at pickup so the commission split can be re-derived later.
+          commission_rate: order.vendor_id ? moneyStr(order.vendor.commission_rate) : null,
           item_total: moneyStr(financials.item_total),
           delivery_fee: moneyStr(financials.delivery_fee),
           rider_tip: moneyStr(financials.rider_tip),
@@ -848,7 +850,14 @@ const BOARD_STATUSES = ["RIDER_REQUESTED", ...ACTIVE_ORDER_STATUSES];
 
 const BOARD_INCLUDE = {
   vendor: { select: { shop_name: true, address: true } },
-  items: { include: { product: { select: { name: true } } } },
+  items: {
+    select: {
+      product_id: true,
+      quantity: true,
+      line_total: true,
+      product: { select: { name: true } },
+    },
+  },
   rider: { select: { vehicle_number: true, user: { select: { name: true } } } },
 };
 

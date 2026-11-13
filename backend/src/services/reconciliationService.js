@@ -339,6 +339,8 @@ async function balanceChecks(franchise_id) {
     }),
   ]);
 
+  const riderSums = new Map(riderLedger.map((row) => [row.rider_id, row._sum.amount]));
+  const vendorSums = new Map(vendorLedger.map((row) => [row.vendor_id, row._sum.amount]));
   const compare = (stored, ledger) => ({
     stored: moneyStr(stored),
     ledger: moneyStr(ledger),
@@ -351,18 +353,12 @@ async function balanceChecks(franchise_id) {
     riders: riders.map((rider) => ({
       id: rider.id,
       name: rider.user.name,
-      ...compare(
-        rider.wallet_earnings,
-        riderLedger.find((row) => row.rider_id === rider.id)?._sum.amount ?? 0
-      ),
+      ...compare(rider.wallet_earnings, riderSums.get(rider.id) ?? 0),
     })),
     vendors: vendors.map((vendor) => ({
       id: vendor.id,
       shop_name: vendor.shop_name,
-      ...compare(
-        vendor.admin_payable_balance,
-        vendorLedger.find((row) => row.vendor_id === vendor.id)?._sum.amount ?? 0
-      ),
+      ...compare(vendor.admin_payable_balance, vendorSums.get(vendor.id) ?? 0),
     })),
   };
 }

@@ -476,6 +476,7 @@ model Order {
   rider_tip            Decimal           @default(0) @db.Decimal(12, 2)
   discount_amount      Decimal           @default(0) @db.Decimal(12, 2)
   grand_total          Decimal           @default(0) @db.Decimal(12, 2)
+  commission_rate      Decimal?          @db.Decimal(5, 2)
   vendor_commission    Decimal           @default(0) @db.Decimal(12, 2)
   vendor_earning       Decimal           @default(0) @db.Decimal(12, 2)
   rider_earning        Decimal           @default(0) @db.Decimal(12, 2)
@@ -756,7 +757,7 @@ vendor_commission =
     item_total × vendor.commission_rate / 100
 ```
 
-rounded to two decimal places.
+rounded to two decimal places. The rate used is copied onto `Order.commission_rate` at rider pickup (null when there is no partner vendor), so the split can be re-derived after the vendor's rate changes.
 
 ```text
 vendor_earning =

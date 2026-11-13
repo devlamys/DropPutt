@@ -161,6 +161,86 @@ export async function applyRiderLocation(rider, payload, { authCache, exceptSock
   return true;
 }
 
+/**
+ * Offline-flush variant of applyRiderLocation for one order: one ownership
+ * query, one Redis round trip for replay protection and one rider update (the
+ * stored position only moves forward). Points must be sorted oldest first.
+ * Returns { accepted, duplicates, rejected }.
+ */
+export async function applyRiderLocationBatch(rider, orderId, points) {
+  const result = { accepted: 0, duplicates: 0, rejected: 0 };
+  const now = Date.now();
+  const inWindow = points.filter(
+    (p) => p.timestamp <= now + 60 * 1000 && p.timestamp >= now - 2 * 60 * 60 * 1000
+  );
+  result.rejected = points.length - inWindow.length;
+  if (inWindow.length === 0) return result;
+
+  const order = await prisma.order.findFirst({
+    where: {
+      id: orderId,
+      franchise_id: rider.franchise_id,
+      rider_id: rider.id,
+      order_status: { in: ACTIVE_ORDER_STATUSES },
+    },
+    select: { id: true },
+  });
+  if (!order) {
+    result.rejected += inWindow.length;
+    return result;
+  }
+
+  let fresh = null; // boolean per point: first time seen
+  const redis = getRedis();
+  if (redis) {
+    try {
+      const multi = redis.multi();
+      for (const p of inWindow) {
+        multi.set(`dp:loc:${orderId}:${p.timestamp}`, "1", {
+          NX: true,
+          EX: SEEN_TTL_SECONDS,
+        });
+      }
+      const replies = await multi.exec();
+      fresh = replies.map((reply) => reply === "OK");
+    } catch (error) {
+      console.error("[socket] redis batch dedupe failed, using memory:", error.message);
+    }
+  }
+  if (!fresh) fresh = inWindow.map((p) => markSeenInMemory(orderId, p.timestamp));
+
+  const accepted = inWindow.filter((_, i) => fresh[i]);
+  result.duplicates = inWindow.length - accepted.length;
+  result.accepted = accepted.length;
+  if (accepted.length === 0) return result;
+
+  const newest = accepted[accepted.length - 1];
+  const seenAt = new Date(newest.timestamp);
+  await prisma.rider.updateMany({
+    where: {
+      id: rider.id,
+      OR: [{ last_location_at: null }, { last_location_at: { lte: seenAt } }],
+    },
+    data: {
+      current_lat: newest.lat.toFixed(7),
+      current_lng: newest.lng.toFixed(7),
+      last_location_at: seenAt,
+    },
+  });
+
+  for (const p of accepted) {
+    io?.to(rooms.order(orderId)).emit("live_bike_position", {
+      order_id: orderId,
+      lat: p.lat,
+      lng: p.lng,
+      accuracy: p.accuracy ?? null,
+      timestamp: p.timestamp,
+    });
+    emitFleetMove(rider, { order_id: orderId, ...p });
+  }
+  return result;
+}
+
 /** Franchise admins' Fleet Radar (franchise:{id} room). */
 function emitFleetMove(rider, payload) {
   io?.to(rooms.franchise(rider.franchise_id)).emit("fleet_rider_move", {
