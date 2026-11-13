@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { History, Loader2, LogOut, ShieldAlert, Wifi, WifiOff } from "lucide-react";
 import { Link } from "react-router-dom";
+import CancelOrderModal from "../components/CancelOrderModal.jsx";
 import Modal from "../components/Modal.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useToast } from "../components/Toast.jsx";
@@ -9,7 +10,9 @@ import { useSocket } from "../hooks/useSocket.js";
 import api, { getErrorMessage, idempotencyHeaders } from "../utils/api.js";
 import { inr, minutesAgo } from "../utils/format.js";
 
-const EVENTS = ["order_accepted", "order_picked_up", "order_delivered", "order_status_changed"];
+const EVENTS = ["order_accepted", "order_picked_up", "order_delivered", "order_status_changed", "order_cancelled"];
+// A shop can withdraw an order until the rider has the food in hand.
+const SHOP_CAN_CANCEL = ["RIDER_REQUESTED", "RIDER_ASSIGNED"];
 
 export default function VendorDashboard() {
   const { user, signOut } = useAuth();
@@ -21,6 +24,7 @@ export default function VendorDashboard() {
   const [loading, setLoading] = useState(true);
   const [calling, setCalling] = useState(false);
   const [billPreview, setBillPreview] = useState(null);
+  const [cancelling, setCancelling] = useState(null);
   const [now, setNow] = useState(Date.now());
   const callLock = useRef(false); // state updates are async; this blocks a same-tick double tap
 
@@ -56,6 +60,7 @@ export default function VendorDashboard() {
         () => {
           refresh();
           if (event === "order_picked_up") toast("🛵 Rider picked up an order", "success");
+          if (event === "order_cancelled") toast("An order was cancelled", "warn");
         },
       ])
     )
@@ -224,8 +229,17 @@ export default function VendorDashboard() {
                       <p className="font-semibold">#{order.order_number}</p>
                       <p className="text-xs text-slate-500">{minutesAgo(order.created_at, now)}</p>
                     </div>
-                    <div>
+                    <div className="flex flex-wrap items-center gap-2">
                       <StatusBadge status={order.order_status} />
+                      {SHOP_CAN_CANCEL.includes(order.order_status) && (
+                        <button
+                          type="button"
+                          onClick={() => setCancelling(order)}
+                          className="rounded-full px-2.5 py-1 text-xs font-bold text-red-600 ring-1 ring-red-200 hover:bg-red-50"
+                        >
+                          Cancel
+                        </button>
+                      )}
                     </div>
                     <div className="text-sm">
                       {order.rider ? (
@@ -290,6 +304,19 @@ export default function VendorDashboard() {
           )}
         </section>
       </main>
+
+      {cancelling && (
+        <CancelOrderModal
+          order={cancelling}
+          role="VENDOR"
+          toast={toast}
+          onClose={() => setCancelling(null)}
+          onCancelled={() => {
+            setCancelling(null);
+            loadOrders();
+          }}
+        />
+      )}
 
       {billPreview && (
         <Modal title={`Bill · #${billPreview.order_number}`} onClose={() => setBillPreview(null)}>

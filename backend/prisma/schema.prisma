@@ -346,6 +346,10 @@ model Order {
   order_status         OrderStatus       @default(RIDER_REQUESTED)
   created_at           DateTime          @default(now())
   delivered_at         DateTime?
+  last_dispatched_at   DateTime?
+  cancelled_at         DateTime?
+  cancelled_by_role    String?
+  cancel_reason        String?
 
   franchise Franchise @relation(fields: [franchise_id], references: [id])
   vendor    Vendor?   @relation(fields: [vendor_id], references: [id])

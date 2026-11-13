@@ -5,6 +5,7 @@ import FleetRadar from "../components/admin/FleetRadar.jsx";
 import FranchisesPanel from "../components/admin/FranchisesPanel.jsx";
 import ReconciliationPanel from "../components/admin/ReconciliationPanel.jsx";
 import SettlementLedger from "../components/admin/SettlementLedger.jsx";
+import StuckOrders from "../components/admin/StuckOrders.jsx";
 import WalletPassbook from "../components/admin/WalletPassbook.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -179,6 +180,12 @@ function FranchiseWorkspace({ slug, tab, isSuper, franchises, onSelectFranchise,
       fleet_rider_status: ({ rider_id, is_online }) => patchRider(rider_id, { is_online }),
       order_accepted: scheduleReload,
       order_delivered: scheduleReload,
+      order_cancelled: scheduleReload,
+      order_status_changed: scheduleReload, // new orders from the storefront
+      stale_order_alert: ({ order_number, waiting_minutes }) => {
+        toast(`⏳ Order #${order_number} has waited ${waiting_minutes} min — riders alerted again`, "warn");
+        scheduleReload();
+      },
       franchise_settings_changed: (settings) =>
         setOverview((current) => current && { ...current, franchise: { ...current.franchise, ...settings } }),
     },
@@ -206,7 +213,12 @@ function FranchiseWorkspace({ slug, tab, isSuper, franchises, onSelectFranchise,
 
   return (
     <main className="px-4 pt-4">
-      {tab === "radar" && <FleetRadar riders={overview.riders} openRequests={overview.open_requests} connected={connected} />}
+      {tab === "radar" && (
+        <>
+          <StuckOrders orders={overview.stuck_orders} onChanged={load} toast={toast} />
+          <FleetRadar riders={overview.riders} openRequests={overview.open_requests} connected={connected} />
+        </>
+      )}
       {tab === "ledger" && <SettlementLedger date={overview.date} riders={overview.riders} onSettled={load} toast={toast} />}
       {tab === "controls" && <ControlsPanel franchise={overview.franchise} onUpdated={updateFranchise} toast={toast} />}
       {tab === "wallet" && (

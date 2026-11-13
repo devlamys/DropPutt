@@ -30,3 +30,9 @@ body {
     radial-gradient(ellipse at 85% 30%, rgba(0, 0, 0, 0.22), transparent 60%),
     radial-gradient(ellipse at 50% 100%, rgba(255, 255, 255, 0.04), transparent 50%);
 }
+
+/* Leaflet's panes and controls use z-index 400–1000. Without a stacking context
+   they climb above modals (z-50) and toasts (z-60); this keeps them inside the map. */
+.leaflet-container {
+  isolation: isolate;
+}

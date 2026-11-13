@@ -13,6 +13,7 @@ import { idempotency } from "../middleware/idempotency.js";
 import { billImageUpload, gatePhotoUpload } from "../middleware/upload.js";
 import { buildCart } from "../services/cartService.js";
 import { dispatchOrder } from "../services/dispatchService.js";
+import { cancelOrder } from "../services/orderCancelService.js";
 import { emitTo, joinRiderToOrder, rooms } from "../socket/socketHandler.js";
 import { audit } from "../utils/audit.js";
 import {
@@ -832,6 +833,45 @@ router.post(
         ? null
         : { cash_collected: result.cash_collected, milestone: result.milestone },
     });
+  })
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/v1/orders/:id/cancel — the shop (before pickup) or the franchise
+// admin (any time before delivery) cancels an order. Idempotent.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const cancelSchema = z.object({
+  reason: z.string().trim().max(200).optional(),
+});
+
+router.post(
+  "/:id/cancel",
+  requireRole("VENDOR", "FRANCHISE_ADMIN"),
+  asyncHandler(async (req, res) => {
+    const orderId = parseId(req.params.id);
+    const body = parse(cancelSchema, req.body ?? {});
+    const franchise_id = req.franchise_id;
+
+    let vendor_id;
+    if (req.user.role === "VENDOR") {
+      const vendor = await prisma.vendor.findFirst({
+        where: { user_id: req.user.id, franchise_id },
+        select: { id: true },
+      });
+      if (!vendor) throw forbidden("Vendor profile not found in this franchise");
+      vendor_id = vendor.id;
+    }
+
+    const { order, already } = await cancelOrder({
+      orderId,
+      franchise_id,
+      role: req.user.role,
+      vendor_id,
+      reason: body.reason,
+      franchise_slug: req.franchise.slug,
+    });
+    ok(res, { order: orderView(order), already });
   })
 );
 

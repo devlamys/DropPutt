@@ -29,6 +29,10 @@ export default function RiderDashboard() {
   const online = Boolean(status?.rider.is_online);
   const onlineRef = useRef(online);
   onlineRef.current = online;
+  const ordersRef = useRef(orders);
+  ordersRef.current = orders;
+  const queueRef = useRef(queue);
+  queueRef.current = queue;
 
   const loadStatus = useCallback(async () => {
     const { data } = await api.get("/rider/me");
@@ -74,6 +78,17 @@ export default function RiderDashboard() {
       if (onlineRef.current) enqueue({ ...payload, kind: "addon" });
     },
     order_taken: ({ order_id }) => setQueue((list) => list.filter((r) => r.order_id !== order_id)),
+    // The shop, the customer or the admin withdrew an order: silence the alarm,
+    // close any open dialog for it and refresh. Only tell riders it concerned.
+    order_cancelled: ({ order_id, order_number, cancel_reason }) => {
+      const mine =
+        ordersRef.current.some((o) => o.id === order_id) ||
+        queueRef.current.some((r) => r.order_id === order_id);
+      setQueue((list) => list.filter((r) => r.order_id !== order_id));
+      setDelivering((current) => (current?.id === order_id ? null : current));
+      if (mine) toast(`❌ Order #${order_number} was cancelled — ${cancel_reason}`, "error");
+      loadOrders().catch(() => {});
+    },
     customer_location_shared: () => {
       toast("📍 Customer shared their location", "success");
       loadOrders().catch(() => {});

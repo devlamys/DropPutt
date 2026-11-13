@@ -17,6 +17,7 @@ import {
 } from "../services/reconciliationService.js";
 import { emitTo, rooms } from "../socket/socketHandler.js";
 import { ACTIVE_ORDER_STATUSES } from "../utils/constants.js";
+import { minutesAgo, staleRules } from "../utils/staleRules.js";
 import { coordStr } from "../utils/serializers.js";
 import { istDayRange } from "../utils/time.js";
 import { idempotency } from "../middleware/idempotency.js";
@@ -306,7 +307,8 @@ router.get(
   asyncHandler(async (req, res) => {
     const franchise_id = req.franchise_id;
     const day = istDayRange();
-    const [franchise, riders, active, deliveredToday, openRequests, cashToday] =
+    const now = new Date();
+    const [franchise, riders, active, deliveredToday, openRequests, cashToday, stuckRows] =
       await Promise.all([
         prisma.franchise.findUnique({ where: { id: franchise_id } }),
         prisma.rider.findMany({
@@ -338,7 +340,42 @@ router.get(
           },
           _sum: { amount: true },
         }),
+        // Orders that need a human: nobody has taken them, or a rider has held them for hours.
+        prisma.order.findMany({
+          where: {
+            franchise_id,
+            OR: [
+              {
+                order_status: "RIDER_REQUESTED",
+                created_at: { lt: minutesAgo(now, staleRules.redispatchAfterMinutes) },
+              },
+              {
+                order_status: { in: ACTIVE_ORDER_STATUSES },
+                created_at: { lt: minutesAgo(now, staleRules.stuckActiveAfterMinutes) },
+              },
+            ],
+          },
+          orderBy: { created_at: "asc" },
+          take: 50,
+          select: {
+            id: true,
+            order_number: true,
+            order_status: true,
+            created_at: true,
+            custom_shop_name: true,
+            vendor: { select: { shop_name: true } },
+            rider: { select: { user: { select: { name: true } } } },
+          },
+        }),
       ]);
+    const stuck_orders = stuckRows.map((row) => ({
+      id: row.id,
+      order_number: row.order_number,
+      order_status: row.order_status,
+      shop_name: row.vendor?.shop_name ?? row.custom_shop_name ?? null,
+      rider_name: row.rider?.user.name ?? null,
+      age_minutes: Math.floor((now.getTime() - row.created_at.getTime()) / 60_000),
+    }));
     const count = (rows, riderId) =>
       rows.find((row) => row.rider_id === riderId)?._count._all ?? 0;
 
@@ -346,6 +383,7 @@ router.get(
       franchise: franchiseSettingsView(franchise),
       date: day.date,
       open_requests: openRequests,
+      stuck_orders,
       riders: riders.map((rider) => ({
         id: rider.id,
         name: rider.user.name,

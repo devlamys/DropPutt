@@ -55,5 +55,8 @@ export function orderView(order) {
     location_token: order.location_token,
     created_at: order.created_at,
     delivered_at: order.delivered_at,
+    cancelled_at: order.cancelled_at ?? null,
+    cancelled_by_role: order.cancelled_by_role ?? null,
+    cancel_reason: order.cancel_reason ?? null,
   };
 }

@@ -10,6 +10,7 @@ import { prisma, TX_OPTIONS } from "../config/prisma.js";
 import { idempotency } from "../middleware/idempotency.js";
 import { publicLimiter, publicWriteLimiter } from "../middleware/rateLimit.js";
 import { voiceUpload } from "../middleware/upload.js";
+import { cancelOrder } from "../services/orderCancelService.js";
 import { emitTo, rooms } from "../socket/socketHandler.js";
 import { audit } from "../utils/audit.js";
 import {
@@ -104,6 +105,9 @@ router.get(
       has_voice_note: Boolean(order.voice_note_url),
       tip_options: ALLOWED_TIP_AMOUNTS,
       can_tip: Boolean(order.rider_id) && ACTIVE_ORDER_STATUSES.includes(order.order_status),
+      // The customer may withdraw only until a rider has taken the order.
+      can_cancel: order.order_status === "RIDER_REQUESTED",
+      cancel_reason: order.order_status === "CANCELLED" ? order.cancel_reason : null,
       gps_accuracy_limit_metres: GPS_ACCURACY_LIMIT_METRES,
       ...riderPosition(order),
     });
@@ -362,6 +366,29 @@ router.post(
       grand_total: moneyStr(order.grand_total),
       amount_to_collect: moneyStr(order.amount_to_collect),
     });
+  })
+);
+
+// POST /api/v1/public/drop/:token/cancel — the customer withdraws an order that
+// no rider has accepted yet. Idempotent (a second tap just returns CANCELLED).
+router.post(
+  "/drop/:token/cancel",
+  publicWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const token = requireToken(req);
+    const current = await prisma.order.findUnique({
+      where: { location_token: token },
+      select: { id: true, franchise_id: true, franchise: { select: { slug: true } } },
+    });
+    if (!current) throw orderNotFound();
+
+    const { order, already } = await cancelOrder({
+      orderId: current.id,
+      franchise_id: current.franchise_id,
+      role: "CUSTOMER",
+      franchise_slug: current.franchise.slug,
+    });
+    ok(res, { cancelled: true, already, order_status: order.order_status });
   })
 );
 

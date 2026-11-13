@@ -44,6 +44,8 @@ export default function CustomerDropPage() {
   const [sharing, setSharing] = useState(false);
   const [shareResult, setShareResult] = useState(null);
   const [tipping, setTipping] = useState(null);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -189,6 +191,22 @@ export default function CustomerDropPage() {
     }
   }
 
+  async function cancelOrder() {
+    setCancelling(true);
+    try {
+      await api.post(`/public/drop/${token}/cancel`, {}, publicApi());
+      setConfirmingCancel(false);
+      toast("Your order was cancelled.", "success");
+      await load();
+    } catch (error) {
+      setConfirmingCancel(false);
+      toast(getErrorMessage(error, "Could not cancel the order."), "error");
+      await load(); // a rider may have just accepted it
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   if (loadError) {
     return (
       <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-3 p-6 text-center">
@@ -252,7 +270,50 @@ export default function CustomerDropPage() {
           </div>
         )}
         {cancelled && (
-          <p className="rounded-2xl bg-slate-100 p-4 text-center font-semibold text-slate-600">This order was cancelled.</p>
+          <div className="rounded-2xl bg-slate-100 p-4 text-center text-slate-600">
+            <p className="font-semibold">This order was cancelled.</p>
+            {order.cancel_reason && <p className="mt-1 text-sm">{order.cancel_reason}</p>}
+          </div>
+        )}
+
+        {/* withdraw: only while no rider has accepted */}
+        {order.can_cancel && (
+          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+            {confirmingCancel ? (
+              <div className="space-y-3">
+                <p className="text-center font-semibold">Cancel this order?</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingCancel(false)}
+                    disabled={cancelling}
+                    className="rounded-2xl border border-slate-300 py-3 font-bold text-slate-700 disabled:opacity-60"
+                  >
+                    Keep order
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelOrder}
+                    disabled={cancelling}
+                    className="flex items-center justify-center rounded-2xl bg-red-600 py-3 font-bold text-white disabled:opacity-60"
+                  >
+                    {cancelling ? <Loader2 className="h-5 w-5 animate-spin" /> : "Yes, cancel"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmingCancel(true)}
+                className="w-full rounded-2xl border border-red-200 py-3 font-bold text-red-600"
+              >
+                Cancel order
+              </button>
+            )}
+            <p className="mt-2 text-center text-xs text-slate-500">
+              You can cancel until a rider accepts your order.
+            </p>
+          </section>
         )}
 
         {/* share location */}

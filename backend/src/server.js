@@ -8,6 +8,7 @@ import { closeRedis, connectRedis, createPubSub } from "./config/redis.js";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { startMaintenanceScheduler } from "./cron/maintenance.js";
 import { startPushScheduler } from "./cron/pushScheduler.js";
+import { startStaleOrderScheduler } from "./cron/staleOrders.js";
 import { initSocket } from "./socket/socketHandler.js";
 
 // Fail fast with a readable message instead of failing on the first request.
@@ -60,6 +61,7 @@ if (pubsub) {
 if (env.enableCron) {
   startPushScheduler();
   startMaintenanceScheduler();
+  startStaleOrderScheduler();
 }
 
 server.listen(env.port, () => {

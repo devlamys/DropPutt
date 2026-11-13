@@ -20,12 +20,18 @@ const STORAGE_KEY = "dropputt.session";
 const ACTING_KEY = "dropputt.acting_slug";
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
+// Public dev-tunnel domains: they carry no tenant, so use the default franchise.
+const TUNNEL_HOSTS = ["trycloudflare.com", "ngrok-free.app", "ngrok.io", "loca.lt"];
 
 /** Slug for a hostname, or null when the host carries no tenant. */
 export function slugFromHostname(hostname) {
   const host = String(hostname || "").trim().toLowerCase();
   if (!host || host === "localhost" || IPV4.test(host) || host.includes(":")) {
     return null; // localhost, IPv4, IPv6
+  }
+  // Dev tunnels hand out random subdomains that are not franchises.
+  if (TUNNEL_HOSTS.some((suffix) => host === suffix || host.endsWith(`.${suffix}`))) {
+    return null;
   }
   const labels = host.split(".");
   // "kizhissery.localhost" works for local multi-tenant testing; a bare
