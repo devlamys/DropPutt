@@ -141,6 +141,7 @@ router.get(
     ok(
       res,
       {
+        franchise: { name: req.franchise.name, slug: req.franchise.slug },
         is_chayakadi_window: chayakadi,
         // "4 PM Snacks" leads the category row during the window.
         categories: chayakadi
@@ -307,6 +308,118 @@ router.post(
         item_total: moneyStr(cart.item_total),
         delivery_fee: moneyStr(zone.delivery_fee),
         estimated_total: moneyStr(addMoney(cart.item_total, money(zone.delivery_fee))),
+      },
+      { status: 201 }
+    );
+  })
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/v1/marketplace/custom-order — "Buy Anything", "Pick & Drop" and
+// "Mini Truck" requests from a customer. No shop is involved: the rider buys
+// (or carries) what the customer describes, and the bill is set at pickup.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CUSTOM_KINDS = Object.freeze({
+  CUSTOM_BUY: { category: "FOOD", label: "Buy Anything" },
+  PICK_DROP: { category: "PICK_DROP", label: "Pick & Drop" },
+  MINI_TRUCK: { category: "PICK_DROP", label: "Mini Truck" },
+});
+
+const customOrderSchema = z
+  .object({
+    kind: z.enum(["CUSTOM_BUY", "PICK_DROP", "MINI_TRUCK"]),
+    zone_id: zId,
+    customer_phone: z.union([z.string(), z.number()]),
+    customer_name: z.string().trim().min(1).max(100).optional(),
+    drop_address: z.string().trim().min(3).max(300),
+    // Buy Anything: the shop to buy from (optional). Pick & Drop / Mini Truck: where to collect.
+    pickup_address: z.string().trim().min(3).max(300).optional(),
+    shop_name: z.string().trim().min(1).max(150).optional(),
+    // Buy Anything: the list. Pick & Drop / Mini Truck: what is being carried.
+    details: z.string().trim().min(3).max(2000),
+  })
+  .superRefine((body, ctx) => {
+    if (body.kind !== "CUSTOM_BUY" && !body.pickup_address) {
+      ctx.addIssue({ code: "custom", path: ["pickup_address"], message: "required: where should the rider collect it?" });
+    }
+  });
+
+router.post(
+  "/custom-order",
+  checkoutIpLimiter,
+  checkoutPhoneLimiter,
+  idempotency(),
+  asyncHandler(async (req, res) => {
+    const body = parse(customOrderSchema, req.body);
+    const franchise_id = req.franchise_id;
+    const kind = CUSTOM_KINDS[body.kind];
+
+    const customer_phone = normalizePhone(body.customer_phone);
+    if (!customer_phone) throw fieldError("customer_phone", "must be a valid 10-digit mobile number");
+
+    const createOrder = () =>
+      prisma.$transaction(async (tx) => {
+        const franchise = await tx.franchise.findUnique({ where: { id: franchise_id } });
+        if (!franchise.wallet_balance.gt(franchise.min_balance_limit)) {
+          throw new AppError(403, "FRANCHISE_WALLET_LOW", "Delivery is temporarily unavailable in this area.");
+        }
+        const zone = await tx.zone.findFirst({ where: { id: body.zone_id, franchise_id } });
+        if (!zone) throw fieldError("zone_id", "area not found");
+
+        await tx.customer.upsert({
+          where: { franchise_id_phone: { franchise_id, phone: customer_phone } },
+          create: { franchise_id, phone: customer_phone, name: body.customer_name ?? null },
+          update: body.customer_name ? { name: body.customer_name } : {},
+        });
+
+        const datePart = istDayRange().date.replaceAll("-", "").slice(2);
+        const order = await tx.order.create({
+          data: {
+            franchise_id,
+            order_number: `DP-${datePart}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`,
+            location_token: crypto.randomBytes(24).toString("base64url"),
+            order_type: body.kind,
+            order_category: kind.category,
+            order_status: "RIDER_REQUESTED",
+            zone_id: zone.id,
+            customer_phone,
+            customer_name: body.customer_name ?? null,
+            custom_shop_name: body.kind === "CUSTOM_BUY" ? (body.shop_name ?? null) : null,
+            custom_items_text: body.details,
+            pickup_address: body.pickup_address ?? body.shop_name ?? null,
+            drop_address: body.drop_address,
+            item_total: "0.00",
+          },
+        });
+        return { order, zone };
+      }, TX_OPTIONS);
+
+    let created;
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        created = await createOrder();
+        break;
+      } catch (error) {
+        const collision = error?.code === "P2002" && String(error.meta?.target).includes("order_number");
+        if (!collision || attempt >= 3) throw error;
+      }
+    }
+    const { order, zone } = created;
+
+    await dispatchOrder(order, { franchise_slug: req.franchise.slug, shop_name: body.shop_name ?? kind.label });
+    emitTo(rooms.franchise(franchise_id), "order_status_changed", { order_id: order.id, order_status: order.order_status });
+
+    ok(
+      res,
+      {
+        order_number: order.order_number,
+        location_token: order.location_token,
+        kind: body.kind,
+        shop_name: body.shop_name ?? kind.label,
+        delivery_fee: moneyStr(zone.delivery_fee),
+        // The rider confirms the bill (shop purchase / load) at pickup.
+        message: "A rider will confirm the final amount before pickup.",
       },
       { status: 201 }
     );

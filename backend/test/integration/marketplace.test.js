@@ -213,3 +213,113 @@ describe("feed ordering (§26, §40)", () => {
     assert.ok(feed.body.meta.pagination);
   });
 });
+
+describe("custom orders: Buy Anything, Pick & Drop, Mini Truck", () => {
+  const customOrder = (body, headers) =>
+    api("POST", "/marketplace/custom-order", {
+      headers,
+      body: {
+        zone_id: w.zones[0].id,
+        customer_phone: nextPhone(),
+        customer_name: "Ravi",
+        drop_address: "Blue gate house, near the mosque",
+        ...body,
+      },
+    });
+
+  it("Buy Anything: stores the list, no shop needed, rider is called", async () => {
+    const res = await customOrder({ kind: "CUSTOM_BUY", details: "1 kg rice, 2 packets milk", shop_name: "Hari Stores" });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    assert.equal(res.body.data.kind, "CUSTOM_BUY");
+    assert.equal(res.body.data.delivery_fee, "30.00");
+    const order = await prisma.order.findFirst();
+    assert.equal(order.order_type, "CUSTOM_BUY");
+    assert.equal(order.order_status, "RIDER_REQUESTED");
+    assert.equal(order.vendor_id, null);
+    assert.equal(order.custom_items_text, "1 kg rice, 2 packets milk");
+    assert.equal(order.custom_shop_name, "Hari Stores");
+    assert.equal(order.franchise_id, w.franchise.id);
+    assert.equal(order.item_total.toFixed(2), "0.00");
+  });
+
+  it("Pick & Drop needs a collection address", async () => {
+    const missing = await customOrder({ kind: "PICK_DROP", details: "Parcel for my brother" });
+    assert.equal(missing.status, 422);
+    assert.match(JSON.stringify(missing.body.error.details), /pickup_address/);
+    const ok = await customOrder({ kind: "PICK_DROP", details: "Parcel for my brother", pickup_address: "Near the bus stand" });
+    assert.equal(ok.status, 201);
+    const order = await prisma.order.findFirst({ where: { order_type: "PICK_DROP" } });
+    assert.equal(order.pickup_address, "Near the bus stand");
+    assert.equal(order.order_category, "PICK_DROP");
+  });
+
+  it("Mini Truck is only offered to mini-truck riders", async () => {
+    const bikeRider = connect(server.url, { auth: { token: w.riders[0].token }, transports: ["websocket"] });
+    const bikeSeen = [];
+    bikeRider.on("new_rider_request", (e) => bikeSeen.push(e));
+    await new Promise((resolve, reject) => {
+      bikeRider.on("connect", resolve);
+      bikeRider.on("connect_error", reject);
+    });
+    try {
+      const res = await customOrder({ kind: "MINI_TRUCK", details: "Sofa and two chairs", pickup_address: "Old house, Main Road" });
+      assert.equal(res.status, 201);
+      await new Promise((r) => setTimeout(r, 250));
+      assert.equal(bikeSeen.length, 0, "a bike rider must not be called for a mini truck");
+      assert.equal((await prisma.order.findFirst()).order_type, "MINI_TRUCK");
+    } finally {
+      bikeRider.close();
+    }
+  });
+
+  it("flows through the rider: accept, then pickup with the bill the rider enters", async () => {
+    await customOrder({ kind: "CUSTOM_BUY", details: "Paracetamol strip", shop_name: "City Medicals" });
+    const order = await prisma.order.findFirst();
+    assert.equal((await accept(api, w.riders[0], order.id)).status, 200);
+    const res = await api("PUT", `/orders/${order.id}/rider-pickup`, {
+      token: w.riders[0].token,
+      body: { customer_phone: order.customer_phone, zone_id: w.zones[0].id, payment_method: "COD", item_total: "45", rider_paid_at_shop: true },
+    });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.data.order.grand_total, "75.00"); // ₹45 purchase + ₹30 delivery
+  });
+
+  it("validates the body and the franchise", async () => {
+    for (const bad of [
+      { kind: "TELEPORT", details: "x y z" },
+      { kind: "CUSTOM_BUY", details: "ab" },
+      { kind: "CUSTOM_BUY", details: "milk", customer_phone: "123" },
+      { kind: "CUSTOM_BUY", details: "milk", drop_address: "" },
+      { kind: "CUSTOM_BUY", details: "milk", zone_id: other.zones[0].id },
+      { kind: "CUSTOM_BUY", details: "milk", zone_id: 99999999999 },
+    ]) {
+      assert.equal((await customOrder(bad)).status, 422, JSON.stringify(bad));
+    }
+    assert.equal(await prisma.order.count(), 0);
+  });
+
+  it("is idempotent, rate limited per phone, and respects the wallet gate", async () => {
+    const key = uuid();
+    const body = { kind: "CUSTOM_BUY", details: "tea powder", customer_phone: nextPhone() };
+    const first = await customOrder(body, { "Idempotency-Key": key });
+    const again = await customOrder(body, { "Idempotency-Key": key });
+    assert.equal(again.body.data.order_number, first.body.data.order_number);
+    assert.equal(await prisma.order.count(), 1);
+
+    const phone = nextPhone();
+    let last;
+    for (let i = 0; i < 6; i += 1) last = await customOrder({ kind: "CUSTOM_BUY", details: "tea powder", customer_phone: phone });
+    assert.equal(last.status, 429);
+
+    await prisma.franchise.update({ where: { id: w.franchise.id }, data: { wallet_balance: -50 } });
+    const blocked = await customOrder({ kind: "CUSTOM_BUY", details: "tea powder" });
+    assert.equal(blocked.status, 403);
+    assert.equal(blocked.body.error.code, "FRANCHISE_WALLET_LOW");
+  });
+
+  it("the feed names the franchise for the storefront header", async () => {
+    const feed = await api("GET", "/marketplace/feed", {});
+    assert.equal(feed.body.data.franchise.name, w.franchise.name);
+    assert.equal(feed.body.data.franchise.slug, "tf");
+  });
+});
