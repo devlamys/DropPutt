@@ -7,3 +7,4 @@ deploy/certs/*
 deploy/secrets/*
 !deploy/secrets/.gitkeep
 backups/
+.claude/launch.json
