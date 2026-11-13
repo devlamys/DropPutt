@@ -5,6 +5,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma, TX_OPTIONS } from "../config/prisma.js";
 import { idempotency } from "../middleware/idempotency.js";
+import { customRequestUpload } from "../middleware/upload.js";
 import { checkoutIpLimiter, checkoutPhoneLimiter } from "../middleware/rateLimit.js";
 import { buildCart, fieldError } from "../services/cartService.js";
 import { dispatchOrder } from "../services/dispatchService.js";
@@ -15,6 +16,7 @@ import { normalizePhone } from "../utils/phone.js";
 import { buildPage, parsePagination } from "../utils/pagination.js";
 import { AppError, asyncHandler, ok } from "../utils/response.js";
 import { moneyStr } from "../utils/serializers.js";
+import { saveUpload } from "../utils/storage.js";
 import { isProductInSlot, slotWindowLabel } from "../utils/slots.js";
 import { isChayakadiWindow, istDayRange, istMinutesOfDay } from "../utils/time.js";
 import { parse, zId } from "../utils/validate.js";
@@ -315,48 +317,95 @@ router.post(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/v1/marketplace/custom-order — "Buy Anything", "Pick & Drop" and
-// "Mini Truck" requests from a customer. No shop is involved: the rider buys
-// (or carries) what the customer describes, and the bill is set at pickup.
+// POST /api/v1/marketplace/orders — "Buy Anything", "Pick & Drop" and "Mini
+// Truck" requests from a customer (JSON or multipart). No shop is involved:
+// the rider buys (or carries) what the customer describes, and the bill is
+// set at pickup.
+//
+// Buy Anything can carry a checklist (`items`), a photo of a handwritten list
+// or prescription (`photo`) and a voice note (`voice`).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CUSTOM_KINDS = Object.freeze({
+const ORDER_KINDS = Object.freeze({
   CUSTOM_BUY: { category: "FOOD", label: "Buy Anything" },
   PICK_DROP: { category: "PICK_DROP", label: "Pick & Drop" },
   MINI_TRUCK: { category: "PICK_DROP", label: "Mini Truck" },
 });
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+
+// multipart sends `items` as a JSON string; JSON bodies send an array.
+const itemsField = z.preprocess((value) => {
+  if (value === undefined || value === "") return [];
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value; // fails the array check below with a clear message
+  }
+}, z.array(z.object({ name: z.string().trim().min(1).max(80), qty: z.coerce.number().int().min(1).max(99) })).max(30));
 
 const customOrderSchema = z
   .object({
-    kind: z.enum(["CUSTOM_BUY", "PICK_DROP", "MINI_TRUCK"]),
+    order_type: z.enum(["CUSTOM_BUY", "PICK_DROP", "MINI_TRUCK"]),
     zone_id: zId,
     customer_phone: z.union([z.string(), z.number()]),
     customer_name: z.string().trim().min(1).max(100).optional(),
     drop_address: z.string().trim().min(3).max(300),
-    // Buy Anything: the shop to buy from (optional). Pick & Drop / Mini Truck: where to collect.
+    // Buy Anything: the shop to buy from. Pick & Drop / Mini Truck: where to collect.
     pickup_address: z.string().trim().min(3).max(300).optional(),
     shop_name: z.string().trim().min(1).max(150).optional(),
-    // Buy Anything: the list. Pick & Drop / Mini Truck: what is being carried.
-    details: z.string().trim().min(3).max(2000),
+    items: itemsField,
+    // Free-text note: what is being carried, or anything extra for a purchase.
+    details: z.string().trim().max(1500).optional(),
   })
   .superRefine((body, ctx) => {
-    if (body.kind !== "CUSTOM_BUY" && !body.pickup_address) {
-      ctx.addIssue({ code: "custom", path: ["pickup_address"], message: "required: where should the rider collect it?" });
+    if (body.order_type !== "CUSTOM_BUY") {
+      if (!body.pickup_address) {
+        ctx.addIssue({ code: "custom", path: ["pickup_address"], message: "required: where should the rider collect it?" });
+      }
+      if (!body.details || body.details.length < 3) {
+        ctx.addIssue({ code: "custom", path: ["details"], message: "required: what is being moved?" });
+      }
     }
   });
 
+/** The text the rider reads: the checklist, then the customer's note. */
+function requestText({ items, details }) {
+  const lines = items.map((item) => `• ${item.qty} × ${item.name}`);
+  if (details) lines.push(...(lines.length ? ["", `Note: ${details}`] : [details]));
+  return lines.join("\n");
+}
+
 router.post(
-  "/custom-order",
+  "/orders",
   checkoutIpLimiter,
+  customRequestUpload, // multipart is parsed first so the per-phone limit can read the body
   checkoutPhoneLimiter,
   idempotency(),
   asyncHandler(async (req, res) => {
     const body = parse(customOrderSchema, req.body);
     const franchise_id = req.franchise_id;
-    const kind = CUSTOM_KINDS[body.kind];
+    const kind = ORDER_KINDS[body.order_type];
+    const photo = req.files?.photo?.[0];
+    const voice = req.files?.voice?.[0];
 
     const customer_phone = normalizePhone(body.customer_phone);
     if (!customer_phone) throw fieldError("customer_phone", "must be a valid 10-digit mobile number");
+    if (photo && photo.size > MAX_PHOTO_BYTES) throw fieldError("photo", "must be 5 MB or smaller");
+
+    const text = requestText(body);
+    // A purchase request has to say what to buy, in some form.
+    if (body.order_type === "CUSTOM_BUY" && !text && !photo && !voice) {
+      throw fieldError("items", "add at least one item, a photo of your list, or a voice note");
+    }
+
+    const location_token = crypto.randomBytes(24).toString("base64url");
+    // Files are stored only after every check above has passed.
+    const folder = `requests/${franchise_id}/${location_token}`;
+    const [photoUrl, voiceUrl] = await Promise.all([
+      photo ? saveUpload(photo, folder) : null,
+      voice ? saveUpload(voice, folder) : null,
+    ]);
 
     const createOrder = () =>
       prisma.$transaction(async (tx) => {
@@ -378,15 +427,17 @@ router.post(
           data: {
             franchise_id,
             order_number: `DP-${datePart}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`,
-            location_token: crypto.randomBytes(24).toString("base64url"),
-            order_type: body.kind,
+            location_token,
+            order_type: body.order_type,
             order_category: kind.category,
             order_status: "RIDER_REQUESTED",
             zone_id: zone.id,
             customer_phone,
             customer_name: body.customer_name ?? null,
-            custom_shop_name: body.kind === "CUSTOM_BUY" ? (body.shop_name ?? null) : null,
-            custom_items_text: body.details,
+            custom_shop_name: body.order_type === "CUSTOM_BUY" ? (body.shop_name ?? null) : null,
+            custom_items_text: text || null,
+            prescription_img_url: photoUrl,
+            request_voice_url: voiceUrl,
             pickup_address: body.pickup_address ?? body.shop_name ?? null,
             drop_address: body.drop_address,
             item_total: "0.00",
@@ -415,9 +466,11 @@ router.post(
       {
         order_number: order.order_number,
         location_token: order.location_token,
-        kind: body.kind,
+        order_type: body.order_type,
         shop_name: body.shop_name ?? kind.label,
         delivery_fee: moneyStr(zone.delivery_fee),
+        has_photo: Boolean(photoUrl),
+        has_voice_note: Boolean(voiceUrl),
         // The rider confirms the bill (shop purchase / load) at pickup.
         message: "A rider will confirm the final amount before pickup.",
       },

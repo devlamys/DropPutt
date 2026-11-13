@@ -458,7 +458,7 @@ authenticated routes need `Authorization: Bearer <access token>`.
 | Area | Endpoints |
 |---|---|
 | **Auth** | `POST /auth/login` · `POST /auth/refresh` · `POST /auth/logout` |
-| **Storefront** (public) | `GET /marketplace/feed` · `GET /marketplace/zones` · `POST /marketplace/checkout` |
+| **Storefront** (public) | `GET /marketplace/feed` · `GET /marketplace/zones` · `POST /marketplace/checkout` · `POST /marketplace/orders` (Buy Anything with checklist, list photo and voice note; Pick & Drop; Mini Truck) |
 | **Magic Link** (public, token = credential) | `GET /public/drop/:token` · `GET …/status` · `POST …/voice-and-pin` · `POST …/tip` |
 | **Orders** | `POST /orders/quick-call` · `POST /orders/:id/accept` · `PUT /orders/:id/rider-pickup` · `POST /orders/:id/deliver` · `POST /orders/:id/gate-photo` · `GET /orders` (history) · `GET /orders/active` · `GET /orders/zones` · `GET /orders/customer-lookup` |
 | **Rider** (`/rider` and `/riders`) | `GET /me` · `PATCH /me/online` · `GET /me/active-orders` · `POST /location-batch` · `GET /earnings` |

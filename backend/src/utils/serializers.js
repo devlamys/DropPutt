@@ -32,6 +32,9 @@ export function orderView(order) {
     rider_paid_at_shop: order.rider_paid_at_shop,
     bill_image_url: order.bill_image_url,
     voice_note_url: order.voice_note_url,
+    // What the customer asked a rider to buy: list photo / prescription and a voice note.
+    request_image_url: order.prescription_img_url,
+    request_voice_url: order.request_voice_url,
     pickup_address: order.pickup_address,
     pickup_lat: coordStr(order.pickup_lat),
     pickup_lng: coordStr(order.pickup_lng),

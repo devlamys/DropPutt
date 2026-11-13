@@ -40,3 +40,26 @@ export const gatePhotoUpload = uploader({
   mimeTypes: IMAGE_MIME_TYPES,
   maxBytes: 5 * 1024 * 1024,
 });
+
+/**
+ * Customer request media: multipart field `photo` (a handwritten list or a
+ * prescription: JPEG / PNG / WebP) and `voice` (audio note). Each field has
+ * its own type check; the route enforces the 5 MB photo limit.
+ */
+export const customRequestUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 2, fields: 30 },
+  fileFilter: (req, file, callback) => {
+    const mimetype = file.mimetype.split(";")[0].trim();
+    const allowed = file.fieldname === "photo" ? IMAGE_MIME_TYPES : file.fieldname === "voice" ? AUDIO_MIME_TYPES : [];
+    if (allowed.includes(mimetype)) return callback(null, true);
+    callback(
+      validationError("Upload rejected", [
+        { field: file.fieldname, issue: `unsupported file type ${mimetype}` },
+      ])
+    );
+  },
+}).fields([
+  { name: "photo", maxCount: 1 },
+  { name: "voice", maxCount: 1 },
+]);

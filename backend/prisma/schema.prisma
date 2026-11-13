@@ -313,6 +313,7 @@ model Order {
   bill_image_url       String?
   prescription_img_url String?
   voice_note_url       String?
+  request_voice_url    String?
   location_token       String            @unique
   pickup_address       String?
   pickup_lat           Decimal?          @db.Decimal(10, 7)
