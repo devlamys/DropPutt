@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import CartBar from "../components/shop/CartBar.jsx";
 import CartSheet, { OrderPlaced } from "../components/shop/CartSheet.jsx";
-import { StorefrontContext, readProfile, saveLastOrder, saveProfile } from "../components/shop/StorefrontContext.jsx";
+import CustomOrderSheet from "../components/shop/CustomOrderSheet.jsx";
+import OrdersDrawer from "../components/shop/OrdersDrawer.jsx";
+import { StorefrontContext, readOrders, readProfile, saveLastOrder, saveProfile } from "../components/shop/StorefrontContext.jsx";
 import ZoneSheet from "../components/shop/ZoneSheet.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { useCart } from "../hooks/useCart.js";
@@ -30,6 +32,12 @@ export default function Storefront() {
   const [zoneOpen, setZoneOpen] = useState(false);
   const [switching, setSwitching] = useState(null); // { product, shopName }
   const [placed, setPlaced] = useState(null);
+  const [customKind, setCustomKind] = useState(null); // "CUSTOM_BUY" | "PICK_DROP" | "MINI_TRUCK"
+  const [ordersOpen, setOrdersOpen] = useState(false);
+  const [orderCount, setOrderCount] = useState(() => readOrders().length);
+  const location = useLocation();
+  // The home page draws its own cart bar; every other page uses the shared one.
+  const homeHasOwnCartBar = location.pathname.replace(/\/+$/, "") === "/shop";
   const loadedAt = useRef(0);
 
   const load = useCallback(async () => {
@@ -125,9 +133,11 @@ export default function Storefront() {
   }, [totals.count]);
 
   const onPlaced = (order) => {
-    saveLastOrder({ token: order.location_token, number: order.order_number, shop: order.shop_name });
-    clear();
+    saveLastOrder({ token: order.location_token, number: order.order_number, shop: order.shop_name, kind: order.kind });
+    setOrderCount(readOrders().length);
+    if (!order.kind) clear(); // shop checkout empties the cart; custom requests leave it alone
     setCartOpen(false);
+    setCustomKind(null);
     setPlaced(order);
     setTimeout(() => navigate(`/drop/${order.location_token}`), 1600);
   };
@@ -150,6 +160,13 @@ export default function Storefront() {
     pickZone,
     totals,
     openCart: () => setCartOpen(true),
+    franchiseName: feed?.franchise?.name ?? null,
+    openCustom: (kind) => setCustomKind(kind),
+    openOrders: () => setOrdersOpen(true),
+    orderCount,
+    minOrder,
+    cartShop,
+    toast,
   };
 
   return (
@@ -160,7 +177,7 @@ export default function Storefront() {
         {/* room for the floating cart bar so it never covers the footer text */}
         {totals.count > 0 && <div className="h-24 bg-pine-950" aria-hidden="true" />}
 
-        {!cartOpen && !placed && (
+        {!cartOpen && !placed && !homeHasOwnCartBar && (
           <CartBar cart={cart} totals={totals} minOrder={minOrder} shopCategory={cartShop?.shop_category} onOpen={() => setCartOpen(true)} />
         )}
 
@@ -185,6 +202,22 @@ export default function Storefront() {
             onPlaced={onPlaced}
           />
         )}
+
+        {customKind && (
+          <CustomOrderSheet
+            kind={customKind}
+            zones={zones}
+            zoneId={zoneId}
+            onZone={(id) => {
+              setZoneId(id);
+              saveProfile({ zone_id: id });
+            }}
+            onClose={() => setCustomKind(null)}
+            onPlaced={onPlaced}
+          />
+        )}
+
+        {ordersOpen && <OrdersDrawer onClose={() => { setOrdersOpen(false); setOrderCount(readOrders().length); }} />}
 
         {zoneOpen && <ZoneSheet zones={zones} value={zoneId} onPick={pickZone} onClose={() => setZoneOpen(false)} />}
 

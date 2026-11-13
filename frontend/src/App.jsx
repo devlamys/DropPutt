@@ -7,9 +7,9 @@ import Login from "./pages/Login.jsx";
 // One chunk per app, so the customer's Magic Link page stays light on rural data.
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard.jsx"));
 const CustomerDropPage = lazy(() => import("./pages/CustomerDropPage.jsx"));
-// The customer storefront is one chunk: shell + home + shop menu.
+// The customer storefront: shell + home + shop menu.
 const Storefront = lazy(() => import("./pages/Storefront.jsx"));
-const ShopHome = lazy(() => import("./pages/ShopHome.jsx"));
+const StorefrontHome = lazy(() => import("./pages/StorefrontHome.jsx"));
 const ShopMenu = lazy(() => import("./pages/ShopMenu.jsx"));
 const RiderDashboard = lazy(() => import("./pages/RiderDashboard.jsx"));
 const RiderEarnings = lazy(() => import("./pages/RiderEarnings.jsx"));
@@ -50,7 +50,7 @@ export default function App() {
       {/* Public Magic Link — the token is the credential, no login. */}
       {/* Public storefront: customers order without an account. */}
       <Route path="/shop" element={<Storefront />}>
-        <Route index element={<ShopHome />} />
+        <Route index element={<StorefrontHome />} />
         <Route path=":vendorId" element={<ShopMenu />} />
       </Route>
       <Route path="/drop/:token" element={<CustomerDropPage />} />
