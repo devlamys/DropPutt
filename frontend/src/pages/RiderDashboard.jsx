@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import ActiveDeliveryCard from "../components/rider/ActiveDeliveryCard.jsx";
 import AlarmModal from "../components/rider/AlarmModal.jsx";
+import CashHandoverPanel from "../components/rider/CashHandoverPanel.jsx";
 import DeliveredModal from "../components/rider/DeliveredModal.jsx";
 import PickupForm from "../components/rider/PickupForm.jsx";
 import RiderTopBar from "../components/rider/RiderTopBar.jsx";
@@ -25,6 +26,7 @@ export default function RiderDashboard() {
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
   const [delivering, setDelivering] = useState(null);
+  const [cashTick, setCashTick] = useState(0); // bumps when a cash event arrives
 
   const online = Boolean(status?.rider.is_online);
   const onlineRef = useRef(online);
@@ -105,6 +107,20 @@ export default function RiderDashboard() {
       toast(`🎉 ${target} deliveries done — ${inr(bonus)} bonus earned!`, "success");
       loadStatus().catch(() => {});
     },
+    cash_limit_reached: () => {
+      toast("💵 Cash limit reached — pay the hotel to get orders again", "warn");
+      setCashTick((n) => n + 1);
+      loadStatus().catch(() => {});
+    },
+    cash_settled: ({ amount }) => {
+      toast(`✅ ${inr(amount)} confirmed. You can take orders again.`, "success");
+      setCashTick((n) => n + 1);
+      loadStatus().catch(() => {});
+    },
+    cash_handover_rejected: () => {
+      toast("The hotel did not confirm your cash payment", "error");
+      setCashTick((n) => n + 1);
+    },
   });
 
   // Reconnect catch-up: sockets miss events while offline.
@@ -184,6 +200,12 @@ export default function RiderDashboard() {
             {trackingError && tracking && (
               <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">{trackingError}</p>
             )}
+
+            <CashHandoverPanel
+              reloadKey={`${cashTick}:${status?.rider.cash_in_hand}`}
+              onSettled={() => loadStatus().catch(() => {})}
+              toast={toast}
+            />
 
             {toPickup.map((order) => (
               <PickupForm

@@ -11,7 +11,13 @@ import { addMoney, money } from "../utils/orderMath.js";
 import { AppError, asyncHandler, ok, orderNotFound } from "../utils/response.js";
 import { coordStr, moneyStr } from "../utils/serializers.js";
 import { istDayRange } from "../utils/time.js";
-import { MAX_ID, parse } from "../utils/validate.js";
+import { MAX_ID, parse, zId, zMoney } from "../utils/validate.js";
+import {
+  cashOwedByVendor,
+  createHandover,
+  handoverInclude,
+  handoverView,
+} from "../services/cashHandoverService.js";
 
 const router = Router();
 router.use(authenticate, requireRole("RIDER"), loadRider);
@@ -241,6 +247,65 @@ router.get(
         bonus: moneyStr(d.bonus),
       })),
     });
+  })
+);
+
+// GET /api/v1/rider/me/cash-owed — how much of the rider's cash belongs to
+// which vendor, plus handovers still waiting for the vendor's confirmation.
+router.get(
+  "/me/cash-owed",
+  asyncHandler(async (req, res) => {
+    const rider = await prisma.rider.findUnique({ where: { id: req.rider.id } });
+    const [owed, pending] = await Promise.all([
+      cashOwedByVendor(prisma, req.franchise_id, rider.id),
+      prisma.riderCashHandover.findMany({
+        where: { franchise_id: req.franchise_id, rider_id: rider.id, status: "PENDING" },
+        orderBy: { id: "desc" },
+        include: handoverInclude,
+      }),
+    ]);
+    const cash = money(rider.cash_in_hand);
+    ok(res, {
+      cash_in_hand: moneyStr(cash),
+      max_cash_limit: moneyStr(rider.max_cash_limit),
+      is_cash_locked: cash.gte(rider.max_cash_limit),
+      vendors: owed.map((row) => ({
+        vendor_id: row.vendor_id,
+        shop_name: row.shop_name,
+        // Never offer more than the rider is actually holding.
+        owed: moneyStr(row.owed.gt(cash) ? cash : row.owed),
+      })),
+      pending: pending.map(handoverView),
+    });
+  })
+);
+
+const handoverSchema = z.object({
+  vendor_id: zId,
+  amount: zMoney.refine((value) => Number(value) > 0, { message: "must be greater than 0" }),
+  note: z.string().trim().min(1).max(300).optional(),
+});
+
+// POST /api/v1/rider/me/cash-handover — "I paid the vendor". Creates a
+// PENDING handover the vendor confirms with one tap.
+router.post(
+  "/me/cash-handover",
+  idempotency(),
+  asyncHandler(async (req, res) => {
+    const body = parse(handoverSchema, req.body);
+    const row = await createHandover(
+      {
+        franchise: req.franchise,
+        rider_id: req.rider.id,
+        vendor_id: body.vendor_id,
+        amount: body.amount,
+        note: body.note,
+        initiated_by: "RIDER",
+        user_id: req.user.id,
+      },
+      { requestId: res.locals.request_id }
+    );
+    ok(res, { handover: handoverView(row) }, { status: 201 });
   })
 );
 

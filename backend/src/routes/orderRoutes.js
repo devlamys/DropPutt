@@ -826,6 +826,29 @@ router.post(
           channel: "earnings",
         });
       }
+
+      // Tell the rider the moment they hit the cash limit, so the app can
+      // show "pay the vendor to keep taking orders" instead of a 422 later.
+      const after = await prisma.rider.findUnique({
+        where: { id: riderId },
+        select: { cash_in_hand: true, max_cash_limit: true },
+      });
+      if (after && money(after.cash_in_hand).gte(after.max_cash_limit)) {
+        emitTo(rooms.rider(riderId), "cash_limit_reached", {
+          cash_in_hand: moneyStr(after.cash_in_hand),
+          max_cash_limit: moneyStr(after.max_cash_limit),
+        });
+        pushToUsers([req.user.id], {
+          title: "💵 Cash limit reached",
+          body: "Pay the hotel your collected cash to keep accepting orders",
+          data: {
+            type: "CASH_LIMIT_REACHED",
+            franchise_slug: req.franchise.slug,
+            deep_link: "dropputt://rider/home",
+          },
+          channel: "order_updates",
+        });
+      }
     }
 
     ok(res, {

@@ -22,6 +22,12 @@ import { coordStr } from "../utils/serializers.js";
 import { istDayRange } from "../utils/time.js";
 import { idempotency } from "../middleware/idempotency.js";
 import { audit } from "../utils/audit.js";
+import {
+  createHandover,
+  handoverInclude,
+  handoverView,
+  resolveHandover,
+} from "../services/cashHandoverService.js";
 import { addMoney, money, subtractMoney } from "../utils/orderMath.js";
 import { buildPage, parsePagination } from "../utils/pagination.js";
 import { AppError, asyncHandler, ok, validationError } from "../utils/response.js";
@@ -104,55 +110,71 @@ router.post(
   asyncHandler(async (req, res) => {
     requireFranchiseHeader(req);
     const riderId = parseId(req.params.id);
-    const franchise_id = req.franchise_id;
     const body = parse(cashSettlementSchema, req.body);
-    const amount = money(body.amount);
-
-    const result = await prisma.$transaction(async (tx) => {
-      const locked = await tx.$queryRaw`
-        SELECT id FROM "riders"
-        WHERE id = ${riderId} AND franchise_id = ${franchise_id}
-        FOR UPDATE
-      `;
-      if (locked.length === 0) {
-        throw new AppError(404, "RIDER_NOT_FOUND", "Rider not found in this franchise");
-      }
-      const rider = await tx.rider.findUnique({ where: { id: riderId } });
-      if (amount.gt(rider.cash_in_hand)) {
-        throw validationError("Request validation failed", [
-          {
-            field: "amount",
-            issue: `exceeds rider cash in hand (₹${moneyStr(rider.cash_in_hand)})`,
-          },
-        ]);
-      }
-
-      const cash_after = subtractMoney(rider.cash_in_hand, amount);
-      await tx.rider.update({
-        where: { id: riderId },
-        data: { cash_in_hand: moneyStr(cash_after) },
-      });
-      return { cash_before: moneyStr(rider.cash_in_hand), cash_after: moneyStr(cash_after) };
-    }, TX_OPTIONS);
-
-    audit("rider.cash_settlement", {
-      franchise_id,
-      rider_id: riderId,
-      settled_by_user_id: req.user.id,
-      amount: moneyStr(amount),
-      note: body.note ?? null,
-      request_id: res.locals.request_id,
-      ...result,
-    });
+    // Direct admin settlement (cash the franchise holds itself). It now
+    // leaves a RiderCashHandover row and notifies the rider.
+    const row = await createHandover(
+      {
+        franchise: req.franchise,
+        rider_id: riderId,
+        amount: body.amount,
+        note: body.note,
+        initiated_by: "ADMIN",
+        user_id: req.user.id,
+      },
+      { requestId: res.locals.request_id }
+    );
 
     ok(res, {
       rider_id: riderId,
-      amount_settled: moneyStr(amount),
-      cash_in_hand_before: result.cash_before,
-      cash_in_hand: result.cash_after,
+      amount_settled: moneyStr(row.amount),
+      cash_in_hand_before: moneyStr(row.cash_before),
+      cash_in_hand: moneyStr(row.cash_after),
+      handover_id: row.id,
     });
   })
 );
+
+// GET /api/v1/admin/cash-handovers?status=PENDING — rider → vendor handovers.
+// Pending ones the vendor has not answered can be resolved by the admin so a
+// busy accountant never keeps a rider blocked.
+router.get(
+  "/cash-handovers",
+  requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
+  asyncHandler(async (req, res) => {
+    requireFranchiseHeader(req);
+    const status = ["PENDING", "CONFIRMED", "REJECTED"].includes(req.query.status)
+      ? req.query.status
+      : undefined;
+    const rows = await prisma.riderCashHandover.findMany({
+      where: { franchise_id: req.franchise_id, ...(status ? { status } : {}) },
+      orderBy: { id: "desc" },
+      take: 50,
+      include: handoverInclude,
+    });
+    ok(res, { items: rows.map(handoverView) });
+  })
+);
+
+for (const action of ["confirm", "reject"]) {
+  router.post(
+    `/cash-handovers/:id/${action}`,
+    requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
+    asyncHandler(async (req, res) => {
+      requireFranchiseHeader(req);
+      const row = await resolveHandover(
+        {
+          franchise: req.franchise,
+          handover_id: parseId(req.params.id),
+          action,
+          user_id: req.user.id,
+        },
+        { requestId: res.locals.request_id }
+      );
+      ok(res, { handover: handoverView(row) });
+    })
+  );
+}
 
 // POST /api/v1/admin/franchise/wallet/top-up
 //

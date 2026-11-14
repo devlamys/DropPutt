@@ -121,6 +121,7 @@ model Franchise {
   wallet_transactions WalletTransaction[]
   push_campaigns      PushCampaign[]
   settlement_entries  SettlementEntry[]
+  cash_handovers      RiderCashHandover[]
 
   @@map("franchises")
 }
@@ -187,6 +188,7 @@ model Vendor {
   products  Product[]
   orders    Order[]
   settlement_entries SettlementEntry[]
+  cash_handovers     RiderCashHandover[]
 
   @@unique([franchise_id, shop_name])
   @@index([franchise_id, shop_category, is_open])
@@ -242,9 +244,51 @@ model Rider {
   user      User      @relation(fields: [user_id], references: [id])
   orders    Order[]
   settlement_entries SettlementEntry[]
+  cash_handovers     RiderCashHandover[]
 
   @@index([franchise_id, is_online, is_approved])
   @@map("riders")
+}
+
+enum CashHandoverStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+enum CashHandoverInitiator {
+  RIDER
+  VENDOR
+  ADMIN
+}
+
+// Cash a rider hands over to a vendor (hotel) to get back under the cash
+// limit. Rider or vendor starts it; the vendor confirms. On CONFIRMED the
+// rider's cash_in_hand and the vendor's admin_payable_balance both drop by
+// `amount`. ADMIN rows are direct admin settlements (vendor_id null).
+model RiderCashHandover {
+  id            Int                   @id @default(autoincrement())
+  franchise_id  Int
+  rider_id      Int
+  vendor_id     Int?
+  amount        Decimal               @db.Decimal(12, 2)
+  status        CashHandoverStatus    @default(PENDING)
+  initiated_by  CashHandoverInitiator
+  cash_before   Decimal?              @db.Decimal(12, 2)
+  cash_after    Decimal?              @db.Decimal(12, 2)
+  note          String?
+  resolved_by   Int?
+  resolved_at   DateTime?
+  created_at    DateTime              @default(now())
+
+  franchise Franchise @relation(fields: [franchise_id], references: [id])
+  rider     Rider     @relation(fields: [rider_id], references: [id])
+  vendor    Vendor?   @relation(fields: [vendor_id], references: [id])
+
+  @@index([franchise_id, status, created_at])
+  @@index([vendor_id, status])
+  @@index([rider_id, created_at])
+  @@map("rider_cash_handovers")
 }
 
 model Customer {

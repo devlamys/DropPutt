@@ -1,5 +1,5 @@
 import { Loader2, Lock, Unlock } from "lucide-react";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Modal from "../Modal.jsx";
 import api, { getErrorMessage, idempotencyHeaders } from "../../utils/api.js";
 import { inr } from "../../utils/format.js";
@@ -7,11 +7,72 @@ import { inr } from "../../utils/format.js";
 /** Nightly cash hand-over: settling cash_in_hand unlocks capped riders. */
 export default function SettlementLedger({ date, riders, onSettled, toast }) {
   const [settling, setSettling] = useState(null);
+  const [handovers, setHandovers] = useState([]);
+  const [busyId, setBusyId] = useState(null);
   const outstanding = riders.reduce((sum, r) => sum + Number(r.cash_in_hand), 0);
   const locked = riders.filter((r) => r.is_cash_locked).length;
 
+  const loadHandovers = useCallback(async () => {
+    try {
+      const { data } = await api.get("/admin/cash-handovers", { params: { status: "PENDING" } });
+      setHandovers(data.data.items);
+    } catch {
+      /* the overview already reports errors */
+    }
+  }, []);
+  // `riders` changes on every overview reload, which keeps this list fresh.
+  useEffect(() => {
+    loadHandovers();
+  }, [loadHandovers, riders]);
+
+  async function resolve(item, action) {
+    setBusyId(item.id);
+    try {
+      await api.post(`/admin/cash-handovers/${item.id}/${action}`);
+      toast(action === "confirm" ? "Handover confirmed" : "Handover rejected", "success");
+      await loadHandovers();
+      onSettled();
+    } catch (error) {
+      toast(getErrorMessage(error), "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
+      {handovers.length > 0 && (
+        <section className="rounded-2xl bg-amber-50 p-3 ring-1 ring-amber-200">
+          <h3 className="text-sm font-bold">Waiting for the hotel to confirm</h3>
+          <ul className="mt-2 space-y-2">
+            {handovers.map((h) => (
+              <li key={h.id} className="flex items-center justify-between gap-3 rounded-xl bg-white p-3 text-sm">
+                <span className="min-w-0">
+                  <b>{h.rider_name}</b> → {h.shop_name} · {inr(h.amount)}
+                </span>
+                <span className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    disabled={busyId === h.id}
+                    onClick={() => resolve(h, "confirm")}
+                    className="rounded-lg bg-green-600 px-3 py-1.5 font-bold text-white disabled:opacity-50"
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busyId === h.id}
+                    onClick={() => resolve(h, "reject")}
+                    className="rounded-lg bg-slate-200 px-3 py-1.5 font-semibold disabled:opacity-50"
+                  >
+                    Reject
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-2xl bg-white p-3 ring-1 ring-slate-200">
           <p className="text-xs text-slate-500">Cash with riders</p>

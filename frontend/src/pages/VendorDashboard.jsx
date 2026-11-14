@@ -3,6 +3,7 @@ import { History, Loader2, LogOut, ShieldAlert, Wifi, WifiOff } from "lucide-rea
 import { Link } from "react-router-dom";
 import CancelOrderModal from "../components/CancelOrderModal.jsx";
 import Modal from "../components/Modal.jsx";
+import CashHandoverCard from "../components/vendor/CashHandoverCard.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -18,6 +19,7 @@ export default function VendorDashboard() {
   const { user, signOut } = useAuth();
   const { toast, node: toastNode } = useToast();
 
+  const [cashTick, setCashTick] = useState(0); // bumps when a cash event arrives
   const [shop, setShop] = useState(null);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -53,8 +55,8 @@ export default function VendorDashboard() {
 
   // Live updates over the socket; polling is the safety net.
   const refresh = useCallback(() => void loadOrders(), [loadOrders]);
-  const { connected } = useSocket(
-    Object.fromEntries(
+  const { connected } = useSocket({
+    ...Object.fromEntries(
       EVENTS.map((event) => [
         event,
         () => {
@@ -63,8 +65,13 @@ export default function VendorDashboard() {
           if (event === "order_cancelled") toast("An order was cancelled", "warn");
         },
       ])
-    )
-  );
+    ),
+    cash_handover_requested: ({ rider_name, amount }) => {
+      toast(`💵 ${rider_name} says they paid ${inr(amount)} — please confirm`, "info");
+      setCashTick((n) => n + 1);
+    },
+    cash_handover_resolved: () => setCashTick((n) => n + 1),
+  });
   useEffect(() => {
     const id = setInterval(() => {
       setNow(Date.now());
@@ -171,6 +178,8 @@ export default function VendorDashboard() {
           </button>
         </div>
       </header>
+
+      <CashHandoverCard reloadKey={cashTick} toast={toast} />
 
       <main className="space-y-6 px-4 pt-5">
         {/* One-tap rider call */}
