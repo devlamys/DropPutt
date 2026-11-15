@@ -61,6 +61,8 @@ export default function VendorDashboard() {
         event,
         () => {
           refresh();
+          // A new order takes stock and a cancelled one gives it back: keep the menu counts live.
+          if (event === "order_status_changed" || event === "order_cancelled") void loadShop();
           if (event === "order_picked_up") toast("🛵 Rider picked up an order", "success");
           if (event === "order_cancelled") toast("An order was cancelled", "warn");
         },
@@ -75,14 +77,17 @@ export default function VendorDashboard() {
   useEffect(() => {
     const id = setInterval(() => {
       setNow(Date.now());
-      if (document.visibilityState === "visible") refresh();
+      if (document.visibilityState === "visible") {
+        refresh();
+        void loadShop();
+      }
     }, 30_000);
     const tick = setInterval(() => setNow(Date.now()), 15_000);
     return () => {
       clearInterval(id);
       clearInterval(tick);
     };
-  }, [refresh]);
+  }, [refresh, loadShop]);
 
   async function callRider() {
     if (callLock.current) return;
