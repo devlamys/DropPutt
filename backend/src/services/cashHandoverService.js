@@ -39,20 +39,25 @@ export const handoverInclude = {
 };
 
 /**
- * Cash the rider still holds that came from each vendor's COD orders:
- * collected minus (pending + confirmed) handovers to that vendor.
+ * Food money the rider collected on each vendor's COD orders and has not yet
+ * handed over: Σ item_total (never more than the cash actually collected)
+ * minus (pending + confirmed) handovers to that vendor. The delivery fee,
+ * tip and surge are not the vendor's; they stay in the rider's cash_in_hand
+ * and are settled with the franchise admin.
  * Returns [{ vendor_id, shop_name, owed }] with owed > 0 only.
  */
 export async function cashOwedByVendor(db, franchise_id, rider_id) {
   const [collected, handed] = await Promise.all([
     db.$queryRaw`
-      SELECT o.vendor_id AS vendor_id, SUM(se.amount) AS total
+      SELECT o.vendor_id AS vendor_id, SUM(LEAST(o.item_total, se.amount)) AS total
       FROM settlement_entries se
       JOIN orders o ON o.id = se.order_id
       WHERE se.franchise_id = ${franchise_id}
         AND se.rider_id = ${rider_id}
         AND se.party = 'RIDER_CASH'
         AND o.vendor_id IS NOT NULL
+        AND o.payment_method = 'COD'
+        AND o.rider_paid_at_shop = false
       GROUP BY o.vendor_id
     `,
     db.riderCashHandover.groupBy({

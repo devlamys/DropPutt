@@ -37,8 +37,8 @@ describe("reconciliation (§41)", () => {
     assert.equal(d.totals.orders, 2);
     assert.equal(d.totals.grand_total, "460.00");
     assert.equal(d.totals.vendor_earning, "360.00");
-    assert.equal(d.totals.rider_earning, "40.00");
-    assert.equal(d.totals.franchise_profit, "54.00");
+    assert.equal(d.totals.rider_earning, "60.00");
+    assert.equal(d.totals.franchise_profit, "34.00");
     assert.equal(d.totals.super_admin_royalty, "6.00");
     // the four shares account for the whole order total
     const sum = [d.totals.vendor_earning, d.totals.rider_earning, d.totals.franchise_profit, d.totals.super_admin_royalty].reduce((n, v) => n + Number(v), 0);

@@ -1,4 +1,4 @@
-import { Building2, Gauge, Loader2, LogOut, Radar, Receipt, Settings2, Wallet } from "lucide-react";
+import { Building2, Gauge, Loader2, LogOut, Radar, Receipt, Settings2, Store, Wallet } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ControlsPanel from "../components/admin/ControlsPanel.jsx";
 import FleetRadar from "../components/admin/FleetRadar.jsx";

@@ -116,12 +116,12 @@ describe("pickup money (§12–§14, §20)", () => {
     const row = await orderRow(order.id);
     assert.equal(row.vendor_commission.toFixed(2), "20.00");
     assert.equal(row.vendor_earning.toFixed(2), "180.00");
-    assert.equal(row.rider_earning.toFixed(2), "20.00"); // zone commission, no tip
-    assert.equal(row.franchise_profit.toFixed(2), "27.00"); // 10 + 20 - 3
+    assert.equal(row.rider_earning.toFixed(2), "30.00"); // the whole delivery fee, no tip
+    assert.equal(row.franchise_profit.toFixed(2), "17.00"); // commission 20 - royalty 3
     assert.equal(row.super_admin_profit.toFixed(2), "3.00");
   });
 
-  it("launch promo: rider keeps the whole delivery fee; franchise profit is not forced to zero", async () => {
+  it("the promo switch no longer changes the split: rider always keeps the whole delivery fee", async () => {
     await prisma.franchise.update({ where: { id: w.franchise.id }, data: { is_launch_promo_active: true } });
     const order = await placeOrder(api, w);
     await accept(api, w.riders[0], order.id);
@@ -142,7 +142,7 @@ describe("pickup money (§12–§14, §20)", () => {
     assert.equal(second.status, 200);
     const row = await orderRow(order.id);
     assert.equal(row.rider_tip.toFixed(2), "20.00");
-    assert.equal(row.rider_earning.toFixed(2), "40.00"); // 20 zone + 20 surge, once
+    assert.equal(row.rider_earning.toFixed(2), "50.00"); // 30 fee + 20 surge, once
     assert.equal(row.grand_total.toFixed(2), "250.00");
     assert.equal(await prisma.settlementEntry.count({ where: { order_id: order.id, type: "RAIN_SURGE" } }), 1);
   });

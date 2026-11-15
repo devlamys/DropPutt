@@ -119,7 +119,10 @@ router.post(
 
     let order_type;
     if (vendor) {
-      order_type = body.items ? "FOOD_MARKETPLACE" : "HOTEL_DIRECT";
+      // §10.1/§18: every vendor-started call is a commission-free hotel
+      // delivery, with or without a cart. Storefront orders (marketplace
+      // routes) are the ones that carry commission.
+      order_type = "HOTEL_DIRECT";
     } else {
       order_type = body.order_type;
       if (!order_type) throw fieldError("order_type", "required when there is no vendor");

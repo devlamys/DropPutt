@@ -47,14 +47,16 @@ const vendorActs = (id, action, token = w.vendorToken, slug = "tf") =>
 describe("rider → vendor cash handover", () => {
   it("rider reports, vendor confirms once: cash and vendor payable drop, block lifts", async () => {
     const held = await holdCash();
+    const food = Number((await owed()).vendors[0].owed);
     assert.ok(held > 0);
     const before = Number(await payable());
 
     const view = await owed();
     assert.equal(view.vendors.length, 1);
-    assert.equal(Number(view.vendors[0].owed), held);
+    // The rider kept the delivery fee at delivery (§15), so the cash left is exactly the food money.
+    assert.equal(food, held);
 
-    const created = await riderPays(held);
+    const created = await riderPays(food);
     assert.equal(created.status, 201, JSON.stringify(created.body));
     const id = created.body.data.handover.id;
     assert.equal(created.body.data.handover.status, "PENDING");
@@ -66,28 +68,30 @@ describe("rider → vendor cash handover", () => {
     const [a, b] = await Promise.all([vendorActs(id, "confirm"), vendorActs(id, "confirm")]);
     assert.equal(a.status, 200, JSON.stringify(a.body));
     assert.equal(b.status, 200, JSON.stringify(b.body));
-    assert.equal(Number(await cash()), 0, "reduced exactly once");
-    assert.equal(Number(await payable()), before - held);
+    assert.equal(Number(await cash()), held - food, "reduced exactly once; the delivery fee stays with the rider");
+    assert.equal(Number(await payable()), before - food);
     assert.equal((await vendorActs(id, "reject")).status, 409, "a confirmed handover cannot be rejected");
   });
 
   it("a rider over the cash limit can accept orders again after confirmation", async () => {
     const held = await holdCash();
+    const food = Number((await owed()).vendors[0].owed);
     await prisma.rider.update({ where: { id: rider().rider.id }, data: { max_cash_limit: held } });
     const next = await placeOrder(api, w);
     const blocked = await accept(api, rider(), next.id);
     assert.equal(blocked.status, 422);
     assert.equal(blocked.body.error.code, "CASH_LIMIT_EXCEEDED");
 
-    const created = await riderPays(held);
+    const created = await riderPays(food);
     await vendorActs(created.body.data.handover.id, "confirm");
     assert.equal((await accept(api, rider(), next.id)).status, 200);
   });
 
   it("rejecting leaves cash and vendor payable untouched", async () => {
     const held = await holdCash();
+    const food = Number((await owed()).vendors[0].owed);
     const before = Number(await payable());
-    const created = await riderPays(held);
+    const created = await riderPays(food);
     const res = await vendorActs(created.body.data.handover.id, "reject");
     assert.equal(res.status, 200);
     assert.equal(res.body.data.handover.status, "REJECTED");
@@ -97,35 +101,39 @@ describe("rider → vendor cash handover", () => {
 
   it("cannot report more than is owed to that vendor, and pending counts against it", async () => {
     const held = await holdCash();
-    assert.equal((await riderPays(held + 1)).status, 422);
-    assert.equal((await riderPays(held)).status, 201);
+    const food = Number((await owed()).vendors[0].owed);
+    assert.equal((await riderPays(food + 1)).status, 422);
+    assert.equal((await riderPays(food)).status, 201);
     assert.equal((await riderPays(1)).status, 422, "the rest is already reported");
   });
 
   it("the same Idempotency-Key does not create two handovers", async () => {
     const held = await holdCash();
+    const food = Number((await owed()).vendors[0].owed);
     const key = uuid();
-    await riderPays(held, key);
-    await riderPays(held, key);
+    await riderPays(food, key);
+    await riderPays(food, key);
     assert.equal(await prisma.riderCashHandover.count(), 1);
   });
 
   it("the vendor can record cash received directly", async () => {
     const held = await holdCash();
+    const food = Number((await owed()).vendors[0].owed);
     const res = await raw("POST", "/vendor/cash-handovers", {
       token: w.vendorToken,
       slug: "tf",
       headers: { "Idempotency-Key": uuid() },
-      body: { rider_id: rider().rider.id, amount: String(held) },
+      body: { rider_id: rider().rider.id, amount: String(food) },
     });
     assert.equal(res.status, 201, JSON.stringify(res.body));
     assert.equal(res.body.data.handover.status, "CONFIRMED");
-    assert.equal(Number(await cash()), 0);
+    assert.equal(Number(await cash()), held - food);
   });
 
   it("other vendors, riders and franchises cannot touch the handover", async () => {
     const held = await holdCash();
-    const created = await riderPays(held);
+    const food = Number((await owed()).vendors[0].owed);
+    const created = await riderPays(food);
     const id = created.body.data.handover.id;
 
     const crossTenant = await vendorActs(id, "confirm", other.vendorToken, "other");
@@ -136,17 +144,19 @@ describe("rider → vendor cash handover", () => {
 
   it("the admin can resolve a handover the vendor never answered", async () => {
     const held = await holdCash();
-    const created = await riderPays(held);
+    const food = Number((await owed()).vendors[0].owed);
+    const created = await riderPays(food);
     const res = await api("POST", `/admin/cash-handovers/${created.body.data.handover.id}/confirm`, {
       token: w.adminToken,
       body: {},
     });
     assert.equal(res.status, 200, JSON.stringify(res.body));
-    assert.equal(Number(await cash()), 0);
+    assert.equal(Number(await cash()), held - food);
   });
 
   it("direct admin settlement still works and leaves a record", async () => {
     const held = await holdCash();
+    const food = Number((await owed()).vendors[0].owed);
     const res = await api("POST", `/admin/riders/${rider().rider.id}/cash-settlement`, {
       token: w.adminToken,
       headers: { "Idempotency-Key": uuid() },

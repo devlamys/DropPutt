@@ -144,20 +144,14 @@ export function calculateVendorAdminPayable({
 // ─── §11 / §12 Four-way split ───────────────────────────────────────────────
 
 /**
- * Normal mode (§11):
- *   rider_earning    = zone.rider_commission + rider_tip
- *   franchise_profit = zone.franchise_profit + shop_markup_profit
- *                      + vendor_commission - royalty_per_order
- *
- * Launch promo (§12):
+ * Split (§11): the rider keeps the whole delivery fee.
  *   rider_earning    = zone.delivery_fee + rider_tip
  *   franchise_profit = shop_markup_profit + vendor_commission - royalty_per_order
  *
- * super_admin_profit = royalty_per_order in both modes. A negative
- * franchise_profit is kept as-is — it is never clamped to zero.
+ * super_admin_profit = royalty_per_order. A negative franchise_profit is kept
+ * as-is — it is never clamped to zero.
  */
 export function calculateSplit({
-  is_launch_promo_active = false,
   zone,
   rider_tip = 0,
   shop_markup_profit = 0,
@@ -165,22 +159,10 @@ export function calculateSplit({
   royalty_per_order = 0,
 }) {
   const super_admin_profit = money(royalty_per_order);
-
-  if (is_launch_promo_active) {
-    return {
-      rider_earning: addMoney(zone.delivery_fee, rider_tip),
-      franchise_profit: subtractMoney(
-        addMoney(shop_markup_profit, vendor_commission),
-        royalty_per_order
-      ),
-      super_admin_profit,
-    };
-  }
-
   return {
-    rider_earning: addMoney(zone.rider_commission, rider_tip),
+    rider_earning: addMoney(zone.delivery_fee, rider_tip),
     franchise_profit: subtractMoney(
-      addMoney(zone.franchise_profit, shop_markup_profit, vendor_commission),
+      addMoney(shop_markup_profit, vendor_commission),
       royalty_per_order
     ),
     super_admin_profit,
@@ -221,7 +203,7 @@ export function calculateOrderFinancials({
   const markup = money(shop_markup_profit);
 
   const { vendor_commission, vendor_earning } = has_partner_vendor
-    ? calculateVendorCommission(itemTotal, commission_rate)
+    ? calculateVendorCommission(itemTotal, commissionFree ? 0 : commission_rate)
     : { vendor_commission: money(0), vendor_earning: money(0) };
 
   const grand_total = calculateGrandTotal({

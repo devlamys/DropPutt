@@ -227,6 +227,10 @@ export default function RiderDashboard() {
                 riderPosition={position}
                 tracking={tracking}
                 onDeliver={setDelivering}
+                onPaymentChanged={() => {
+                  toast("Payment method updated", "success");
+                  loadOrders().catch(() => {});
+                }}
               />
             ))}
 

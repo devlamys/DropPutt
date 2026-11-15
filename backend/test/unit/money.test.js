@@ -62,18 +62,17 @@ describe("four-way split (§11, §12)", () => {
     royalty_per_order: 3,
   };
 
-  it("launch promo: rider keeps the whole delivery fee (spec example)", () => {
-    const r = calculateSplit({ ...base, is_launch_promo_active: true });
+  it("rider keeps the whole delivery fee (spec example)", () => {
+    const r = calculateSplit({ ...base });
     assert.equal(s(r.rider_earning), "70.00"); // 50 + 20
     assert.equal(s(r.franchise_profit), "22.00"); // 10 + 15 - 3, NOT zero
     assert.equal(s(r.super_admin_profit), "3.00");
   });
 
-  it("normal mode: rider commission + tip; franchise keeps its share", () => {
+  it("the zone's franchise_profit and the promo flag no longer change the split", () => {
     const r = calculateSplit({ ...base, is_launch_promo_active: false });
-    assert.equal(s(r.rider_earning), "45.00"); // 25 + 20
-    assert.equal(s(r.franchise_profit), "42.00"); // 20 + 10 + 15 - 3
-    assert.equal(s(r.super_admin_profit), "3.00");
+    assert.equal(s(r.rider_earning), "70.00");
+    assert.equal(s(r.franchise_profit), "22.00");
   });
 
   it("a negative franchise profit is kept, never clamped to zero", () => {

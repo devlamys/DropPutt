@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 export default function Modal({ title, onClose, children, tone = "default", dismissible = true }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[600] flex items-end justify-center bg-black/60 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label={title}

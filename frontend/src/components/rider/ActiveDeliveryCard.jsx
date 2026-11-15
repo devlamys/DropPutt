@@ -1,5 +1,8 @@
-import { MessageCircle, Phone, Radio } from "lucide-react";
+import { Loader2, MessageCircle, Phone, Radio } from "lucide-react";
+import { useState } from "react";
+import Modal from "../Modal.jsx";
 import StatusBadge from "../StatusBadge.jsx";
+import api, { getErrorMessage } from "../../utils/api.js";
 import { PAYMENT_LABELS, inr } from "../../utils/format.js";
 import RequestDetails from "./RequestDetails.jsx";
 import RouteMap from "./RouteMap.jsx";
@@ -14,8 +17,9 @@ function whatsappUrl(order) {
   return `https://wa.me/91${digits}?text=${encodeURIComponent(text)}`;
 }
 
-export default function ActiveDeliveryCard({ order, riderPosition, tracking, onDeliver }) {
+export default function ActiveDeliveryCard({ order, riderPosition, tracking, onDeliver, onPaymentChanged }) {
   const nav = order.navigation;
+  const [changing, setChanging] = useState(false);
   return (
     <section className="space-y-4 rounded-2xl bg-white p-4 shadow-sm ring-2 ring-violet-200">
       <div className="flex items-start justify-between gap-2">
