@@ -319,10 +319,15 @@ router.post(
     emitTo(rooms.franchise(franchiseId), "order_accepted", event);
     void notifyWhatsappOrder(order.id, "accepted");
     if (order.vendor_id) {
-      emitTo(rooms.vendor(order.vendor_id), "order_accepted", event);
+      // The shop sees who is coming, so the food is ready when they arrive.
+      emitTo(rooms.vendor(order.vendor_id), "order_accepted", {
+        ...event,
+        rider_name: req.user.name,
+        vehicle_number: req.rider.vehicle_number ?? null,
+      });
       pushToUsers([order.vendor.user_id], {
         title: "✅ Order Accepted",
-        body: `Order #${order.order_number} has a rider`,
+        body: `Order #${order.order_number} — ${req.user.name} is coming. Keep it ready!`,
         data: {
           type: "ORDER_ACCEPTED",
           order_id: order.id,
@@ -1112,7 +1117,7 @@ const ALL_ORDER_STATUSES = [
 const BOARD_STATUSES = ["RIDER_REQUESTED", ...ACTIVE_ORDER_STATUSES];
 
 const BOARD_INCLUDE = {
-  vendor: { select: { shop_name: true, address: true } },
+  vendor: { select: { shop_name: true, address: true, app_enabled: true } },
   items: {
     select: {
       product_id: true,
@@ -1128,6 +1133,8 @@ function boardOrderView(order, role) {
   const view = {
     ...orderView(order),
     shop_name: order.vendor?.shop_name ?? order.custom_shop_name ?? null,
+    // false: the shop is not on the app, so the rider says the items out loud (§62).
+    vendor_on_app: Boolean(order.vendor?.app_enabled),
     items: order.items.map((item) => ({
       product_id: item.product_id,
       name: item.product.name,
@@ -1276,6 +1283,8 @@ router.get(
           pickup_address: order.pickup_address,
           drop_address: order.drop_address,
           zone_id: order.zone_id,
+          vendor_on_app: Boolean(order.vendor?.app_enabled),
+          items: order.items.map((item) => ({ name: item.product.name, quantity: item.quantity })),
         })),
       });
     }

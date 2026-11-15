@@ -13,7 +13,7 @@ import { moneyStr } from "../utils/serializers.js";
 import { istDayRange } from "../utils/time.js";
 import { buildCart } from "./cartService.js";
 import { requireDelivery, resolveDelivery } from "./deliveryZoneService.js";
-import { dispatchOrder } from "./dispatchService.js";
+import { dispatchOrder, notifyVendorNewOrder } from "./dispatchService.js";
 
 export const CATEGORY_BY_SHOP = Object.freeze({
   HOTEL: "FOOD",
@@ -154,7 +154,10 @@ export async function placeMarketplaceOrder({ franchise, body, customer_phone, c
   }
   const { order, zone, cart } = created;
 
-  await dispatchOrder(order, { franchise_slug: franchise.slug, shop_name: vendor.shop_name });
+  await Promise.all([
+    dispatchOrder(order, { franchise_slug: franchise.slug, shop_name: vendor.shop_name }),
+    notifyVendorNewOrder(order, vendor, { franchise_slug: franchise.slug }),
+  ]);
   // Refresh the shop's and the admin's order boards.
   const event = { order_id: order.id, order_status: order.order_status };
   emitTo(rooms.vendor(vendor.id), "order_status_changed", event);

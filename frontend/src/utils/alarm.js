@@ -4,6 +4,7 @@
 
 let ctx = null;
 let timer = null;
+let kind = "rider";
 
 function getContext() {
   const Ctor = window.AudioContext || window.webkitAudioContext;
@@ -34,16 +35,25 @@ function ring() {
   const c = getContext();
   if (c && c.state === "running") {
     const t = c.currentTime;
-    beep(c, t, 880, 0.18);
-    beep(c, t + 0.25, 1175, 0.18);
-    beep(c, t + 0.5, 880, 0.18);
-    beep(c, t + 0.75, 1175, 0.18);
+    if (kind === "vendor") {
+      // A lower three-note chime so a shop owner can tell it from a rider's alert.
+      beep(c, t, 660, 0.22);
+      beep(c, t + 0.3, 880, 0.22);
+      beep(c, t + 0.6, 1100, 0.3);
+    } else {
+      beep(c, t, 880, 0.18);
+      beep(c, t + 0.25, 1175, 0.18);
+      beep(c, t + 0.5, 880, 0.18);
+      beep(c, t + 0.75, 1175, 0.18);
+    }
   }
   navigator.vibrate?.([300, 150, 300]);
 }
 
-export function startAlarm() {
+/** `which`: "rider" (default) or "vendor" — a different tone for each. */
+export function startAlarm(which = "rider") {
   if (timer) return;
+  kind = which;
   unlockAlarm();
   ring();
   timer = setInterval(ring, 1600);

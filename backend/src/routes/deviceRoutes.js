@@ -72,4 +72,22 @@ router.post(
   })
 );
 
+// POST /api/v1/device/unregister — sign-out: this phone stops getting the
+// account's alerts. Only the owner's own row is touched.
+const unregisterSchema = z.object({ fcm_token: z.string().trim().min(20).max(4096) });
+router.post(
+  "/unregister",
+  asyncHandler(async (req, res) => {
+    const body = parse(unregisterSchema, req.body);
+    const [scheme, token] = (req.get("authorization") || "").split(" ");
+    if (scheme !== "Bearer" || !token) throw unauthenticated();
+    const { user } = await resolveUserFromToken(token);
+    const result = await prisma.deviceRegistration.updateMany({
+      where: { fcm_token: body.fcm_token, user_id: user.id },
+      data: { is_active: false },
+    });
+    ok(res, { deactivated: result.count }, { status: 200 });
+  })
+);
+
 export default router;

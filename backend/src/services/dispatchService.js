@@ -5,6 +5,16 @@ import { emitTo, rooms } from "../socket/socketHandler.js";
 import { ACTIVE_ORDER_STATUSES } from "../utils/constants.js";
 import { pushToUsers } from "../utils/push.js";
 
+/** [{ name, quantity }] for the order's lines (empty for custom / quick-call orders). */
+export function itemSummary(order) {
+  return (order.items ?? []).map((item) => ({
+    name: item.product?.name ?? "Item",
+    quantity: item.quantity,
+  }));
+}
+
+const itemLine = (item) => `${item.quantity}× ${item.name}`;
+
 /**
  * - Online, approved riders with zero active orders get `new_rider_request`.
  * - Riders already on a delivery, still under their max_active_orders, and
@@ -50,6 +60,14 @@ export async function dispatchOrder(order, { franchise_slug, shop_name } = {}) {
       activeByRider.set(active.rider_id, list);
     }
 
+    // A shop that does not use the app cannot be told what to prepare, so the
+    // rider's own alert carries the list they must ask for at the counter.
+    const shop = order.vendor_id
+      ? await prisma.vendor.findUnique({ where: { id: order.vendor_id }, select: { app_enabled: true } })
+      : null;
+    const vendor_on_app = Boolean(shop?.app_enabled);
+    const items = itemSummary(order);
+
     const request = {
       order_id: order.id,
       order_number: order.order_number,
@@ -58,6 +76,8 @@ export async function dispatchOrder(order, { franchise_slug, shop_name } = {}) {
       pickup_address: order.pickup_address,
       drop_address: order.drop_address,
       zone_id: order.zone_id,
+      vendor_on_app,
+      items,
     };
     const requestedUsers = [];
     const addonUsers = [];
@@ -78,6 +98,11 @@ export async function dispatchOrder(order, { franchise_slug, shop_name } = {}) {
         emitTo(rooms.rider(rider.id), "addon_order_alert", {
           order_id: order.id,
           message: "🔥 Add-on Order on your route!",
+          order_number: order.order_number,
+          shop_name: request.shop_name,
+          pickup_address: order.pickup_address,
+          vendor_on_app,
+          items,
         });
         addonUsers.push(rider.user_id);
       }
@@ -87,8 +112,11 @@ export async function dispatchOrder(order, { franchise_slug, shop_name } = {}) {
       order_id: order.id,
       franchise_slug: franchise_slug ?? "",
       deep_link: `dropputt://orders/${order.id}`,
+      web_path: "/rider",
     };
-    const body = `Order #${order.order_number}${request.shop_name ? ` from ${request.shop_name}` : ""}`;
+    const body =
+      `Order #${order.order_number}${request.shop_name ? ` from ${request.shop_name}` : ""}` +
+      (!vendor_on_app && items.length > 0 ? ` — ${items.map(itemLine).join(", ")}` : "");
     await Promise.all([
       pushToUsers(requestedUsers, {
         title: "🛵 New Order!",
@@ -108,5 +136,42 @@ export async function dispatchOrder(order, { franchise_slug, shop_name } = {}) {
   } catch (error) {
     console.error("[dispatch] failed for order", order.id, error.message);
     return { requested: 0, addon: 0 };
+  }
+}
+
+/**
+ * Tells the shop about a customer's new order: a socket event for the open
+ * dashboard (loud alert) and a push for a closed one. Shops that do not use the
+ * app are skipped: their rider is told the items instead (see dispatchOrder).
+ * Failures are logged, never thrown.
+ */
+export async function notifyVendorNewOrder(order, vendor, { franchise_slug } = {}) {
+  try {
+    if (!vendor?.app_enabled) return false;
+    const items = itemSummary(order);
+    emitTo(rooms.vendor(vendor.id), "new_order_for_vendor", {
+      order_id: order.id,
+      order_number: order.order_number,
+      payment_method: order.payment_method,
+      items,
+    });
+    const lines = items.map(itemLine);
+    const shown = lines.slice(0, 4).join(", ");
+    await pushToUsers([vendor.user_id], {
+      title: "🔔 New Order!",
+      body: `#${order.order_number} — ${shown}${lines.length > 4 ? ` +${lines.length - 4} more` : ""}`,
+      data: {
+        type: "VENDOR_NEW_ORDER",
+        order_id: order.id,
+        franchise_slug: franchise_slug ?? "",
+        deep_link: `dropputt://vendor/orders/${order.id}`,
+        web_path: "/vendor",
+      },
+      channel: "order_alerts",
+    });
+    return true;
+  } catch (error) {
+    console.error("[dispatch] vendor notify failed for order", order.id, error.message);
+    return false;
   }
 }

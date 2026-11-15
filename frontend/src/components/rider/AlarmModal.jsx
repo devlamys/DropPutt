@@ -1,6 +1,7 @@
 import { BellRing, Loader2 } from "lucide-react";
 import { useState } from "react";
 import Modal from "../Modal.jsx";
+import OrderItemList from "../OrderItemList.jsx";
 
 /** Full-screen order alert. The looping sound runs while this is mounted. */
 export default function AlarmModal({ request, queued, onAccept, onDismiss }) {
@@ -32,6 +33,10 @@ export default function AlarmModal({ request, queued, onAccept, onDismiss }) {
             {request.message && <p className="font-semibold text-orange-700">{request.message}</p>}
           </div>
         </div>
+        {/* A shop that is not on the app is told the items by the rider, so show them here. */}
+        {request.vendor_on_app === false && (
+          <OrderItemList items={request.items} big title="Ask the shop for" />
+        )}
         {queued > 0 && <p className="text-center text-xs text-slate-500">+{queued} more waiting</p>}
         <div className="grid grid-cols-3 gap-3">
           <button

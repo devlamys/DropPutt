@@ -2742,7 +2742,8 @@ All FCM/APNs notifications MUST include a `data` payload with a `deep_link` fiel
 |---|---|---|---|
 | New order request | Rider | `🛵 New Order!` | `dropputt://orders/{order_id}` |
 | Add-on order alert | Rider | `🔥 Add-on Order!` | `dropputt://orders/{order_id}` |
-| Order accepted | Vendor | `✅ Order Accepted` | `dropputt://vendor/orders/{order_id}` |
+| New customer order | Vendor (shops with `app_enabled`) | `🔔 New Order!` — body lists the items | `dropputt://vendor/orders/{order_id}` |
+| Order accepted | Vendor | `✅ Order Accepted` — body names the rider | `dropputt://vendor/orders/{order_id}` |
 | Order picked up | Vendor | `🛵 Rider On The Way` | `dropputt://vendor/orders/{order_id}` |
 | Order delivered | Vendor + Customer | `🎉 Delivered!` | `dropputt://orders/{order_id}/receipt` |
 | Milestone achieved | Rider | `🏆 Milestone Bonus!` | `dropputt://rider/earnings` |
@@ -3425,3 +3426,32 @@ The delivery zone, and so the delivery fee, is decided by the software from the 
 - `GET /public/geocode?q=&near_lat=&near_lng=` searches a place by name for the map (India only, results prefer the shop's area). The browser never calls the geocoder: the API caches answers for 24 hours, paces requests (about one a second) and rate-limits callers (20 a minute). `GEOCODER_URL` points at a self-hosted Nominatim/Photon; the public Nominatim default is for development and low volume only (no type-ahead).
 
 **Invariants:** a customer cannot choose or influence the zone except by the location they give; the zone is decided on the server; the delivery fee quoted to a customer is the fee charged.
+
+---
+
+# 62. Order Alerts for Shops and Riders, Web Push (PWA)
+
+## 62.1 What each side is told when a customer orders
+
+| Who | Socket event | Push | Content |
+|---|---|---|---|
+| Eligible riders | `new_rider_request` / `addon_order_alert` | `🛵 New Order!` / `🔥 Add-on Order!` (`order_alerts`) | `items: [{name, quantity}]` and `vendor_on_app` are in the payload and in `GET /orders/active` → `open_requests` |
+| Shop with `app_enabled = true` | `new_order_for_vendor` `{order_id, order_number, payment_method, items}` | `🔔 New Order!` (`order_alerts`), body `#number — 2× Biryani, …` | Dashboard rings a looping vendor alert and shows items + quantities until the shop taps "Got it" |
+| Shop with `app_enabled = false` | none | none | The rider's alert shows the items large ("Ask the shop for"), and the push body lists them |
+
+* Vendor dashboard order rows show the items and one of: `⏳ Waiting for a rider to accept…` or `🛵 Rider on the way — name · vehicle` (so the food is ready when the rider arrives). `order_accepted` carries `rider_name` and `vehicle_number`.
+* `Vendor.app_enabled` (default `true`) is set by the franchise admin: `PATCH /admin/vendors/:id { app_enabled }`; it is also listed by `GET /admin/vendors`.
+* Alerts for shop-less orders (custom buy, pick & drop, quick call) are unchanged.
+
+## 62.2 Web push
+
+* PWA: `manifest.webmanifest`, `firebase-messaging-sw.js`. The service worker gets the Firebase web config in its URL query string and opens the screen named by `data.web_path` (or derived from `deep_link`) when a notification is tapped.
+* FCM web config is `VITE_FIREBASE_*` (+ `VITE_FIREBASE_VAPID_KEY`), baked into the frontend build; backend uses `FIREBASE_SERVICE_ACCOUNT_PATH`. Without them push is a silent no-op and the in-app alerts still work.
+* One tap ("Online" for riders, "Turn on alerts" for shops) unlocks the alarm sound and asks for notification permission, then `POST /device/register` with `platform: "web"`. The device is re-registered silently on launch.
+* `POST /device/unregister { fcm_token }` (Bearer) deactivates the caller's own device; called at sign-out.
+* `order_alerts` sends carry a `webpush` block: `Urgency: high`, short TTL, `requireInteraction`, vibrate.
+* Limits of a browser: the looping beep exists only while the app is open; a push uses the system sound. iPhones get push only from the app added to the Home Screen (iOS 16.4+). A native app (Play Store / App Store) is planned for background alarms.
+
+## 62.3 Tests
+
+* New order → shop device pushed with items; shop with `app_enabled = false` not pushed and its rider's `open_requests` shows `vendor_on_app: false` with items; accept → shop push names the rider; `PATCH /admin/vendors/:id` guarded; `/device/unregister` touches only the caller's device.

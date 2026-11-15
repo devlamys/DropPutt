@@ -14,6 +14,7 @@ import { useSocket } from "../hooks/useSocket.js";
 import api, { getErrorMessage } from "../utils/api.js";
 import { startAlarm, stopAlarm, unlockAlarm } from "../utils/alarm.js";
 import { inr } from "../utils/format.js";
+import { enablePush, refreshPush } from "../utils/push.js";
 
 export default function RiderDashboard() {
   const { user, signOut } = useAuth();
@@ -65,6 +66,10 @@ export default function RiderDashboard() {
       toast(getErrorMessage(error), "error");
     }
   }, [loadStatus, loadOrders, toast]);
+
+  useEffect(() => {
+    void refreshPush(); // keeps this phone's push token current once allowed
+  }, []);
 
   useEffect(() => {
     Promise.all([reloadAll(), api.get("/orders/zones").then(({ data }) => setZones(data.data.zones))])
@@ -152,6 +157,7 @@ export default function RiderDashboard() {
 
   async function toggleOnline() {
     unlockAlarm(); // this tap is the gesture that lets the alarm make sound
+    if (!online) void enablePush(); // the same tap asks for push permission
     setToggling(true);
     try {
       const { data } = await api.patch("/rider/me/online", { is_online: !online });

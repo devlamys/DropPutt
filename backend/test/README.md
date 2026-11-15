@@ -23,6 +23,7 @@ npm run test:unit   # pure money / time logic only, no database (~0.2 s)
 | `integration/marketplace.test.js` | §7 cart rules, checkout, §40 feed |
 | `integration/gps.test.js` | §21 GPS accuracy, §37.4 uploads |
 | `integration/mobile.test.js` | §49 devices, §51 push, §50 offline GPS, §48 pagination, §54 version gate |
+| `integration/vendorAlert.test.js` | §62 shop and rider order alerts, `app_enabled`, device unregister |
 | `integration/reconciliation.test.js` | §41 reconciliation, earnings, vendor ledger |
 | `integration/security.test.js` | §37 sockets, leaks, input handling, role guards, HTTPS |
 

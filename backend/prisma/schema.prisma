@@ -204,6 +204,9 @@ model Vendor {
   min_order_value       Decimal      @default(150) @db.Decimal(12, 2)
   upi_id                String?
   is_open               Boolean      @default(true)
+  // false = the shop does not use the app: the rider reads the item list off the
+  // order alert and buys it over the counter (SPEC §62).
+  app_enabled           Boolean      @default(true)
   admin_payable_balance Decimal      @default(0) @db.Decimal(12, 2)
   created_at            DateTime     @default(now())
   updated_at            DateTime     @updatedAt

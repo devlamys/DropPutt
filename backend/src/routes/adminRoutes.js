@@ -213,6 +213,7 @@ router.get(
           admin_payable_balance: true,
           commission_rate: true,
           commission_free_until: true,
+          app_enabled: true,
         },
       }),
       Promise.all(
@@ -247,6 +248,7 @@ router.get(
           admin_payable_balance: moneyStr(balance),
           commission_rate: moneyStr(vendor.commission_rate),
           commission_free_until: vendor.commission_free_until,
+          app_enabled: vendor.app_enabled,
           trial_active: Boolean(vendor.commission_free_until) && vendor.commission_free_until > new Date(),
           // Who owes whom, spelled out so the screen needs no sign logic.
           owes: balance.lt(0) ? "VENDOR" : balance.gt(0) ? "FRANCHISE" : "NONE",
@@ -438,6 +440,8 @@ const vendorTermsSchema = z
     commission_free_until: z
       .union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.null()])
       .optional(),
+    // false = this shop does not use the app; its riders get the item list (§62).
+    app_enabled: z.boolean().optional(),
   })
   .refine((body) => Object.keys(body).length > 0, { message: "nothing to update" });
 
@@ -457,6 +461,7 @@ router.patch(
     if (!before) throw new AppError(404, "VENDOR_NOT_FOUND", "Vendor not found in this franchise");
 
     const data = {};
+    if (body.app_enabled !== undefined) data.app_enabled = body.app_enabled;
     if (body.commission_rate !== undefined) data.commission_rate = money(body.commission_rate).toFixed(2);
     if (body.commission_free_until !== undefined) {
       // The trial runs through the end of the chosen IST day.
@@ -478,10 +483,12 @@ router.patch(
       before: {
         commission_rate: moneyStr(before.commission_rate),
         commission_free_until: before.commission_free_until,
+        app_enabled: before.app_enabled,
       },
       after: {
         commission_rate: moneyStr(vendor.commission_rate),
         commission_free_until: vendor.commission_free_until,
+        app_enabled: vendor.app_enabled,
       },
       request_id: res.locals.request_id,
     });
@@ -490,6 +497,7 @@ router.patch(
         id: vendor.id,
         commission_rate: moneyStr(vendor.commission_rate),
         commission_free_until: vendor.commission_free_until,
+        app_enabled: vendor.app_enabled,
         trial_active: Boolean(vendor.commission_free_until) && vendor.commission_free_until > new Date(),
       },
     });

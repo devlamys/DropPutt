@@ -1,17 +1,48 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { History, Loader2, LogOut, ShieldAlert, Wifi, WifiOff } from "lucide-react";
+import { BellRing, History, Loader2, LogOut, ShieldAlert, Wifi, WifiOff } from "lucide-react";
 import { Link } from "react-router-dom";
 import CancelOrderModal from "../components/CancelOrderModal.jsx";
 import Modal from "../components/Modal.jsx";
 import CashHandoverCard from "../components/vendor/CashHandoverCard.jsx";
+import EnableAlertsButton from "../components/EnableAlertsButton.jsx";
+import OrderItemList from "../components/OrderItemList.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useSocket } from "../hooks/useSocket.js";
 import api, { getErrorMessage, idempotencyHeaders } from "../utils/api.js";
+import { startAlarm, stopAlarm } from "../utils/alarm.js";
 import { inr, minutesAgo } from "../utils/format.js";
 
-const EVENTS = ["order_accepted", "order_picked_up", "order_delivered", "order_status_changed", "order_cancelled", "order_payment_changed"];
+const EVENTS = ["new_order_for_vendor", "order_accepted", "order_picked_up", "order_delivered", "order_status_changed", "order_cancelled", "order_payment_changed"];
+// A new customer order rings until the shop taps "Got it" (remembered on this phone).
+const ACKED_KEY = "dropputt.vendor_acked_orders";
+const ALERT_STATUSES = ["RIDER_REQUESTED", "RIDER_ASSIGNED"];
+
+function loadAcked() {
+  try {
+    return new Set(JSON.parse(window.localStorage.getItem(ACKED_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+/** Where the rider stands, in words the shop can act on. */
+function RiderLine({ order }) {
+  if (order.order_status === "RIDER_REQUESTED") {
+    return <p className="text-sm font-semibold text-amber-700">⏳ Waiting for a rider to accept…</p>;
+  }
+  if (order.order_status === "RIDER_ASSIGNED" && order.rider) {
+    return (
+      <p className="text-sm font-semibold text-green-700">
+        🛵 Rider on the way — {order.rider.name}
+        {order.rider.vehicle_number ? ` · ${order.rider.vehicle_number}` : ""}. Keep the food ready!
+      </p>
+    );
+  }
+  return null;
+}
+
 // A shop can withdraw an order until the rider has the food in hand.
 const SHOP_CAN_CANCEL = ["RIDER_REQUESTED", "RIDER_ASSIGNED"];
 
@@ -28,6 +59,7 @@ export default function VendorDashboard() {
   const [billPreview, setBillPreview] = useState(null);
   const [cancelling, setCancelling] = useState(null);
   const [now, setNow] = useState(Date.now());
+  const [acked, setAcked] = useState(loadAcked);
   const callLock = useRef(false); // state updates are async; this blocks a same-tick double tap
 
   const loadOrders = useCallback(async () => {
@@ -38,6 +70,29 @@ export default function VendorDashboard() {
       toast(getErrorMessage(error), "error");
     }
   }, [toast]);
+
+  // Customer orders the shop has not yet looked at: the loud alert stays on until they do.
+  const alerts = orders.filter(
+    (o) => o.order_type === "FOOD_MARKETPLACE" && ALERT_STATUSES.includes(o.order_status) && !acked.has(o.id)
+  );
+  function acknowledge(order) {
+    setAcked((current) => {
+      const next = new Set(current).add(order.id);
+      try {
+        // Keep the list short: only ids that can still come back.
+        const keep = [...next].slice(-200);
+        window.localStorage.setItem(ACKED_KEY, JSON.stringify(keep));
+      } catch {
+        /* private window: the alert simply shows again after a reload */
+      }
+      return next;
+    });
+  }
+  useEffect(() => {
+    if (alerts.length > 0) startAlarm("vendor");
+    else stopAlarm();
+    return stopAlarm;
+  }, [alerts.length]);
 
   const loadShop = useCallback(async () => {
     try {
@@ -62,7 +117,8 @@ export default function VendorDashboard() {
         () => {
           refresh();
           // A new order takes stock and a cancelled one gives it back: keep the menu counts live.
-          if (event === "order_status_changed" || event === "order_cancelled") void loadShop();
+          if (["order_status_changed", "order_cancelled", "new_order_for_vendor"].includes(event)) void loadShop();
+          if (event === "order_accepted") toast("🛵 A rider accepted your order — keep it ready!", "success");
           if (event === "order_picked_up") toast("🛵 Rider picked up an order", "success");
           if (event === "order_cancelled") toast("An order was cancelled", "warn");
         },
@@ -154,6 +210,7 @@ export default function VendorDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <EnableAlertsButton />
           {shop && (
             <button
               type="button"
@@ -281,6 +338,12 @@ export default function VendorDashboard() {
                       )}
                     </div>
                     <BillCheck order={order} onPreview={setBillPreview} />
+                    {(order.items?.length > 0 || ALERT_STATUSES.includes(order.order_status)) && (
+                      <div className="space-y-2 md:col-span-4">
+                        <RiderLine order={order} />
+                        <OrderItemList items={order.items} />
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -351,6 +414,29 @@ export default function VendorDashboard() {
             loadOrders();
           }}
         />
+      )}
+
+      {alerts.length > 0 && (
+        <Modal title="🔔 New order!" tone="alert" dismissible={false}>
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 rounded-2xl bg-orange-50 p-4">
+              <BellRing className="h-8 w-8 shrink-0 animate-bounce text-orange-600" />
+              <div className="min-w-0 text-sm">
+                <p className="text-base font-bold">Order #{alerts[0].order_number}</p>
+                <RiderLine order={alerts[0]} />
+              </div>
+            </div>
+            <OrderItemList items={alerts[0].items} big title="Prepare" />
+            {alerts.length > 1 && <p className="text-center text-xs text-slate-500">+{alerts.length - 1} more waiting</p>}
+            <button
+              type="button"
+              onClick={() => acknowledge(alerts[0])}
+              className="w-full rounded-2xl bg-green-600 py-4 text-lg font-bold text-white shadow active:scale-95"
+            >
+              Got it
+            </button>
+          </div>
+        </Modal>
       )}
 
       {billPreview && (

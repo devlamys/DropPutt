@@ -91,6 +91,17 @@ export async function sendToTokens(
           headers: { "apns-priority": highPriority ? "10" : "5" },
           payload: { aps: { sound: "default" } },
         },
+        // Browser / PWA devices. Alerts stay on screen until tapped and buzz;
+        // the service worker opens `data.web_path` on tap.
+        webpush: {
+          headers: { Urgency: highPriority ? "high" : "normal", TTL: highPriority ? "120" : "3600" },
+          notification: {
+            ...(highPriority
+              ? { requireInteraction: true, vibrate: [300, 150, 300, 150, 300], renotify: true }
+              : {}),
+            tag: stringData.order_id ? `order-${stringData.order_id}-${stringData.type ?? ""}` : undefined,
+          },
+        },
       });
       sent += result.successCount;
       failed += result.failureCount;

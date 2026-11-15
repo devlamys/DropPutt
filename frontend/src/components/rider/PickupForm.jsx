@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import api, { MULTIPART, getErrorMessage } from "../../utils/api.js";
 import { PAYMENT_LABELS, inr } from "../../utils/format.js";
 import { compressImage } from "../../utils/image.js";
+import OrderItemList from "../OrderItemList.jsx";
 import RequestDetails from "./RequestDetails.jsx";
 
 /** Badge under the phone field: what we already know about this customer. */
@@ -146,6 +147,11 @@ export default function PickupForm({ order, zones, onPickedUp, onError }) {
       </div>
 
       <RequestDetails order={order} />
+      <OrderItemList
+        items={order.items}
+        big={order.vendor_on_app === false}
+        title={order.vendor_on_app === false ? "Ask the shop for" : "Order items"}
+      />
 
       {/* 1 — bill photo */}
       <div>

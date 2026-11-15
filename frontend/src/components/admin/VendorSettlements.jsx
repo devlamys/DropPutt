@@ -274,6 +274,20 @@ function PaymentModal({ vendor, onClose, onDone }) {
           onChange={(e) => setNote(e.target.value)}
           className="w-full rounded-xl border border-slate-300 px-3 py-2.5"
         />
+        <label className="flex items-start gap-3 rounded-xl bg-slate-50 p-3">
+          <input
+            type="checkbox"
+            checked={appEnabled}
+            onChange={(e) => setAppEnabled(e.target.checked)}
+            className="mt-1 h-5 w-5"
+          />
+          <span className="text-sm">
+            <span className="block font-semibold">This shop uses the app</span>
+            <span className="text-slate-500">
+              Untick if the shop has no phone alerts: the rider then sees the items and quantities on their own screen and asks for them at the counter.
+            </span>
+          </span>
+        </label>
         {problem && <p role="alert" className="text-sm font-semibold text-red-600">{problem}</p>}
         <button type="submit" disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-3 font-bold text-white disabled:opacity-60">
           {busy && <Loader2 className="h-4 w-4 animate-spin" />} Record
@@ -298,6 +312,7 @@ function TermsModal({ vendor, onClose, onDone }) {
       : ""
   );
   const [rate, setRate] = useState(String(Number(vendor.commission_rate)));
+  const [appEnabled, setAppEnabled] = useState(vendor.app_enabled !== false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
 
@@ -308,6 +323,7 @@ function TermsModal({ vendor, onClose, onDone }) {
     try {
       await api.patch(`/admin/vendors/${vendor.id}`, {
         commission_free_until: until || null,
+        app_enabled: appEnabled,
         ...(isSuper ? { commission_rate: Number(rate) } : {}),
       });
       onDone();

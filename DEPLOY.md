@@ -57,7 +57,11 @@ A wildcard needs a DNS challenge. Pick one:
 ## 4. Optional integrations
 
 * **Firebase push:** download the service-account JSON to
-  `deploy/secrets/firebase.json` (never commit it).
+  `deploy/secrets/firebase.json` (never commit it). For push in the browser /
+  installed PWA also fill the `VITE_FIREBASE_*` values in `deploy/compose.env`
+  (web app config + the VAPID key from Cloud Messaging → Web Push certificates)
+  and rebuild the `web` image: they are baked into the build. iPhones get push
+  only from the app added to the Home Screen (iOS 16.4+).
 * **R2:** fill the `R2_*` values in `deploy/api.env`. Without R2 in production
   uploads have nowhere to go, so set it before real use.
 * **Road routes on the maps (OSRM):** without it the maps draw a straight

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import * as client from "../utils/api.js";
+import { disablePush } from "../utils/push.js";
 
 const AuthContext = createContext(null);
 
@@ -16,6 +17,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    await disablePush(); // while the token still works
     await client.logout();
     client.clearSession();
     setSession(null);
