@@ -68,6 +68,7 @@ export default function FranchisesPanel({ franchises, current, onSelect, onChang
               </p>
             </div>
             <CommissionDefault franchise={f} onChanged={onChanged} toast={toast} />
+            <WhatsappSetting franchise={f} onChanged={onChanged} toast={toast} />
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -121,6 +122,51 @@ function slugify(name) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 63);
+}
+
+/** Super Admin: the WhatsApp number customers order on (Meta phone-number id) and its switch. */
+function WhatsappSetting({ franchise, onChanged, toast }) {
+  const [id, setId] = useState(franchise.whatsapp_phone_number_id ?? "");
+  const [enabled, setEnabled] = useState(Boolean(franchise.whatsapp_enabled));
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    setBusy(true);
+    try {
+      await api.patch(`/super/franchises/${franchise.id}`, {
+        whatsapp_phone_number_id: id.trim() || null,
+        whatsapp_enabled: enabled,
+      });
+      toast("WhatsApp ordering saved", "success");
+      onChanged();
+    } catch (error) {
+      toast(getErrorMessage(error), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex w-full flex-wrap items-center gap-2 text-sm">
+      <label htmlFor={`wa-${franchise.id}`} className="text-xs font-semibold text-slate-600">
+        WhatsApp number id
+      </label>
+      <input
+        id={`wa-${franchise.id}`}
+        inputMode="numeric"
+        value={id}
+        onChange={(e) => setId(e.target.value)}
+        placeholder="Meta phone-number id"
+        className="w-44 rounded-lg border border-slate-300 px-2 py-1"
+      />
+      <label className="flex items-center gap-1 text-xs">
+        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} /> On
+      </label>
+      <button type="button" disabled={busy} onClick={save} className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold disabled:opacity-50">
+        {busy ? "…" : "Save"}
+      </button>
+    </div>
+  );
 }
 
 /** Super Admin: the commission % hotels of this franchise get by default. */
