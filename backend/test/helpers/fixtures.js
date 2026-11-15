@@ -49,6 +49,7 @@ export async function makeWorld({ slug = "tf", name = "Test Franchise", franchis
       lat: "11.0000000",
       lng: "76.0000000",
       commission_rate: 10,
+      commission_free_until: new Date(Date.now() + 180 * 86_400_000), // Call Rider Now trial (§10.1)
       min_order_value: 100,
     },
   });

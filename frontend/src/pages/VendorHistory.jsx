@@ -20,6 +20,7 @@ export default function VendorHistory() {
     const { data } = await api.get("/vendor/ledger", { params: { limit: 15, ...(after ? { cursor: after } : {}) } });
     setLedger((current) => ({
       balance: data.data.admin_payable_balance,
+      settlements: data.data.settlements ?? [],
       items: after ? [...(current?.items ?? []), ...data.data.items] : data.data.items,
     }));
     setLedgerCursor(data.meta.pagination?.next_cursor ?? null);
@@ -54,13 +55,29 @@ export default function VendorHistory() {
         <main className="space-y-4 px-4 pt-4">
           <div className={`rounded-2xl p-4 ${balance < 0 ? "bg-amber-50" : "bg-green-50"}`}>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              {balance < 0 ? "You owe DropPutt" : "DropPutt owes you"}
+              {balance < 0 ? "Commission you owe the franchise" : "The franchise owes you"}
             </p>
             <p className="text-3xl font-extrabold">{inr(Math.abs(balance))}</p>
             <p className="text-xs text-slate-600">
-              Sum of every delivered order below. Prepaid orders where you already hold the money add only DropPutt's commission to what you owe.
+              The franchise settles this with you in person (daily, weekly or monthly). Orders from "Call Rider Now" carry no commission.
             </p>
           </div>
+
+          {ledger.settlements.length > 0 && (
+            <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+              <h2 className="mb-2 text-sm font-bold text-slate-700">Payments with the franchise</h2>
+              <ul className="divide-y divide-slate-100 text-sm">
+                {ledger.settlements.map((s) => (
+                  <li key={s.id} className="flex justify-between gap-3 py-2">
+                    <span>
+                      {when(s.created_at)} · {s.direction === "VENDOR_PAID_FRANCHISE" ? "you paid" : "franchise paid you"} ({s.method})
+                    </span>
+                    <span className="font-bold">{inr(s.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
             <h2 className="mb-2 text-sm font-bold text-slate-700">Payment ledger</h2>
@@ -72,7 +89,10 @@ export default function VendorHistory() {
                   <li key={row.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
                     <div className="min-w-0">
                       <p className="font-semibold">{row.order_number}</p>
-                      <p className="text-xs text-slate-500">{when(row.delivered_at ?? row.created_at)} · {PAYMENT_LABELS[row.payment_method]}</p>
+                      <p className="text-xs text-slate-500">
+                        {when(row.delivered_at ?? row.created_at)} · {PAYMENT_LABELS[row.payment_method]}
+                        {row.commission_free ? " · no commission" : Number(row.commission) > 0 ? ` · commission ${inr(row.commission)}` : ""}
+                      </p>
                     </div>
                     <span className={`shrink-0 font-bold ${Number(row.amount) < 0 ? "text-amber-700" : "text-green-700"}`}>
                       {Number(row.amount) < 0 ? "−" : "+"}{inr(Math.abs(Number(row.amount)))}

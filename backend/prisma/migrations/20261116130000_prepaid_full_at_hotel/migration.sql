@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "PaymentMethod" ADD VALUE 'PREPAID_FULL_AT_HOTEL';
+

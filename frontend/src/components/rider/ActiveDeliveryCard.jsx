@@ -1,5 +1,8 @@
-import { MessageCircle, Phone, Radio } from "lucide-react";
+import { Loader2, MessageCircle, Phone, Radio } from "lucide-react";
+import { useState } from "react";
+import Modal from "../Modal.jsx";
 import StatusBadge from "../StatusBadge.jsx";
+import api, { getErrorMessage } from "../../utils/api.js";
 import { PAYMENT_LABELS, inr } from "../../utils/format.js";
 import RequestDetails from "./RequestDetails.jsx";
 import RouteMap from "./RouteMap.jsx";
@@ -14,8 +17,9 @@ function whatsappUrl(order) {
   return `https://wa.me/91${digits}?text=${encodeURIComponent(text)}`;
 }
 
-export default function ActiveDeliveryCard({ order, riderPosition, tracking, onDeliver }) {
+export default function ActiveDeliveryCard({ order, riderPosition, tracking, onDeliver, onPaymentChanged }) {
   const nav = order.navigation;
+  const [changing, setChanging] = useState(false);
   return (
     <section className="space-y-4 rounded-2xl bg-white p-4 shadow-sm ring-2 ring-violet-200">
       <div className="flex items-start justify-between gap-2">
@@ -31,6 +35,13 @@ export default function ActiveDeliveryCard({ order, riderPosition, tracking, onD
         <StatusBadge status={order.order_status} />
       </div>
 
+      {/* §14.4: the hotel hands the rider the delivery fee at pickup */}
+      {Number(order.collect_from_hotel) > 0 && (
+        <p className="rounded-xl bg-green-50 p-3 text-center text-sm font-bold text-green-800 ring-1 ring-green-200">
+          Take your {inr(order.collect_from_hotel)} delivery fee from {order.shop_name ?? "the hotel"} now
+        </p>
+      )}
+
       {/* money to collect */}
       <div className="rounded-xl bg-orange-50 p-3 text-center">
         <p className="text-xs font-semibold uppercase tracking-wide text-orange-700">
@@ -38,7 +49,43 @@ export default function ActiveDeliveryCard({ order, riderPosition, tracking, onD
         </p>
         <p className="text-3xl font-extrabold text-orange-700">{inr(order.amount_to_collect)}</p>
         <p className="text-xs text-slate-600">{PAYMENT_LABELS[order.payment_method]}</p>
+        <button type="button" onClick={() => setChanging(true)} className="mt-1 text-xs font-semibold text-orange-700 underline">
+          Wrong payment method? Change
+        </button>
       </div>
+      {changing && (
+        <PaymentMethodModal
+          order={order}
+          onClose={() => setChanging(false)}
+          onChanged={(data) => {
+            setChanging(false);
+            onPaymentChanged?.(data);
+          }}
+        />
+      )}
+
+      {/* what the rider keeps and what goes to the hotel */}
+      {Number(order.delivery_fee) > 0 && (
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-xl bg-slate-50 p-3 text-sm">
+          <dt className="text-slate-600">Your delivery fee (keep)</dt>
+          <dd className="text-right font-semibold">{inr(order.delivery_fee)}</dd>
+          {Number(order.pay_vendor) > 0 && (
+            <>
+              <dt className="text-slate-600">Pay {order.shop_name ?? "hotel"}</dt>
+              <dd className="text-right font-semibold">{inr(order.pay_vendor)}</dd>
+            </>
+          )}
+          {order.vendor_id && (
+            <p className="col-span-2 text-xs text-slate-500">
+              {order.commission_free
+                ? "No franchise commission on this order."
+                : Number(order.vendor_commission) > 0
+                  ? `Franchise commission ${inr(order.vendor_commission)} is settled by the hotel with the franchise, not by you.`
+                  : null}
+            </p>
+          )}
+        </dl>
+      )}
 
       <RequestDetails order={order} />
 
@@ -89,5 +136,58 @@ export default function ActiveDeliveryCard({ order, riderPosition, tracking, onD
         ✅ Mark as Delivered
       </button>
     </section>
+  );
+}
+
+/** Rider corrects the payment method after pickup, before delivery (§19.1). */
+function PaymentMethodModal({ order, onClose, onChanged }) {
+  const [choice, setChoice] = useState(order.payment_method);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState("");
+
+  async function save() {
+    setBusy(true);
+    setProblem("");
+    try {
+      const { data } = await api.patch(`/orders/${order.id}/payment-method`, { payment_method: choice });
+      onChanged(data.data);
+    } catch (error) {
+      setProblem(getErrorMessage(error, "Could not change the payment method."));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Change payment method" onClose={busy ? () => {} : onClose}>
+      <div className="space-y-3">
+        <p className="text-sm text-slate-600">Only change this if you picked the wrong one. The amounts are worked out again.</p>
+        <div className="grid gap-2">
+          {Object.entries(PAYMENT_LABELS)
+            .filter(([value]) => !value.startsWith("PREPAID") || order.vendor_id)
+            .map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setChoice(value)}
+                aria-pressed={choice === value}
+                className={`rounded-xl border px-3 py-3 text-left text-sm font-semibold ${
+                  choice === value ? "border-orange-500 bg-orange-50 text-orange-800" : "border-slate-300"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+        </div>
+        {problem && <p role="alert" className="text-sm font-semibold text-red-600">{problem}</p>}
+        <button
+          type="button"
+          disabled={busy || choice === order.payment_method}
+          onClick={save}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-3 font-bold text-white disabled:opacity-50"
+        >
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />} Save
+        </button>
+      </div>
+    </Modal>
   );
 }

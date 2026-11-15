@@ -72,6 +72,11 @@ export default function DeliveredModal({ order, onClose, onDelivered }) {
           <p className="text-xs font-semibold uppercase text-orange-700">Cash to collect</p>
           <p className="text-2xl font-extrabold text-orange-700">{inr(order.amount_to_collect)}</p>
           <p className="text-xs text-slate-600">{PAYMENT_LABELS[order.payment_method]}</p>
+          {Number(order.pay_vendor) > 0 && (
+            <p className="mt-1 text-xs text-slate-700">
+              You keep {inr(order.delivery_fee)} · hand the hotel {inr(order.pay_vendor)}
+            </p>
+          )}
         </div>
 
         <div

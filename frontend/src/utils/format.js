@@ -25,5 +25,6 @@ export const ORDER_STATUS_LABELS = {
 export const PAYMENT_LABELS = {
   COD: "Cash on delivery",
   PREPAID_AT_HOTEL: "Prepaid at hotel",
+  PREPAID_FULL_AT_HOTEL: "Paid at hotel (food + delivery)",
   UPI_TO_ADMIN: "UPI to admin",
 };

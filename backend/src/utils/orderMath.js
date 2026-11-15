@@ -14,6 +14,9 @@ export const PAYMENT_METHODS = Object.freeze({
   COD: "COD",
   PREPAID_AT_HOTEL: "PREPAID_AT_HOTEL",
   UPI_TO_ADMIN: "UPI_TO_ADMIN",
+  // The customer paid the hotel food + delivery; the hotel hands the rider
+  // the delivery fee at pickup (§14.4).
+  PREPAID_FULL_AT_HOTEL: "PREPAID_FULL_AT_HOTEL",
 });
 
 export const ALLOWED_TIP_AMOUNTS = Object.freeze([10, 20, 30]);
@@ -64,6 +67,23 @@ export function calculateItemTotal(lines) {
   );
 }
 
+// ─── §10.1 Commission-free orders ───────────────────────────────────────────
+
+/**
+ * "Call Rider Now" orders (HOTEL_DIRECT) are a delivery service for the
+ * hotel's own customer. While the hotel's free trial runs
+ * (vendor.commission_free_until, set by the franchise admin) the franchise
+ * takes no vendor commission. The Super Admin royalty is still charged to the
+ * franchise on every order, trial or not. Storefront orders never get a trial.
+ */
+export function isCommissionFree({ order_type, commission_free_until } = {}, at = new Date()) {
+  return (
+    order_type === "HOTEL_DIRECT" &&
+    Boolean(commission_free_until) &&
+    new Date(at) < new Date(commission_free_until)
+  );
+}
+
 // ─── §10 Vendor commission ──────────────────────────────────────────────────
 
 /**
@@ -111,6 +131,11 @@ export function calculateAmountToCollect({
         addMoney(delivery_fee, rider_tip),
         delivery_side_discount
       );
+    case PAYMENT_METHODS.PREPAID_FULL_AT_HOTEL: {
+      // Only the tip / rain surge is still collected at the door.
+      const due = subtractMoney(rider_tip, delivery_side_discount);
+      return due.isNegative() ? money(0) : due;
+    }
     case PAYMENT_METHODS.UPI_TO_ADMIN:
       return money(0);
     default:
@@ -135,7 +160,10 @@ export function calculateVendorAdminPayable({
   vendor_earning,
   vendor_commission,
 }) {
-  if (payment_method === PAYMENT_METHODS.PREPAID_AT_HOTEL) {
+  if (
+    payment_method === PAYMENT_METHODS.PREPAID_AT_HOTEL ||
+    payment_method === PAYMENT_METHODS.PREPAID_FULL_AT_HOTEL
+  ) {
     return money(new Decimal(vendor_commission ?? 0).negated());
   }
   return money(vendor_earning);
@@ -144,20 +172,14 @@ export function calculateVendorAdminPayable({
 // ─── §11 / §12 Four-way split ───────────────────────────────────────────────
 
 /**
- * Normal mode (§11):
- *   rider_earning    = zone.rider_commission + rider_tip
- *   franchise_profit = zone.franchise_profit + shop_markup_profit
- *                      + vendor_commission - royalty_per_order
- *
- * Launch promo (§12):
+ * Split (§11): the rider keeps the whole delivery fee.
  *   rider_earning    = zone.delivery_fee + rider_tip
  *   franchise_profit = shop_markup_profit + vendor_commission - royalty_per_order
  *
- * super_admin_profit = royalty_per_order in both modes. A negative
- * franchise_profit is kept as-is — it is never clamped to zero.
+ * super_admin_profit = royalty_per_order. A negative franchise_profit is kept
+ * as-is — it is never clamped to zero.
  */
 export function calculateSplit({
-  is_launch_promo_active = false,
   zone,
   rider_tip = 0,
   shop_markup_profit = 0,
@@ -165,22 +187,10 @@ export function calculateSplit({
   royalty_per_order = 0,
 }) {
   const super_admin_profit = money(royalty_per_order);
-
-  if (is_launch_promo_active) {
-    return {
-      rider_earning: addMoney(zone.delivery_fee, rider_tip),
-      franchise_profit: subtractMoney(
-        addMoney(shop_markup_profit, vendor_commission),
-        royalty_per_order
-      ),
-      super_admin_profit,
-    };
-  }
-
   return {
-    rider_earning: addMoney(zone.rider_commission, rider_tip),
+    rider_earning: addMoney(zone.delivery_fee, rider_tip),
     franchise_profit: subtractMoney(
-      addMoney(zone.franchise_profit, shop_markup_profit, vendor_commission),
+      addMoney(shop_markup_profit, vendor_commission),
       royalty_per_order
     ),
     super_admin_profit,
@@ -202,6 +212,7 @@ export function calculateSplit({
  * @param {Decimal.Value} [input.discount_amount]
  * @param {Decimal.Value} [input.shop_markup_profit]
  * @param {boolean} [input.has_partner_vendor]       false for custom-buy / pick-drop
+ * @param {boolean} [input.commission_free]          inside the hotel's Call Rider Now trial (§10.1)
  */
 export function calculateOrderFinancials({
   item_total,
@@ -213,7 +224,10 @@ export function calculateOrderFinancials({
   discount_amount = 0,
   shop_markup_profit = 0,
   has_partner_vendor = true,
+  commission_free = false,
 }) {
+  // §10.1: no vendor commission during a hotel's Call Rider Now trial (royalty still applies).
+  const commissionFree = commission_free;
   const itemTotal = money(item_total);
   const delivery_fee = money(zone.delivery_fee);
   const tip = money(rider_tip);
@@ -221,7 +235,7 @@ export function calculateOrderFinancials({
   const markup = money(shop_markup_profit);
 
   const { vendor_commission, vendor_earning } = has_partner_vendor
-    ? calculateVendorCommission(itemTotal, commission_rate)
+    ? calculateVendorCommission(itemTotal, commissionFree ? 0 : commission_rate)
     : { vendor_commission: money(0), vendor_earning: money(0) };
 
   const grand_total = calculateGrandTotal({
@@ -240,12 +254,11 @@ export function calculateOrderFinancials({
 
   const { rider_earning, franchise_profit, super_admin_profit } =
     calculateSplit({
-      is_launch_promo_active: franchise.is_launch_promo_active,
       zone,
       rider_tip: tip,
       shop_markup_profit: markup,
       vendor_commission,
-      royalty_per_order: franchise.royalty_per_order,
+      royalty_per_order: franchise.royalty_per_order, // always charged, trial or not (§10.1)
     });
 
   return {
@@ -269,6 +282,28 @@ export function calculateOrderFinancials({
         })
       : money(0),
   };
+}
+
+/**
+ * Re-prices a picked-up order for another payment method (§19.1), from the
+ * values stored at pickup only: item_total, delivery_fee, rider_tip (it already
+ * holds tips and the rain surge, so nothing is added twice), discount, markup,
+ * and the commission rate decided at pickup (0 during a Call Rider Now trial).
+ * Only amount_to_collect and vendor_admin_payable depend on the method; the
+ * four-way split is identical for every method.
+ */
+export function recomputeForPaymentMethod(order, franchise, payment_method) {
+  return calculateOrderFinancials({
+    item_total: order.item_total,
+    zone: { delivery_fee: order.delivery_fee, rider_commission: 0, franchise_profit: 0 },
+    franchise,
+    payment_method,
+    commission_rate: order.commission_rate ?? 0,
+    rider_tip: order.rider_tip,
+    discount_amount: order.discount_amount,
+    shop_markup_profit: order.shop_markup_profit,
+    has_partner_vendor: Boolean(order.vendor_id),
+  });
 }
 
 // ─── §13 / §20 Rider-side additions (tip, rain surge) ───────────────────────
@@ -322,5 +357,13 @@ export function calculateCashInHandIncrease(order) {
   if (order.rider_paid_at_shop) {
     return subtractMoney(order.grand_total, order.item_total);
   }
-  return money(order.amount_to_collect);
+  // §14.4: the delivery fee comes from the hotel, the rest from the customer.
+  return addMoney(collectFromHotel(order), order.amount_to_collect);
+}
+
+/** Cash the hotel hands the rider at pickup (§14.4); 0 for every other method. */
+export function collectFromHotel(order) {
+  return order.payment_method === PAYMENT_METHODS.PREPAID_FULL_AT_HOTEL
+    ? money(order.delivery_fee)
+    : money(0);
 }

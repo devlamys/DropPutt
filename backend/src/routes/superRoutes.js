@@ -8,6 +8,7 @@ import { env } from "../config/env.js";
 import { authenticate, requireRole } from "../middleware/auth.js";
 import { normalizeSlug } from "../middleware/resolveTenant.js";
 import { audit } from "../utils/audit.js";
+import { money } from "../utils/orderMath.js";
 import { normalizePhone } from "../utils/phone.js";
 import { AppError, asyncHandler, ok, validationError } from "../utils/response.js";
 import { moneyStr } from "../utils/serializers.js";
@@ -27,6 +28,7 @@ const franchiseView = (franchise) => ({
   wallet_balance: moneyStr(franchise.wallet_balance),
   min_balance_limit: moneyStr(franchise.min_balance_limit),
   royalty_per_order: moneyStr(franchise.royalty_per_order),
+  default_commission_rate: moneyStr(franchise.default_commission_rate),
   is_launch_promo_active: franchise.is_launch_promo_active,
   created_at: franchise.created_at,
   counts: franchise._count
@@ -54,6 +56,7 @@ const createSchema = z.object({
   name: z.string().trim().min(2).max(100),
   slug: z.string().trim().min(2).max(63),
   royalty_per_order: zMoney.optional(),
+  default_commission_rate: z.coerce.number().min(0).max(100).optional(),
   opening_wallet_balance: zMoney.optional(),
   admin: z.object({
     name: z.string().trim().min(2).max(100),
@@ -90,6 +93,9 @@ router.post(
             name: body.name,
             slug,
             wallet_balance: opening,
+            ...(body.default_commission_rate !== undefined
+              ? { default_commission_rate: money(body.default_commission_rate).toFixed(2) }
+              : {}),
             ...(body.royalty_per_order !== undefined
               ? { royalty_per_order: moneyStr(body.royalty_per_order) }
               : {}),
@@ -143,19 +149,53 @@ router.post(
   })
 );
 
-const activeSchema = z.object({ is_active: z.boolean() });
+const patchSchema = z
+  .object({
+    is_active: z.boolean().optional(),
+    default_commission_rate: z.coerce.number().min(0).max(100).optional(),
+    // Also set this rate on every hotel already in the franchise.
+    apply_to_hotels: z.boolean().optional(),
+  })
+  .refine((body) => body.is_active !== undefined || body.default_commission_rate !== undefined, {
+    message: "nothing to update",
+  })
+  .refine((body) => !body.apply_to_hotels || body.default_commission_rate !== undefined, {
+    message: "apply_to_hotels needs default_commission_rate",
+    path: ["apply_to_hotels"],
+  });
 
-// PATCH /api/v1/super/franchises/:id — activate / suspend a franchise.
+// PATCH /api/v1/super/franchises/:id — activate / suspend a franchise, and set
+// its default hotel commission % (optionally applied to existing hotels too).
 router.patch(
   "/franchises/:id",
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id);
-    const { is_active } = parse(activeSchema, req.body);
-    const { count } = await prisma.franchise.updateMany({ where: { id }, data: { is_active } });
-    if (count === 0) throw new AppError(404, "NOT_FOUND", "Franchise not found");
-    audit("franchise.active", { franchise_id: id, is_active, by_user_id: req.user.id });
+    const body = parse(patchSchema, req.body);
+    const rate = body.default_commission_rate === undefined ? undefined : money(body.default_commission_rate).toFixed(2);
+    const before = await prisma.franchise.findUnique({ where: { id } });
+    if (!before) throw new AppError(404, "NOT_FOUND", "Franchise not found");
+    let applied = 0;
+    await prisma.$transaction(async (tx) => {
+      await tx.franchise.update({
+        where: { id },
+        data: {
+          ...(body.is_active !== undefined ? { is_active: body.is_active } : {}),
+          ...(rate !== undefined ? { default_commission_rate: rate } : {}),
+        },
+      });
+      if (body.apply_to_hotels) {
+        applied = (await tx.vendor.updateMany({ where: { franchise_id: id }, data: { commission_rate: rate } })).count;
+      }
+    });
+    audit("franchise.settings_by_super", {
+      franchise_id: id,
+      by_user_id: req.user.id,
+      before: { is_active: before.is_active, default_commission_rate: moneyStr(before.default_commission_rate) },
+      after: { is_active: body.is_active ?? before.is_active, default_commission_rate: rate ?? moneyStr(before.default_commission_rate) },
+      hotels_updated: applied,
+    });
     const franchise = await prisma.franchise.findUnique({ where: { id } });
-    ok(res, { franchise: franchiseView(franchise) });
+    ok(res, { franchise: franchiseView(franchise), hotels_updated: applied });
   })
 );
 

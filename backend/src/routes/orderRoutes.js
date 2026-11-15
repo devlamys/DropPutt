@@ -25,7 +25,9 @@ import {
   calculateCashInHandIncrease,
   calculateLineTotal,
   calculateOrderFinancials,
+  isCommissionFree,
   money,
+  recomputeForPaymentMethod,
   subtractMoney,
 } from "../utils/orderMath.js";
 import { buildPage, parsePagination } from "../utils/pagination.js";
@@ -119,7 +121,10 @@ router.post(
 
     let order_type;
     if (vendor) {
-      order_type = body.items ? "FOOD_MARKETPLACE" : "HOTEL_DIRECT";
+      // §10.1/§18: every vendor-started call is a commission-free hotel
+      // delivery, with or without a cart. Storefront orders (marketplace
+      // routes) are the ones that carry commission.
+      order_type = "HOTEL_DIRECT";
     } else {
       order_type = body.order_type;
       if (!order_type) throw fieldError("order_type", "required when there is no vendor");
@@ -338,7 +343,9 @@ const pickupSchema = z.object({
   customer_phone: z.union([z.string(), z.number()]).optional(),
   customer_name: z.string().trim().min(1).max(100).optional(),
   zone_id: zId.optional(),
-  payment_method: z.enum(["COD", "PREPAID_AT_HOTEL", "UPI_TO_ADMIN"]).optional(),
+  payment_method: z
+    .enum(["COD", "PREPAID_AT_HOTEL", "PREPAID_FULL_AT_HOTEL", "UPI_TO_ADMIN"])
+    .optional(),
   item_total: zMoney.optional(),
   rider_paid_at_shop: zBoolean.optional(),
   bill_image_url: z.string().trim().min(1).max(2048).optional(),
@@ -428,8 +435,8 @@ router.put(
       if (!zone) throw fieldError("zone_id", "zone not found in this franchise");
 
       const payment_method = body.payment_method ?? order.payment_method;
-      if (payment_method === "PREPAID_AT_HOTEL" && !order.vendor_id) {
-        throw fieldError("payment_method", "PREPAID_AT_HOTEL requires a partner vendor");
+      if (["PREPAID_AT_HOTEL", "PREPAID_FULL_AT_HOTEL"].includes(payment_method) && !order.vendor_id) {
+        throw fieldError("payment_method", `${payment_method} requires a partner vendor`);
       }
 
       // Marketplace orders: item total comes from OrderItem rows only.
@@ -456,12 +463,18 @@ router.put(
       // and amount_to_collect follows the payment method (so UPI stays 0).
       const rider_tip = applySurge ? addMoney(order.rider_tip, surge) : money(order.rider_tip);
 
+      // §10.1: decided once, at pickup, from the hotel's trial date.
+      const commission_free = isCommissionFree({
+        order_type: order.order_type,
+        commission_free_until: order.vendor?.commission_free_until,
+      });
       const financials = calculateOrderFinancials({
         item_total,
         zone,
         franchise,
         payment_method,
         commission_rate: order.vendor?.commission_rate ?? 0,
+        commission_free,
         rider_tip,
         discount_amount: order.discount_amount,
         shop_markup_profit: order.shop_markup_profit,
@@ -498,7 +511,9 @@ router.put(
           turning_point: order.turning_point ?? customer.turning_point,
           voice_note_url: order.voice_note_url ?? customer.voice_direction_url,
           // Rate fixed at pickup so the commission split can be re-derived later.
-          commission_rate: order.vendor_id ? moneyStr(order.vendor.commission_rate) : null,
+          commission_rate: order.vendor_id
+            ? moneyStr(commission_free ? 0 : order.vendor.commission_rate)
+            : null,
           item_total: moneyStr(financials.item_total),
           delivery_fee: moneyStr(financials.delivery_fee),
           rider_tip: moneyStr(financials.rider_tip),
@@ -568,6 +583,97 @@ router.put(
       magic_link_path: `/drop/${order.location_token}`,
       already_picked_up,
     });
+  })
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATCH /api/v1/orders/:id/payment-method — the rider corrects the payment
+// method after pickup and before delivery (§19.1). Amounts are re-priced from
+// the values stored at pickup; the split never changes; nothing is in the
+// ledger yet, so no reversal is needed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const paymentMethodSchema = z.object({
+  payment_method: z.enum(["COD", "PREPAID_AT_HOTEL", "PREPAID_FULL_AT_HOTEL", "UPI_TO_ADMIN"]),
+});
+
+router.patch(
+  "/:id/payment-method",
+  requireRole("RIDER"),
+  loadRider,
+  asyncHandler(async (req, res) => {
+    const orderId = parseId(req.params.id);
+    const franchise_id = req.franchise_id;
+    const { payment_method } = parse(paymentMethodSchema, req.body);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw`
+        SELECT id FROM "orders"
+        WHERE id = ${orderId} AND franchise_id = ${franchise_id}
+        FOR UPDATE
+      `;
+      if (locked.length === 0) throw orderNotFound();
+      const order = await tx.order.findUnique({ where: { id: orderId } });
+      if (order.rider_id !== req.rider.id) throw forbidden("This order is not assigned to you");
+      if (order.order_status === "DELIVERED") {
+        throw new AppError(409, "ORDER_ALREADY_DELIVERED", "Order is already delivered");
+      }
+      if (order.order_status === "CANCELLED") {
+        throw new AppError(409, "ORDER_CANCELLED", "Order has been cancelled");
+      }
+      if (!["PICKED_UP", "LOCATION_SHARED"].includes(order.order_status)) {
+        throw new AppError(409, "NOT_PICKED_UP", "Pick the order up first");
+      }
+      if (order.payment_method === payment_method) return { order, changed: false };
+      if (["PREPAID_AT_HOTEL", "PREPAID_FULL_AT_HOTEL"].includes(payment_method) && !order.vendor_id) {
+        throw fieldError("payment_method", `${payment_method} requires a partner vendor`);
+      }
+
+      const franchise = await tx.franchise.findUnique({ where: { id: franchise_id } });
+      const f = recomputeForPaymentMethod(order, franchise, payment_method);
+      // The split must not depend on the method; refuse rather than drift.
+      for (const key of ["grand_total", "vendor_commission", "vendor_earning", "rider_earning", "franchise_profit", "super_admin_profit"]) {
+        if (!money(order[key]).eq(f[key])) {
+          throw new AppError(409, "ORDER_NOT_REPRICEABLE", `${key} would change; ask the admin`);
+        }
+      }
+      const updated = await tx.order.update({
+        where: { id: orderId },
+        data: {
+          payment_method,
+          amount_to_collect: moneyStr(f.amount_to_collect),
+          vendor_admin_payable: moneyStr(f.vendor_admin_payable),
+        },
+        include: { vendor: true },
+      });
+      audit("order.payment_method_changed", {
+        franchise_id,
+        order_id: orderId,
+        rider_id: req.rider.id,
+        from: order.payment_method,
+        to: payment_method,
+        amount_to_collect_before: moneyStr(order.amount_to_collect),
+        amount_to_collect_after: moneyStr(f.amount_to_collect),
+        vendor_payable_before: moneyStr(order.vendor_admin_payable),
+        vendor_payable_after: moneyStr(f.vendor_admin_payable),
+        request_id: res.locals.request_id,
+      });
+      return { order: updated, changed: true };
+    }, TX_OPTIONS);
+
+    const view = orderView(result.order);
+    if (result.changed) {
+      const event = {
+        order_id: orderId,
+        payment_method: view.payment_method,
+        amount_to_collect: view.amount_to_collect,
+        collect_from_hotel: view.collect_from_hotel,
+      };
+      emitTo(rooms.order(orderId), "order_payment_changed", event);
+      emitTo(rooms.franchise(franchise_id), "order_payment_changed", event);
+      if (result.order.vendor_id) emitTo(rooms.vendor(result.order.vendor_id), "order_payment_changed", event);
+    }
+    ok(res, { order: view, changed: result.changed });
   })
 );
 
@@ -740,11 +846,27 @@ router.post(
         }
       }
 
+      // §15: the rider keeps this order's earning (fee + tip + surge) out of
+      // the customer's cash. Only the rest counts as cash owed to others, and
+      // only what could not be kept (UPI orders, bonuses) goes to the wallet
+      // for the franchise to pay — so an earning is paid exactly once.
+      const earning = money(order.rider_earning);
+      const kept = cash.lt(earning) ? cash : earning;
+      if (kept.gt(0)) {
+        await entry({
+          rider_id: riderId,
+          party: "RIDER_EARNING",
+          type: "PAID_FROM_CASH",
+          amount: moneyStr(kept.negated()),
+          reference_key: `order:${orderId}:earning-from-cash`,
+          description: `Rider kept their earning from the cash for order ${order.order_number}`,
+        });
+      }
       await tx.rider.update({
         where: { id: riderId },
         data: {
-          cash_in_hand: { increment: moneyStr(cash) },
-          wallet_earnings: { increment: moneyStr(riderCredit) },
+          cash_in_hand: { increment: moneyStr(subtractMoney(cash, kept)) },
+          wallet_earnings: { increment: moneyStr(subtractMoney(riderCredit, kept)) },
         },
       });
 
@@ -802,6 +924,7 @@ router.post(
         order: delivered,
         already_delivered: false,
         cash_collected: moneyStr(cash),
+        earning_kept: moneyStr(kept),
         milestone,
       };
     }, TX_OPTIONS);
@@ -826,6 +949,29 @@ router.post(
           channel: "earnings",
         });
       }
+
+      // Tell the rider the moment they hit the cash limit, so the app can
+      // show "pay the vendor to keep taking orders" instead of a 422 later.
+      const after = await prisma.rider.findUnique({
+        where: { id: riderId },
+        select: { cash_in_hand: true, max_cash_limit: true },
+      });
+      if (after && money(after.cash_in_hand).gte(after.max_cash_limit)) {
+        emitTo(rooms.rider(riderId), "cash_limit_reached", {
+          cash_in_hand: moneyStr(after.cash_in_hand),
+          max_cash_limit: moneyStr(after.max_cash_limit),
+        });
+        pushToUsers([req.user.id], {
+          title: "💵 Cash limit reached",
+          body: "Pay the hotel your collected cash to keep accepting orders",
+          data: {
+            type: "CASH_LIMIT_REACHED",
+            franchise_slug: req.franchise.slug,
+            deep_link: "dropputt://rider/home",
+          },
+          channel: "order_updates",
+        });
+      }
     }
 
     ok(res, {
@@ -833,7 +979,11 @@ router.post(
       already_delivered: result.already_delivered,
       settlement: result.already_delivered
         ? null
-        : { cash_collected: result.cash_collected, milestone: result.milestone },
+        : {
+            cash_collected: result.cash_collected,
+            earning_kept: result.earning_kept,
+            milestone: result.milestone,
+          },
     });
   })
 );

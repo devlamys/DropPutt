@@ -22,10 +22,21 @@ import { coordStr } from "../utils/serializers.js";
 import { istDayRange } from "../utils/time.js";
 import { idempotency } from "../middleware/idempotency.js";
 import { audit } from "../utils/audit.js";
+import { netSettleRider, payoutView, payRider } from "../services/riderPayoutService.js";
+import {
+  recordVendorSettlement,
+  settlementView,
+} from "../services/vendorSettlementService.js";
+import {
+  createHandover,
+  handoverInclude,
+  handoverView,
+  resolveHandover,
+} from "../services/cashHandoverService.js";
 import { addMoney, money, subtractMoney } from "../utils/orderMath.js";
 import { buildPage, parsePagination } from "../utils/pagination.js";
-import { AppError, asyncHandler, ok, validationError } from "../utils/response.js";
-import { moneyStr } from "../utils/serializers.js";
+import { AppError, asyncHandler, forbidden, ok, validationError } from "../utils/response.js";
+import { isCommissionFreeOrder, moneyStr } from "../utils/serializers.js";
 import { parse, parseId, zMoney } from "../utils/validate.js";
 
 /**
@@ -81,6 +92,7 @@ router.get(
           cash_in_hand: moneyStr(rider.cash_in_hand),
           max_cash_limit: moneyStr(rider.max_cash_limit),
           wallet_earnings: moneyStr(rider.wallet_earnings),
+          net_due: moneyStr(subtractMoney(rider.cash_in_hand, rider.wallet_earnings)),
         })),
       },
       { pagination: page.pagination }
@@ -104,53 +116,433 @@ router.post(
   asyncHandler(async (req, res) => {
     requireFranchiseHeader(req);
     const riderId = parseId(req.params.id);
-    const franchise_id = req.franchise_id;
     const body = parse(cashSettlementSchema, req.body);
-    const amount = money(body.amount);
-
-    const result = await prisma.$transaction(async (tx) => {
-      const locked = await tx.$queryRaw`
-        SELECT id FROM "riders"
-        WHERE id = ${riderId} AND franchise_id = ${franchise_id}
-        FOR UPDATE
-      `;
-      if (locked.length === 0) {
-        throw new AppError(404, "RIDER_NOT_FOUND", "Rider not found in this franchise");
-      }
-      const rider = await tx.rider.findUnique({ where: { id: riderId } });
-      if (amount.gt(rider.cash_in_hand)) {
-        throw validationError("Request validation failed", [
-          {
-            field: "amount",
-            issue: `exceeds rider cash in hand (₹${moneyStr(rider.cash_in_hand)})`,
-          },
-        ]);
-      }
-
-      const cash_after = subtractMoney(rider.cash_in_hand, amount);
-      await tx.rider.update({
-        where: { id: riderId },
-        data: { cash_in_hand: moneyStr(cash_after) },
-      });
-      return { cash_before: moneyStr(rider.cash_in_hand), cash_after: moneyStr(cash_after) };
-    }, TX_OPTIONS);
-
-    audit("rider.cash_settlement", {
-      franchise_id,
-      rider_id: riderId,
-      settled_by_user_id: req.user.id,
-      amount: moneyStr(amount),
-      note: body.note ?? null,
-      request_id: res.locals.request_id,
-      ...result,
-    });
+    // Direct admin settlement (cash the franchise holds itself). It now
+    // leaves a RiderCashHandover row and notifies the rider.
+    const row = await createHandover(
+      {
+        franchise: req.franchise,
+        rider_id: riderId,
+        amount: body.amount,
+        note: body.note,
+        initiated_by: "ADMIN",
+        user_id: req.user.id,
+      },
+      { requestId: res.locals.request_id }
+    );
 
     ok(res, {
       rider_id: riderId,
-      amount_settled: moneyStr(amount),
-      cash_in_hand_before: result.cash_before,
-      cash_in_hand: result.cash_after,
+      amount_settled: moneyStr(row.amount),
+      cash_in_hand_before: moneyStr(row.cash_before),
+      cash_in_hand: moneyStr(row.cash_after),
+      handover_id: row.id,
     });
+  })
+);
+
+// GET /api/v1/admin/cash-handovers?status=PENDING — rider → vendor handovers.
+// Pending ones the vendor has not answered can be resolved by the admin so a
+// busy accountant never keeps a rider blocked.
+router.get(
+  "/cash-handovers",
+  requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
+  asyncHandler(async (req, res) => {
+    requireFranchiseHeader(req);
+    const status = ["PENDING", "CONFIRMED", "REJECTED"].includes(req.query.status)
+      ? req.query.status
+      : undefined;
+    const rows = await prisma.riderCashHandover.findMany({
+      where: { franchise_id: req.franchise_id, ...(status ? { status } : {}) },
+      orderBy: { id: "desc" },
+      take: 50,
+      include: handoverInclude,
+    });
+    ok(res, { items: rows.map(handoverView) });
+  })
+);
+
+for (const action of ["confirm", "reject"]) {
+  router.post(
+    `/cash-handovers/:id/${action}`,
+    requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
+    asyncHandler(async (req, res) => {
+      requireFranchiseHeader(req);
+      const row = await resolveHandover(
+        {
+          franchise: req.franchise,
+          handover_id: parseId(req.params.id),
+          action,
+          user_id: req.user.id,
+        },
+        { requestId: res.locals.request_id }
+      );
+      ok(res, { handover: handoverView(row) });
+    })
+  );
+}
+
+// ── Vendor commission settlement (§16.1) ────────────────────────────────────
+// The hotel never pays per order. Storefront commission accrues in the
+// vendor's signed balance; the admin visits the hotel daily / weekly / monthly
+// and records the payment here.
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// GET /api/v1/admin/vendors — balance and recent commission per hotel.
+router.get(
+  "/vendors",
+  requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
+  asyncHandler(async (req, res) => {
+    requireFranchiseHeader(req);
+    const franchise_id = req.franchise_id;
+    const today = istDayRange();
+    const windows = {
+      today: today.start,
+      last_7_days: new Date(today.end.getTime() - 7 * DAY_MS),
+      last_30_days: new Date(today.end.getTime() - 30 * DAY_MS),
+    };
+    const [vendors, sums, lastSettlements] = await Promise.all([
+      prisma.vendor.findMany({
+        where: { franchise_id },
+        orderBy: { shop_name: "asc" },
+        select: {
+          id: true,
+          shop_name: true,
+          shop_category: true,
+          admin_payable_balance: true,
+          commission_rate: true,
+          commission_free_until: true,
+        },
+      }),
+      Promise.all(
+        Object.entries(windows).map(async ([name, since]) => {
+          const rows = await prisma.order.groupBy({
+            by: ["vendor_id"],
+            where: {
+              franchise_id,
+              vendor_id: { not: null },
+              order_status: "DELIVERED",
+              delivered_at: { gte: since },
+            },
+            _sum: { vendor_commission: true },
+          });
+          return [name, new Map(rows.map((r) => [r.vendor_id, r._sum.vendor_commission]))];
+        })
+      ),
+      prisma.vendorSettlement.groupBy({
+        by: ["vendor_id"],
+        where: { franchise_id },
+        _max: { created_at: true },
+      }),
+    ]);
+    const last = new Map(lastSettlements.map((r) => [r.vendor_id, r._max.created_at]));
+    ok(res, {
+      vendors: vendors.map((vendor) => {
+        const balance = money(vendor.admin_payable_balance);
+        return {
+          id: vendor.id,
+          shop_name: vendor.shop_name,
+          shop_category: vendor.shop_category,
+          admin_payable_balance: moneyStr(balance),
+          commission_rate: moneyStr(vendor.commission_rate),
+          commission_free_until: vendor.commission_free_until,
+          trial_active: Boolean(vendor.commission_free_until) && vendor.commission_free_until > new Date(),
+          // Who owes whom, spelled out so the screen needs no sign logic.
+          owes: balance.lt(0) ? "VENDOR" : balance.gt(0) ? "FRANCHISE" : "NONE",
+          commission: Object.fromEntries(
+            sums.map(([name, bySum]) => [name, moneyStr(bySum.get(vendor.id) ?? 0)])
+          ),
+          last_settlement_at: last.get(vendor.id) ?? null,
+        };
+      }),
+    });
+  })
+);
+
+// GET /api/v1/admin/vendors/:id/statement?from=YYYY-MM-DD&to=YYYY-MM-DD
+// Delivered orders in the range with commission, plus the settlements made.
+router.get(
+  "/vendors/:id/statement",
+  requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
+  asyncHandler(async (req, res) => {
+    requireFranchiseHeader(req);
+    const vendorId = parseId(req.params.id);
+    const franchise_id = req.franchise_id;
+    const vendor = await prisma.vendor.findFirst({
+      where: { id: vendorId, franchise_id },
+      select: { id: true, shop_name: true, admin_payable_balance: true, commission_rate: true },
+    });
+    if (!vendor) throw new AppError(404, "VENDOR_NOT_FOUND", "Vendor not found in this franchise");
+    const range = parseRange(req.query);
+
+    const [orders, settlements] = await Promise.all([
+      prisma.order.findMany({
+        where: {
+          franchise_id,
+          vendor_id: vendorId,
+          order_status: "DELIVERED",
+          delivered_at: { gte: range.start, lt: range.end },
+        },
+        orderBy: { delivered_at: "asc" },
+        take: 1000,
+        select: {
+          id: true,
+          order_number: true,
+          order_type: true,
+          payment_method: true,
+          item_total: true,
+          vendor_id: true,
+          commission_rate: true,
+          vendor_commission: true,
+          vendor_admin_payable: true,
+          delivered_at: true,
+        },
+      }),
+      prisma.vendorSettlement.findMany({
+        where: { franchise_id, vendor_id: vendorId, created_at: { gte: range.start, lt: range.end } },
+        orderBy: { id: "asc" },
+      }),
+    ]);
+
+    const totals = orders.reduce(
+      (t, o) => ({
+        orders: t.orders + 1,
+        item_total: addMoney(t.item_total, o.item_total),
+        commission: addMoney(t.commission, o.vendor_commission),
+        payable: addMoney(t.payable, o.vendor_admin_payable),
+      }),
+      { orders: 0, item_total: money(0), commission: money(0), payable: money(0) }
+    );
+    ok(res, {
+      vendor: {
+        id: vendor.id,
+        shop_name: vendor.shop_name,
+        commission_rate: moneyStr(vendor.commission_rate),
+        admin_payable_balance: moneyStr(vendor.admin_payable_balance),
+      },
+      range: { from: range.from, to: range.to },
+      totals: {
+        orders: totals.orders,
+        item_total: moneyStr(totals.item_total),
+        commission: moneyStr(totals.commission),
+        payable: moneyStr(totals.payable),
+      },
+      orders: orders.map((o) => ({
+        id: o.id,
+        order_number: o.order_number,
+        order_type: o.order_type,
+        commission_free: isCommissionFreeOrder(o),
+        payment_method: o.payment_method,
+        item_total: moneyStr(o.item_total),
+        commission: moneyStr(o.vendor_commission),
+        payable: moneyStr(o.vendor_admin_payable),
+        delivered_at: o.delivered_at,
+      })),
+      settlements: settlements.map(settlementView),
+    });
+  })
+);
+
+const vendorSettlementSchema = z.object({
+  direction: z.enum(["VENDOR_PAID_FRANCHISE", "FRANCHISE_PAID_VENDOR"]),
+  amount: amountSchema,
+  method: z.enum(["CASH", "UPI", "BANK"]).default("CASH"),
+  note: z.string().trim().min(1).max(300).optional(),
+  period_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  period_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+
+// POST /api/v1/admin/vendors/:id/settlements — record a payment with a hotel.
+router.post(
+  "/vendors/:id/settlements",
+  requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
+  idempotency(),
+  asyncHandler(async (req, res) => {
+    requireFranchiseHeader(req);
+    const vendorId = parseId(req.params.id);
+    const body = parse(vendorSettlementSchema, req.body);
+    const row = await recordVendorSettlement(
+      {
+        franchise: req.franchise,
+        vendor_id: vendorId,
+        direction: body.direction,
+        amount: body.amount,
+        method: body.method,
+        note: body.note,
+        period_from: body.period_from ? new Date(`${body.period_from}T00:00:00+05:30`) : null,
+        period_to: body.period_to ? new Date(`${body.period_to}T00:00:00+05:30`) : null,
+        user_id: req.user.id,
+      },
+      { requestId: res.locals.request_id }
+    );
+    ok(res, { settlement: settlementView(row) }, { status: 201 });
+  })
+);
+
+// PATCH /api/v1/admin/riders/:id/cash-limit — raise or lower one rider's cash
+// limit. Franchise admin and Super Admin; the rider is blocked while
+// cash_in_hand >= max_cash_limit, so this also unblocks / blocks at once.
+const cashLimitSchema = z.object({
+  max_cash_limit: amountSchema.refine((value) => Number(value) <= 100000, {
+    message: "must be at most 100000",
+  }),
+});
+
+router.patch(
+  "/riders/:id/cash-limit",
+  requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
+  asyncHandler(async (req, res) => {
+    requireFranchiseHeader(req);
+    const riderId = parseId(req.params.id);
+    const body = parse(cashLimitSchema, req.body);
+    const rider = await prisma.rider.findFirst({
+      where: { id: riderId, franchise_id: req.franchise_id },
+    });
+    if (!rider) throw new AppError(404, "RIDER_NOT_FOUND", "Rider not found in this franchise");
+    const limit = money(body.max_cash_limit);
+    const updated = await prisma.rider.update({
+      where: { id: riderId },
+      data: { max_cash_limit: moneyStr(limit) },
+    });
+    const is_cash_locked = money(updated.cash_in_hand).gte(limit);
+    audit("rider.cash_limit_changed", {
+      franchise_id: req.franchise_id,
+      rider_id: riderId,
+      by_user_id: req.user.id,
+      before: moneyStr(rider.max_cash_limit),
+      after: moneyStr(limit),
+      request_id: res.locals.request_id,
+    });
+    emitTo(rooms.rider(riderId), "cash_limit_changed", {
+      max_cash_limit: moneyStr(limit),
+      cash_in_hand: moneyStr(updated.cash_in_hand),
+      is_cash_locked,
+    });
+    emitTo(rooms.franchise(req.franchise_id), "cash_limit_changed", { rider_id: riderId });
+    ok(res, {
+      rider_id: riderId,
+      max_cash_limit: moneyStr(limit),
+      cash_in_hand: moneyStr(updated.cash_in_hand),
+      is_cash_locked,
+    });
+  })
+);
+
+// PATCH /api/v1/admin/vendors/:id — a hotel's Call Rider Now free trial and
+// commission rate. The trial date is the franchise admin's call; the
+// commission percentage is decided by the Super Admin only.
+const vendorTermsSchema = z
+  .object({
+    commission_rate: z.coerce.number().min(0).max(100).optional(),
+    commission_free_until: z
+      .union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.null()])
+      .optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, { message: "nothing to update" });
+
+router.patch(
+  "/vendors/:id",
+  requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
+  asyncHandler(async (req, res) => {
+    requireFranchiseHeader(req);
+    const vendorId = parseId(req.params.id);
+    const body = parse(vendorTermsSchema, req.body);
+    if (body.commission_rate !== undefined && req.user.role !== "SUPER_ADMIN") {
+      throw forbidden("Only the Super Admin can change the commission percentage");
+    }
+    const before = await prisma.vendor.findFirst({
+      where: { id: vendorId, franchise_id: req.franchise_id },
+    });
+    if (!before) throw new AppError(404, "VENDOR_NOT_FOUND", "Vendor not found in this franchise");
+
+    const data = {};
+    if (body.commission_rate !== undefined) data.commission_rate = money(body.commission_rate).toFixed(2);
+    if (body.commission_free_until !== undefined) {
+      // The trial runs through the end of the chosen IST day.
+      data.commission_free_until =
+        body.commission_free_until === null
+          ? null
+          : new Date(new Date(`${body.commission_free_until}T00:00:00+05:30`).getTime() + DAY_MS);
+      if (data.commission_free_until && Number.isNaN(data.commission_free_until.getTime())) {
+        throw validationError("Request validation failed", [
+          { field: "commission_free_until", issue: "must be a date like 2026-11-30" },
+        ]);
+      }
+    }
+    const vendor = await prisma.vendor.update({ where: { id: vendorId }, data });
+    audit("vendor.terms_changed", {
+      franchise_id: req.franchise_id,
+      vendor_id: vendorId,
+      by_user_id: req.user.id,
+      before: {
+        commission_rate: moneyStr(before.commission_rate),
+        commission_free_until: before.commission_free_until,
+      },
+      after: {
+        commission_rate: moneyStr(vendor.commission_rate),
+        commission_free_until: vendor.commission_free_until,
+      },
+      request_id: res.locals.request_id,
+    });
+    ok(res, {
+      vendor: {
+        id: vendor.id,
+        commission_rate: moneyStr(vendor.commission_rate),
+        commission_free_until: vendor.commission_free_until,
+        trial_active: Boolean(vendor.commission_free_until) && vendor.commission_free_until > new Date(),
+      },
+    });
+  })
+);
+
+// ── Rider earnings payout (§15.2) ───────────────────────────────────────────
+
+const payoutSchema = z.object({
+  amount: amountSchema,
+  method: z.enum(["CASH", "UPI", "BANK"]).default("CASH"),
+  note: z.string().trim().min(1).max(300).optional(),
+});
+
+// POST /api/v1/admin/riders/:id/payouts — pay part or all of a rider's wallet.
+router.post(
+  "/riders/:id/payouts",
+  requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
+  idempotency(),
+  asyncHandler(async (req, res) => {
+    requireFranchiseHeader(req);
+    const body = parse(payoutSchema, req.body);
+    const row = await payRider(
+      {
+        franchise: req.franchise,
+        rider_id: parseId(req.params.id),
+        amount: body.amount,
+        method: body.method,
+        note: body.note,
+        user_id: req.user.id,
+      },
+      { requestId: res.locals.request_id }
+    );
+    ok(res, { payout: payoutView(row) }, { status: 201 });
+  })
+);
+
+const netSchema = z.object({ note: z.string().trim().min(1).max(300).optional() });
+
+// POST /api/v1/admin/riders/:id/net-settlement — collect all cash, pay all
+// earnings; only the difference changes hands.
+router.post(
+  "/riders/:id/net-settlement",
+  requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
+  idempotency(),
+  asyncHandler(async (req, res) => {
+    requireFranchiseHeader(req);
+    const body = parse(netSchema, req.body ?? {});
+    const result = await netSettleRider(
+      { franchise: req.franchise, rider_id: parseId(req.params.id), note: body.note, user_id: req.user.id },
+      { requestId: res.locals.request_id }
+    );
+    ok(res, result);
   })
 );
 
@@ -294,6 +686,7 @@ const franchiseSettingsView = (franchise) => ({
   wallet_balance: moneyStr(franchise.wallet_balance),
   min_balance_limit: moneyStr(franchise.min_balance_limit),
   royalty_per_order: moneyStr(franchise.royalty_per_order),
+  default_commission_rate: moneyStr(franchise.default_commission_rate),
   is_launch_promo_active: franchise.is_launch_promo_active,
   rain_surge_fee: moneyStr(franchise.rain_surge_fee),
   daily_milestone_target: franchise.daily_milestone_target,
@@ -398,6 +791,8 @@ router.get(
         // At the limit a rider cannot accept orders or go online (§15).
         is_cash_locked: rider.cash_in_hand.gte(rider.max_cash_limit),
         wallet_earnings: moneyStr(rider.wallet_earnings),
+        // + rider owes the franchise, − the franchise owes the rider (§15.2).
+        net_due: moneyStr(subtractMoney(rider.cash_in_hand, rider.wallet_earnings)),
         active_orders: count(active, rider.id),
         delivered_today: count(deliveredToday, rider.id),
         cash_collected_today: moneyStr(

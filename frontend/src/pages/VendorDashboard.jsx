@@ -3,6 +3,7 @@ import { History, Loader2, LogOut, ShieldAlert, Wifi, WifiOff } from "lucide-rea
 import { Link } from "react-router-dom";
 import CancelOrderModal from "../components/CancelOrderModal.jsx";
 import Modal from "../components/Modal.jsx";
+import CashHandoverCard from "../components/vendor/CashHandoverCard.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -10,7 +11,7 @@ import { useSocket } from "../hooks/useSocket.js";
 import api, { getErrorMessage, idempotencyHeaders } from "../utils/api.js";
 import { inr, minutesAgo } from "../utils/format.js";
 
-const EVENTS = ["order_accepted", "order_picked_up", "order_delivered", "order_status_changed", "order_cancelled"];
+const EVENTS = ["order_accepted", "order_picked_up", "order_delivered", "order_status_changed", "order_cancelled", "order_payment_changed"];
 // A shop can withdraw an order until the rider has the food in hand.
 const SHOP_CAN_CANCEL = ["RIDER_REQUESTED", "RIDER_ASSIGNED"];
 
@@ -18,6 +19,7 @@ export default function VendorDashboard() {
   const { user, signOut } = useAuth();
   const { toast, node: toastNode } = useToast();
 
+  const [cashTick, setCashTick] = useState(0); // bumps when a cash event arrives
   const [shop, setShop] = useState(null);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -53,8 +55,8 @@ export default function VendorDashboard() {
 
   // Live updates over the socket; polling is the safety net.
   const refresh = useCallback(() => void loadOrders(), [loadOrders]);
-  const { connected } = useSocket(
-    Object.fromEntries(
+  const { connected } = useSocket({
+    ...Object.fromEntries(
       EVENTS.map((event) => [
         event,
         () => {
@@ -63,8 +65,13 @@ export default function VendorDashboard() {
           if (event === "order_cancelled") toast("An order was cancelled", "warn");
         },
       ])
-    )
-  );
+    ),
+    cash_handover_requested: ({ rider_name, amount }) => {
+      toast(`💵 ${rider_name} says they paid ${inr(amount)} — please confirm`, "info");
+      setCashTick((n) => n + 1);
+    },
+    cash_handover_resolved: () => setCashTick((n) => n + 1),
+  });
   useEffect(() => {
     const id = setInterval(() => {
       setNow(Date.now());
@@ -172,6 +179,15 @@ export default function VendorDashboard() {
         </div>
       </header>
 
+      {shop?.trial_active && shop.commission_free_until && (
+        <p className="mx-4 mt-4 rounded-2xl bg-green-50 px-4 py-3 text-sm text-green-800 ring-1 ring-green-200">
+          🎁 “Call Rider Now” has no commission for you until{" "}
+          <strong>{new Date(new Date(shop.commission_free_until).getTime() - 1).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</strong>.
+        </p>
+      )}
+
+      <CashHandoverCard reloadKey={cashTick} toast={toast} />
+
       <main className="space-y-6 px-4 pt-5">
         {/* One-tap rider call */}
         <section className="flex flex-col items-center py-2">
@@ -231,6 +247,11 @@ export default function VendorDashboard() {
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <StatusBadge status={order.order_status} />
+                      {Number(order.collect_from_hotel) > 0 && (
+                        <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-bold text-green-800">
+                          Give the rider {inr(order.collect_from_hotel)} delivery fee
+                        </span>
+                      )}
                       {SHOP_CAN_CANCEL.includes(order.order_status) && (
                         <button
                           type="button"

@@ -59,7 +59,7 @@ export default function RiderEarnings() {
             <Tile label="Today" value={inr(Number(data.today.earning) + Number(data.today.bonus))} sub={`${data.today.deliveries} deliveries · tips ${inr(data.today.tips)}`} />
             <Tile label="Last 7 days" value={inr(Number(data.last_7_days.earning) + Number(data.last_7_days.bonus))} sub={`${data.last_7_days.deliveries} deliveries`} />
             <Tile label="Last 30 days" value={inr(Number(data.last_30_days.earning) + Number(data.last_30_days.bonus))} sub={`${data.last_30_days.deliveries} deliveries · bonus ${inr(data.last_30_days.bonus)}`} />
-            <Tile label="Wallet total" value={inr(data.wallet_earnings)} sub={`Cash in hand ${inr(data.cash_in_hand)}`} />
+            <Tile label="Franchise will pay you" value={inr(data.wallet_earnings)} sub={`Cash to hand over ${inr(data.cash_in_hand)} · your fees are kept from cash`} />
           </div>
 
           <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">

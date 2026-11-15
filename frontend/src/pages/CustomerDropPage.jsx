@@ -80,6 +80,7 @@ export default function CustomerDropPage() {
     socket.on("disconnect", () => setConnected(false));
     socket.on("live_bike_position", ({ lat, lng }) => setBike([lat, lng]));
     socket.on("order_status_changed", () => load());
+    socket.on("order_payment_changed", () => load());
     // The server re-routes when the rider leaves the road or the pin moves.
     socket.on("route_updated", ({ coords, distance_m, duration_s }) =>
       setOrder((current) => current && { ...current, route: { coords, distance_m, duration_s } })
@@ -453,6 +454,10 @@ export default function CustomerDropPage() {
                 {order.payment_method === "COD" && `Pay the rider ${inr(order.amount_to_collect)} in cash`}
                 {order.payment_method === "PREPAID_AT_HOTEL" &&
                   `Food already paid at the shop. Pay the rider ${inr(order.amount_to_collect)} (delivery${Number(order.rider_tip) > 0 ? " + tip" : ""}).`}
+                {order.payment_method === "PREPAID_FULL_AT_HOTEL" &&
+                  (Number(order.amount_to_collect) > 0
+                    ? `Food and delivery already paid at the shop. Pay the rider ${inr(order.amount_to_collect)} (tip).`
+                    : "Food and delivery already paid at the shop. Nothing to pay the rider.")}
                 {order.payment_method === "UPI_TO_ADMIN" &&
                   (Number(order.amount_to_collect) > 0
                     ? `Paid online. Pay the rider ${inr(order.amount_to_collect)}.`

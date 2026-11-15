@@ -12,7 +12,9 @@ import {
   calculateSplit,
   calculateVendorAdminPayable,
   calculateVendorCommission,
+  recomputeForPaymentMethod,
   isAllowedTipAmount,
+  isCommissionFree,
   money,
 } from "../../src/utils/orderMath.js";
 
@@ -62,18 +64,17 @@ describe("four-way split (§11, §12)", () => {
     royalty_per_order: 3,
   };
 
-  it("launch promo: rider keeps the whole delivery fee (spec example)", () => {
-    const r = calculateSplit({ ...base, is_launch_promo_active: true });
+  it("rider keeps the whole delivery fee (spec example)", () => {
+    const r = calculateSplit({ ...base });
     assert.equal(s(r.rider_earning), "70.00"); // 50 + 20
     assert.equal(s(r.franchise_profit), "22.00"); // 10 + 15 - 3, NOT zero
     assert.equal(s(r.super_admin_profit), "3.00");
   });
 
-  it("normal mode: rider commission + tip; franchise keeps its share", () => {
+  it("the zone's franchise_profit and the promo flag no longer change the split", () => {
     const r = calculateSplit({ ...base, is_launch_promo_active: false });
-    assert.equal(s(r.rider_earning), "45.00"); // 25 + 20
-    assert.equal(s(r.franchise_profit), "42.00"); // 20 + 10 + 15 - 3
-    assert.equal(s(r.super_admin_profit), "3.00");
+    assert.equal(s(r.rider_earning), "70.00");
+    assert.equal(s(r.franchise_profit), "22.00");
   });
 
   it("a negative franchise profit is kept, never clamped to zero", () => {
@@ -94,6 +95,16 @@ describe("amount to collect (§14)", () => {
   });
   it("prepaid at hotel collects delivery + tip only", () => {
     assert.equal(s(calculateAmountToCollect({ payment_method: "PREPAID_AT_HOTEL", ...order })), "50.00");
+  });
+  it("paid at hotel incl. delivery collects only the tip (§14.4)", () => {
+    assert.equal(s(calculateAmountToCollect({ payment_method: "PREPAID_FULL_AT_HOTEL", ...order })), "20.00");
+    assert.equal(s(calculateAmountToCollect({ payment_method: "PREPAID_FULL_AT_HOTEL", ...order, rider_tip: 0 })), "0.00");
+    // the hotel hands over the fee, so the rider still receives fee + tip in cash
+    assert.equal(
+      s(calculateCashInHandIncrease({ payment_method: "PREPAID_FULL_AT_HOTEL", delivery_fee: 30, amount_to_collect: 20 })),
+      "50.00"
+    );
+    assert.equal(s(calculateVendorAdminPayable({ payment_method: "PREPAID_FULL_AT_HOTEL", vendor_earning: 90, vendor_commission: 10 })), "-10.00");
   });
   it("UPI to admin collects nothing", () => {
     assert.equal(s(calculateAmountToCollect({ payment_method: "UPI_TO_ADMIN", ...order })), "0.00");
@@ -160,6 +171,87 @@ describe("full order financials", () => {
         });
         const allocated = addMoney(f.vendor_earning, f.rider_earning, f.franchise_profit, f.super_admin_profit);
         assert.equal(s(allocated), s(f.grand_total), `${payment_method} promo=${promo}`);
+      }
+    }
+  });
+
+  it("trial HOTEL_DIRECT: no commission, royalty still charged, rider keeps the fee (§10.1)", () => {
+    for (const payment_method of ["COD", "PREPAID_AT_HOTEL"]) {
+      const f = calculateOrderFinancials({
+        item_total: 700,
+        zone,
+        franchise,
+        payment_method,
+        commission_rate: 10,
+        commission_free: true,
+      });
+      assert.equal(s(f.vendor_commission), "0.00");
+      assert.equal(s(f.vendor_earning), "700.00");
+      assert.equal(s(f.super_admin_profit), "3.00");
+      assert.equal(s(f.rider_earning), "30.00");
+      assert.equal(s(f.franchise_profit), "-3.00"); // royalty only, never clamped
+      assert.equal(s(f.vendor_admin_payable), payment_method === "COD" ? "700.00" : "0.00");
+      const allocated = addMoney(f.vendor_earning, f.rider_earning, f.franchise_profit, f.super_admin_profit);
+      assert.equal(s(allocated), s(f.grand_total));
+    }
+  });
+
+  it("isCommissionFree: only HOTEL_DIRECT inside the hotel's trial (§10.1)", () => {
+    const future = new Date(Date.now() + 86_400_000);
+    const past = new Date(Date.now() - 86_400_000);
+    assert.equal(isCommissionFree({ order_type: "HOTEL_DIRECT", commission_free_until: future }), true);
+    assert.equal(isCommissionFree({ order_type: "HOTEL_DIRECT", commission_free_until: past }), false);
+    assert.equal(isCommissionFree({ order_type: "HOTEL_DIRECT", commission_free_until: null }), false);
+    assert.equal(isCommissionFree({ order_type: "FOOD_MARKETPLACE", commission_free_until: future }), false);
+    assert.equal(isCommissionFree({}), false);
+    // the end moment itself is already past the trial
+    assert.equal(isCommissionFree({ order_type: "HOTEL_DIRECT", commission_free_until: past }, past), false);
+  });
+
+  it("after the trial a Call Rider Now order pays 1% commission and royalty", () => {
+    const f = calculateOrderFinancials({
+      item_total: 700,
+      zone,
+      franchise,
+      payment_method: "PREPAID_AT_HOTEL",
+      commission_rate: 1,
+      commission_free: false,
+    });
+    assert.equal(s(f.vendor_commission), "7.00");
+    assert.equal(s(f.super_admin_profit), "3.00");
+    assert.equal(s(f.vendor_admin_payable), "-7.00"); // the hotel owes the franchise
+    assert.equal(s(f.rider_earning), "30.00");
+  });
+
+  it("storefront orders keep commission and royalty", () => {
+    const f = calculateOrderFinancials({
+      item_total: 700,
+      zone,
+      franchise,
+      payment_method: "COD",
+      commission_rate: 10,
+      commission_free: false,
+    });
+    assert.equal(s(f.vendor_commission), "70.00");
+    assert.equal(s(f.super_admin_profit), "3.00");
+    assert.equal(s(f.franchise_profit), "67.00");
+  });
+
+  it("re-pricing for another payment method never changes the split (§19.1)", () => {
+    const stored = calculateOrderFinancials({ item_total: 700, zone, franchise, payment_method: "COD", commission_rate: 10, rider_tip: 20 });
+    const order = {
+      item_total: stored.item_total,
+      delivery_fee: stored.delivery_fee,
+      rider_tip: stored.rider_tip,
+      discount_amount: 0,
+      shop_markup_profit: 0,
+      commission_rate: 10,
+      vendor_id: 1,
+    };
+    for (const method of ["COD", "PREPAID_AT_HOTEL", "PREPAID_FULL_AT_HOTEL", "UPI_TO_ADMIN"]) {
+      const f = recomputeForPaymentMethod(order, franchise, method);
+      for (const key of ["grand_total", "vendor_commission", "vendor_earning", "rider_earning", "franchise_profit", "super_admin_profit"]) {
+        assert.equal(s(f[key]), s(stored[key]), `${method} ${key}`);
       }
     }
   });

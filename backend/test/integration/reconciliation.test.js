@@ -37,8 +37,8 @@ describe("reconciliation (§41)", () => {
     assert.equal(d.totals.orders, 2);
     assert.equal(d.totals.grand_total, "460.00");
     assert.equal(d.totals.vendor_earning, "360.00");
-    assert.equal(d.totals.rider_earning, "40.00");
-    assert.equal(d.totals.franchise_profit, "54.00");
+    assert.equal(d.totals.rider_earning, "60.00");
+    assert.equal(d.totals.franchise_profit, "34.00");
     assert.equal(d.totals.super_admin_royalty, "6.00");
     // the four shares account for the whole order total
     const sum = [d.totals.vendor_earning, d.totals.rider_earning, d.totals.franchise_profit, d.totals.super_admin_royalty].reduce((n, v) => n + Number(v), 0);
@@ -126,7 +126,10 @@ describe("earnings and vendor ledger", () => {
     await deliverTwo();
     const e = await api("GET", "/rider/earnings", { token: w.riders[0].token });
     assert.equal(e.body.data.today.deliveries, 1);
-    assert.equal(e.body.data.wallet_earnings, e.body.data.today.earning);
+    // Earnings kept from cash are already paid; the wallet holds only what the
+    // franchise still owes (deliverTwo uses COD and prepaid, both kept in full).
+    assert.equal(e.body.data.wallet_earnings, "0.00");
+    assert.equal(e.body.data.today.earning, "30.00");
     const v = await api("GET", "/vendor/ledger", { token: w.vendorToken });
     const total = v.body.data.items.reduce((n, r) => n + Number(r.amount), 0);
     assert.equal(total, Number(v.body.data.admin_payable_balance));

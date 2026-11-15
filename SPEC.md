@@ -757,7 +757,7 @@ vendor_commission =
     item_total × vendor.commission_rate / 100
 ```
 
-rounded to two decimal places. The rate used is copied onto `Order.commission_rate` at rider pickup (null when there is no partner vendor), so the split can be re-derived after the vendor's rate changes.
+`vendor.commission_rate` defaults to 10% for new hotels. The Super Admin sets each franchise's default (`Franchise.default_commission_rate`, default 10) with `PATCH /api/v1/super/franchises/:id` `{ default_commission_rate, apply_to_hotels? }` (`apply_to_hotels: true` also sets it on every hotel already in that franchise) and can change a single hotel's rate with `PATCH /api/v1/admin/vendors/:id`. The franchise admin sees the rate but cannot edit it. Rounded to two decimal places. The rate used is copied onto `Order.commission_rate` at rider pickup (null when there is no partner vendor), so the split can be re-derived after the vendor's rate changes.
 
 ```text
 vendor_earning =
@@ -766,19 +766,33 @@ vendor_earning =
 
 For a custom-buy order with no partner vendor, vendor commission is zero.
 
+## 10.1 "Call Rider Now" free trial
+
+An order started by the vendor's "Call Rider Now" button is `order_type = HOTEL_DIRECT` (with or without a cart). Each hotel has `Vendor.commission_free_until` (set by the franchise admin, editable per hotel). The franchise admin or Super Admin sets the date per hotel (`PATCH /api/v1/admin/vendors/:id` with `commission_free_until`, end of that IST day, or `null` for no trial). Evaluated once at rider pickup:
+
+```text
+if order_type = HOTEL_DIRECT and now < vendor.commission_free_until:
+    commission_rate   = 0   (stored on the order)
+    vendor_commission = 0
+    vendor_earning    = item_total
+else:
+    normal commission (vendor.commission_rate) on item_total
+```
+
+The Super Admin royalty (`royalty_per_order`) is charged on every order, during the trial as well; a trial order therefore has `franchise_profit = shop_markup_profit - royalty_per_order` (negative is kept). Storefront/marketplace orders (`FOOD_MARKETPLACE`) never get a trial. Commission is never taken from the delivery fee; the rider keeps all of it (§11). Stored values are never recomputed, so changing the date affects only orders picked up afterwards.
+
 ---
 
-# 11. Normal Four-Way Split
+# 11. Four-Way Split
 
-Normal mode uses:
+The rider always keeps the whole delivery fee:
 
 ```text
 rider_earning =
-    zone.rider_commission + rider_tip
+    zone.delivery_fee + rider_tip
 
 franchise_profit =
-    zone.franchise_profit
-  + shop_markup_profit
+    shop_markup_profit
   + vendor_commission
   - royalty_per_order
 
@@ -786,48 +800,15 @@ super_admin_profit =
     royalty_per_order
 ```
 
-The royalty is therefore represented as a separate Super Admin economic share while also being deducted from the franchise's net profit.
+`zone.rider_commission` and `zone.franchise_profit` no longer take part in the split. The royalty is a separate Super Admin share that is also deducted from the franchise's net profit. During a Call Rider Now trial (§10.1) `vendor_commission` is 0; `royalty_per_order` is unchanged.
 
 All four values MUST be rounded to two decimals.
 
 ---
 
-# 12. Correct Launch Promo Math
+# 12. Launch Promo (retired)
 
-The launch-promo rule is explicitly:
-
-```text
-franchise_profit =
-    shop_markup_profit
-  + vendor_commission
-  - royalty_per_order
-```
-
-The previous incorrect implementation that simply forced:
-
-```text
-franchise_profit = 0
-```
-
-MUST NOT be used.
-
-During launch promo:
-
-```text
-rider_earning =
-    zone.delivery_fee
-  + rider_tip
-
-franchise_profit =
-    shop_markup_profit
-  + vendor_commission
-  - royalty_per_order
-
-super_admin_profit =
-    royalty_per_order
-```
-
-Thus the launch promo gives 100% of the delivery fee to the rider while preserving vendor commission and shop markup economics.
+The rule in §11 (rider keeps 100% of the delivery fee) is now permanent, so `Franchise.is_launch_promo_active` no longer changes any amount. The column is kept for compatibility and the admin UI no longer shows a switch.
 
 If the resulting franchise profit is negative, it remains negative as a real accounting value; it MUST NOT silently be converted to zero.
 
@@ -866,6 +847,7 @@ The platform supports exactly:
 
 - `COD`
 - `PREPAID_AT_HOTEL`
+- `PREPAID_FULL_AT_HOTEL`
 - `UPI_TO_ADMIN`
 
 ## 14.1 COD
@@ -923,6 +905,19 @@ The rider MUST NOT be instructed to collect the prepaid amount in cash.
 
 The financial record still stores the full `grand_total` for reconciliation.
 
+## 14.4 PREPAID_FULL_AT_HOTEL
+
+The customer paid the hotel the whole bill, food and delivery (typical for a "Call Rider Now" order). Partner-vendor orders only; never offered on the storefront. The hotel hands the rider the delivery fee at pickup, so nobody owes anybody afterwards:
+
+```text
+collect_from_hotel  = delivery_fee                     -- at pickup, shown to rider and hotel
+amount_to_collect   = rider_tip - delivery_side_discount (never negative)  -- at the door
+cash received       = delivery_fee + amount_to_collect -- calculateCashInHandIncrease
+vendor_admin_payable = -vendor_commission              -- 0 during the Call Rider Now trial
+```
+
+At delivery the rider keeps all of it as their earning (§15), so `cash_in_hand` and `wallet_earnings` do not change. `orderView` exposes `collect_from_hotel`.
+
 ---
 
 # 15. Rider Cash-In-Hand Safety
@@ -938,25 +933,49 @@ if rider.cash_in_hand >= rider.max_cash_limit:
 
 Use `>=`, not only `>`.
 
-At delivery:
+At delivery the rider keeps their own earning out of the customer's cash, so an earning is paid exactly once:
 
 ```text
-rider.cash_in_hand += amount_to_collect
+cash      = amount_to_collect
+            (custom-buy with rider_paid_at_shop = true: grand_total - item_total)
+kept      = min(cash, rider_earning)          -- delivery fee + tip + surge
+rider.cash_in_hand    += cash - kept          -- money owed to the hotel / franchise
+rider.wallet_earnings += rider_earning - kept -- what the franchise still owes the rider
+                       + milestone bonus
 ```
 
-For custom-buy where the rider paid the shop personally:
+COD: `cash_in_hand` grows by the food money, wallet 0. Prepaid at hotel: both 0. UPI to admin: cash 0, wallet += fee. Ledger: the `RIDER_CASH / ORDER_PAYMENT` entry records the full cash collected; a `RIDER_EARNING / PAID_FROM_CASH` entry of `-kept` (key `order:{id}:earning-from-cash`) records the earning kept. The rider's own advance on a custom-buy is never counted as customer cash.
 
-```text
-rider.cash_in_hand += grand_total - item_total
-```
+---
 
-provided that:
+## 15.1 Rider → hotel cash handover
 
-```text
-rider_paid_at_shop = true
-```
+A rider at or above `max_cash_limit` cannot accept orders. The block is computed (`cash_in_hand >= max_cash_limit`), so any confirmed handover below the limit lifts it.
 
-This prevents the rider's own advance payment from being incorrectly counted as customer cash collected.
+The rider hands the hotel the **food money only**: for each COD order with a partner vendor (not rider-paid), `min(item_total, cash collected)`. The delivery fee, tip and rain surge stay in the rider's `cash_in_hand` and are settled with the franchise admin. The hotel's own bill therefore equals the cash it receives.
+
+`RiderCashHandover` (franchise_id, rider_id, vendor_id nullable, amount, status `PENDING|CONFIRMED|REJECTED`, initiated_by `RIDER|VENDOR|ADMIN`, cash_before/after, note, resolved_by/at):
+
+- Rider reports "I paid" → `PENDING`; the hotel confirms or rejects with one tap. Amount ≤ food owed to that vendor (pending counts) and ≤ `cash_in_hand`. Partial amounts are allowed.
+- The vendor can record cash received directly (confirmed at once). The franchise admin can confirm/reject any pending row, and the direct admin cash settlement now also writes a `RiderCashHandover` (`ADMIN`, no vendor).
+- On confirm, in one transaction with `FOR UPDATE` on the rider row: `rider.cash_in_hand -= amount`; for a vendor handover `vendor.admin_payable_balance -= amount`. Confirming twice is a no-op.
+
+The franchise admin and the Super Admin can raise or lower each rider's limit: `PATCH /api/v1/admin/riders/:id/cash-limit` `{ max_cash_limit }` (1-100000). It emits `cash_limit_changed` to the rider and the franchise room; the rider is unblocked or blocked at once because the block is computed.
+
+Endpoints: `GET /rider/me/cash-owed`, `POST /rider/me/cash-handover` (Idempotency-Key); `GET /vendor/cash-handovers`, `GET /vendor/cash-riders`, `POST /vendor/cash-handovers` (Idempotency-Key), `POST /vendor/cash-handovers/:id/confirm|reject`; `GET /admin/cash-handovers`, `POST /admin/cash-handovers/:id/confirm|reject`.
+
+Socket events: `cash_limit_reached` (rider, after the delivery that reaches the limit), `cash_handover_requested` (vendor, franchise), `cash_handover_resolved` (vendor), `cash_settled` (rider, franchise), `cash_handover_rejected` (rider). Push types: `CASH_LIMIT_REACHED`, `CASH_HANDOVER_REQUESTED`, `CASH_SETTLED`, `CASH_HANDOVER_REJECTED`.
+
+## 15.2 Rider earnings payout and net settlement
+
+`wallet_earnings` holds only what the rider could not keep from cash (UPI orders, milestone bonuses). The franchise pays it with `RiderPayout` (franchise_id, rider_id, amount, method `CASH|UPI|BANK|NETTED`, note, wallet_before/after, recorded_by); one locked transaction, `amount <= wallet_earnings`.
+
+- `POST /api/v1/admin/riders/:id/payouts` `{ amount, method, note? }` (Idempotency-Key) — part or all of the wallet.
+- `POST /api/v1/admin/riders/:id/net-settlement` (Idempotency-Key) — collects all `cash_in_hand` (an `ADMIN` `RiderCashHandover`) and pays all `wallet_earnings` (`NETTED` payout) together; returns `net = cash - wallet` and `direction` `RIDER_PAYS | FRANCHISE_PAYS | EVEN`. 409 `NOTHING_TO_SETTLE` when both are 0.
+- `/admin/overview` and `/admin/riders` return `net_due = cash_in_hand - wallet_earnings`.
+- Socket `earnings_paid` to the rider and franchise rooms; push type `EARNINGS_PAID`.
+
+Balances from before this rule (cash that still includes fees, wallet that still includes the same fees) are cleared with a net settlement.
 
 ---
 
@@ -991,6 +1010,26 @@ order:{order_id}:vendor-payable
 ```
 
 so a retried delivery request cannot duplicate the payable.
+
+During a trial (§10.1) the payable is `item_total` under COD and `0` under `PREPAID_AT_HOTEL`; after it the normal rule applies (prepaid: `-vendor_commission`).
+
+## 16.1 Franchise ↔ hotel settlement
+
+`vendor.admin_payable_balance` is signed: positive = the franchise owes the hotel; negative = the hotel owes the franchise (storefront commission). The hotel never pays per order. The franchise admin settles it in person daily, weekly or monthly and records the payment (`VendorSettlement`: franchise_id, vendor_id, direction `VENDOR_PAID_FRANCHISE | FRANCHISE_PAID_VENDOR`, amount, method `CASH|UPI|BANK`, note, balance_before/after, recorded_by). One locked transaction (`SELECT … FOR UPDATE` on the vendor row):
+
+```text
+VENDOR_PAID_FRANCHISE: balance += amount   (amount <= -balance)
+FRANCHISE_PAID_VENDOR: balance -= amount   (amount <= balance)
+```
+
+Endpoints (franchise admin / super admin, `x-franchise-slug` required):
+
+- `PATCH /api/v1/admin/vendors/:id` — `commission_free_until` (franchise admin or Super Admin) and `commission_rate` 0-100 (Super Admin only; 403 for the franchise admin).
+- `GET /api/v1/admin/vendors` — balance, who owes whom, commission today / 7 days / 30 days, last settlement.
+- `GET /api/v1/admin/vendors/:id/statement?from&to` — delivered orders (order type, item total, commission, payable), totals and settlements in the range (max 31 days).
+- `POST /api/v1/admin/vendors/:id/settlements` — records a payment; `Idempotency-Key` required.
+
+`GET /api/v1/vendor/ledger` also returns `commission`, `commission_free` per row and the latest `settlements`. Socket event `vendor_settlement_recorded` goes to the vendor room.
 
 ---
 
@@ -1060,6 +1099,8 @@ This is required to prevent two riders from simultaneously accepting the same or
 Endpoint:
 
 `POST /api/v1/orders/quick-call`
+
+A call started by a vendor always creates a `HOTEL_DIRECT` order, which is commission-free during the hotel's free trial and carries normal commission afterwards; the royalty is always charged (§10.1). This holds even when a cart is sent.
 
 ### Step 1 — Royalty wallet gate
 
@@ -1164,6 +1205,14 @@ The response may include:
 - rider delivery note
 
 only for the authorized rider handling that order.
+
+## 19.1 Correcting the payment method before delivery
+
+`PATCH /api/v1/orders/:id/payment-method` `{ payment_method }` — the assigned rider only, while the order is `PICKED_UP` or `LOCATION_SHARED` (409 `NOT_PICKED_UP`, `ORDER_ALREADY_DELIVERED`, `ORDER_CANCELLED` otherwise; 403 for any other role or rider).
+
+In one transaction with `FOR UPDATE` on the order, the order is re-priced from the values stored at pickup (`item_total`, `delivery_fee`, `rider_tip` — which already holds tips and the rain surge — discount, markup and the stored `commission_rate`). Only `payment_method`, `amount_to_collect` and `vendor_admin_payable` change; `grand_total`, commission, earning, profit and royalty must stay identical or the request is refused (`ORDER_NOT_REPRICEABLE`). The same method is a no-op. Prepaid methods still need a partner vendor (422). Nothing is in the ledger before delivery, so no reversal entries are needed. Every change is audited (`order.payment_method_changed`) and emits `order_payment_changed` to the order, vendor and franchise rooms.
+
+A delivered order's payment method is final.
 
 ---
 
@@ -1324,7 +1373,7 @@ Inside one transaction:
 8. Apply customer gate verification.
 9. Apply cash collection.
 10. Apply vendor payable.
-11. Apply rider earnings.
+11. Apply rider earnings (kept from cash first, the rest to the wallet, §15).
 12. Apply milestone bonus if earned.
 13. Deduct royalty exactly once.
 14. Write all settlement entries.
@@ -1666,6 +1715,12 @@ For `rider_location_move`, the server derives the franchise from the rider/order
 | Endpoint | Purpose | Transaction |
 |---|---|---|
 | `POST /api/v1/orders/quick-call` | Create rider request | Yes |
+| `GET/POST /api/v1/rider/me/cash-owed`, `cash-handover` | Rider cash handover (§15.1) | Yes + `FOR UPDATE` |
+| `/api/v1/vendor/cash-handovers…` | Vendor confirms/records rider cash (§15.1) | Yes + `FOR UPDATE` |
+| `/api/v1/admin/cash-handovers…` | Admin resolves pending handovers | Yes + `FOR UPDATE` |
+| `/api/v1/admin/vendors…` | Hotel statements and settlements (§16.1) | Yes + `FOR UPDATE` |
+| `PATCH /api/v1/orders/:id/payment-method` | Rider corrects payment method (§19.1) | Yes + `FOR UPDATE` |
+| `POST /api/v1/admin/riders/:id/payouts`, `net-settlement` | Rider earnings payout (§15.2) | Yes + `FOR UPDATE` |
 | `POST /api/v1/orders/:id/accept` | Atomic rider acceptance | Yes + `FOR UPDATE` |
 | `PUT /api/v1/orders/:id/rider-pickup` | Bill/customer/payment/pickup | Yes |
 | `POST /api/v1/public/drop/:token/voice-and-pin` | Rural GPS/voice route | Yes |
@@ -1935,9 +1990,13 @@ Every discrepancy must be traceable through:
 
 Do not rely only on mutable aggregate balances for historical accounting.
 
+The vendor balance check compares `admin_payable_balance` with the expected ledger total in invariant 23 (VENDOR_PAYABLE entries, minus confirmed rider handovers, plus/minus hotel settlements).
+
 ---
 
 # 42. Required Test Cases
+
+Added with §10.1/§15.1/§16.1: trial HOTEL_DIRECT delivery (commission 0, royalty still charged, rider keeps the full fee); trial ended → the hotel's normal commission; storefront order inside a trial still pays commission; storefront order keeps commission and royalty; handover owed excludes the delivery fee; handover confirm/reject/idempotent/cross-tenant; vendor settlement partial/overpay/wrong direction/idempotent/role guard; reconciliation clean with handovers and settlements. See `backend/test/integration/{commissionFree,cashHandover,vendorSettlement}.test.js` and `backend/test/unit/money.test.js`.
 
 ## Tenant uniqueness
 
@@ -2155,13 +2214,16 @@ The following statements MUST always remain true:
 5. Every money-changing event has an idempotent reference.
 6. Rain surge can be applied only once per order.
 7. A tip increases rider_tip, rider_earning, grand_total and amount_to_collect together.
-8. Launch promo franchise profit =
-   shop_markup_profit + vendor_commission - royalty_per_order.
-9. COD cash-in-hand increase equals amount_to_collect.
-10. Prepaid-at-hotel does not make the rider collect the item amount.
+8. franchise_profit = shop_markup_profit + vendor_commission - royalty_per_order,
+   and the rider always keeps the whole delivery fee (rider_earning = delivery_fee + tip).
+9. COD cash-in-hand increase equals amount_to_collect minus the rider earning kept from it.
+10. Prepaid-at-hotel does not make the rider collect the item amount;
+    PREPAID_FULL_AT_HOTEL does not make the rider collect the delivery fee
+    from the customer either (the hotel hands it over at pickup).
 11. UPI-to-admin makes rider amount_to_collect zero.
 12. Vendor payable is vendor_earning, not raw item_total.
-13. Royalty is deducted once per delivered order.
+13. Royalty is deducted once per delivered order, including free-trial
+    HOTEL_DIRECT orders.
 14. Rider acceptance uses PostgreSQL FOR UPDATE.
 15. Delivery settlement is atomic.
 16. Verified gate GPS is franchise-scoped and preferred for future delivery.
@@ -2169,6 +2231,16 @@ The following statements MUST always remain true:
 18. Rider live tracking is authorized by rider/order ownership.
 19. Customer Magic Links cannot access another order or franchise.
 20. All financial calculations use two-decimal safe money arithmetic.
+21. HOTEL_DIRECT ("Call Rider Now") orders carry no vendor commission only while the hotel's free trial runs.
+22. The rider hands a hotel only food money; the delivery fee stays with the rider.
+23. vendor.admin_payable_balance = Σ VENDOR_PAYABLE entries
+    - Σ confirmed rider→hotel handovers
+    + Σ VENDOR_PAID_FRANCHISE - Σ FRANCHISE_PAID_VENDOR settlements.
+24. A rider earning is paid exactly once: kept from cash at delivery or paid out
+    from wallet_earnings (rider wallet = Σ RIDER_EARNING entries incl. PAID_FROM_CASH
+    - Σ RiderPayout).
+25. The payment method can change only while the order is PICKED_UP or
+    LOCATION_SHARED, and never changes grand_total or the four-way split.
 ```
 
 This document is the authoritative production specification for the corrected multi-franchise hyperlocal delivery architecture.

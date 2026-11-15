@@ -1,11 +1,18 @@
 import crypto from "node:crypto";
 import assert from "node:assert/strict";
+import { prisma } from "./app.js";
 import { nextPhone } from "./fixtures.js";
 
 export const uuid = () => crypto.randomUUID();
 
-/** Vendor calls a rider with an itemised cart. Returns the created order. */
-export async function placeOrder(api, w, { items, phone = nextPhone() } = {}) {
+/**
+ * Vendor calls a rider with an itemised cart. Returns the created order.
+ * A vendor-started call is a commission-free HOTEL_DIRECT order (§10.1). By
+ * default the order is re-typed FOOD_MARKETPLACE so it behaves like a
+ * storefront order (commission + royalty); pass { storefront: false } to keep
+ * the real "Call Rider Now" behaviour.
+ */
+export async function placeOrder(api, w, { items, phone = nextPhone(), storefront = true } = {}) {
   const res = await api("POST", "/orders/quick-call", {
     token: w.vendorToken,
     headers: { "Idempotency-Key": uuid() },
@@ -15,7 +22,11 @@ export async function placeOrder(api, w, { items, phone = nextPhone() } = {}) {
     },
   });
   assert.equal(res.status, 201, JSON.stringify(res.body));
-  return { ...res.body.data.order, phone };
+  const order = res.body.data.order;
+  if (storefront) {
+    await prisma.order.update({ where: { id: order.id }, data: { order_type: "FOOD_MARKETPLACE" } });
+  }
+  return { ...order, phone };
 }
 
 export const accept = (api, rider, id) =>

@@ -15,6 +15,18 @@ export const coordStr = (value) =>
  * Order as seen by the rider / vendor / franchise staff. Deliberately omits
  * franchise_profit and super_admin_profit.
  */
+/** Cash the rider hands the vendor: the food money of a COD order, never the delivery fee. */
+export function payToVendor(order) {
+  if (!order.vendor_id || order.payment_method !== "COD" || order.rider_paid_at_shop) return 0;
+  const food = Number(order.item_total);
+  const collect = Number(order.amount_to_collect);
+  return Math.min(food, collect);
+}
+
+/** True when the vendor order was priced without commission (rate stored as 0 at pickup). */
+export const isCommissionFreeOrder = (order) =>
+  Boolean(order.vendor_id) && order.commission_rate !== null && order.commission_rate !== undefined && Number(order.commission_rate) === 0;
+
 export function orderView(order) {
   return {
     id: order.id,
@@ -49,6 +61,13 @@ export function orderView(order) {
     grand_total: moneyStr(order.grand_total),
     amount_to_collect: moneyStr(order.amount_to_collect),
     rider_earning: moneyStr(order.rider_earning),
+    // Bill breakdown for the rider (§10.1): what to hand the hotel, and the
+    // commission the hotel settles with the franchise (0 for Call Rider Now).
+    vendor_commission: moneyStr(order.vendor_commission),
+    commission_free: isCommissionFreeOrder(order),
+    pay_vendor: moneyStr(payToVendor(order)),
+    // §14.4: delivery fee the hotel hands the rider at pickup.
+    collect_from_hotel: order.payment_method === "PREPAID_FULL_AT_HOTEL" ? moneyStr(order.delivery_fee) : "0.00",
     payment_method: order.payment_method,
     rain_surge_applied: order.rain_surge_applied,
     is_batched_addon: order.is_batched_addon,

@@ -190,7 +190,7 @@ export default function PickupForm({ order, zones, onPickedUp, onError }) {
         <p className="mb-1 text-sm font-semibold">4. Payment method</p>
         <div className="grid gap-2">
           {Object.entries(PAYMENT_LABELS)
-            .filter(([value]) => value !== "PREPAID_AT_HOTEL" || order.vendor_id)
+            .filter(([value]) => !value.startsWith("PREPAID") || order.vendor_id)
             .map(([value, label]) => (
               <button
                 key={value}
