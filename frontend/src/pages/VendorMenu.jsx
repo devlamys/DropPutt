@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import Modal from "../components/Modal.jsx";
 import { useToast } from "../components/Toast.jsx";
 import ProductFormModal from "../components/vendor/ProductFormModal.jsx";
+import { useSocket } from "../hooks/useSocket.js";
 import api, { getErrorMessage } from "../utils/api.js";
 import { inr } from "../utils/format.js";
 
@@ -25,6 +26,15 @@ export default function VendorMenu() {
   }, [toast]);
   useEffect(() => {
     load();
+  }, [load]);
+
+  // An order takes stock and a cancelled one gives it back: keep the counts live.
+  useSocket({ order_status_changed: () => void load(), order_cancelled: () => void load() });
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, 30_000);
+    return () => clearInterval(id);
   }, [load]);
 
   const replace = (saved) => setProducts((list) => list.map((p) => (p.id === saved.id ? saved : p)));
