@@ -459,12 +459,18 @@ router.put(
       // and amount_to_collect follows the payment method (so UPI stays 0).
       const rider_tip = applySurge ? addMoney(order.rider_tip, surge) : money(order.rider_tip);
 
+      // §10.1: decided once, at pickup, from the hotel's trial date.
+      const commission_free = isCommissionFree({
+        order_type: order.order_type,
+        commission_free_until: order.vendor?.commission_free_until,
+      });
       const financials = calculateOrderFinancials({
         item_total,
         zone,
         franchise,
         payment_method,
         commission_rate: order.vendor?.commission_rate ?? 0,
+        commission_free,
         rider_tip,
         discount_amount: order.discount_amount,
         shop_markup_profit: order.shop_markup_profit,
@@ -501,7 +507,9 @@ router.put(
           turning_point: order.turning_point ?? customer.turning_point,
           voice_note_url: order.voice_note_url ?? customer.voice_direction_url,
           // Rate fixed at pickup so the commission split can be re-derived later.
-          commission_rate: order.vendor_id ? moneyStr(order.vendor.commission_rate) : null,
+          commission_rate: order.vendor_id
+            ? moneyStr(commission_free ? 0 : order.vendor.commission_rate)
+            : null,
           item_total: moneyStr(financials.item_total),
           delivery_fee: moneyStr(financials.delivery_fee),
           rider_tip: moneyStr(financials.rider_tip),

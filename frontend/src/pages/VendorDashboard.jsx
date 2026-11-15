@@ -179,6 +179,13 @@ export default function VendorDashboard() {
         </div>
       </header>
 
+      {shop?.trial_active && shop.commission_free_until && (
+        <p className="mx-4 mt-4 rounded-2xl bg-green-50 px-4 py-3 text-sm text-green-800 ring-1 ring-green-200">
+          🎁 “Call Rider Now” has no commission for you until{" "}
+          <strong>{new Date(new Date(shop.commission_free_until).getTime() - 1).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</strong>.
+        </p>
+      )}
+
       <CashHandoverCard reloadKey={cashTick} toast={toast} />
 
       <main className="space-y-6 px-4 pt-5">

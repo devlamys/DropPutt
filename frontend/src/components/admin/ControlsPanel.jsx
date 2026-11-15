@@ -40,30 +40,14 @@ export default function ControlsPanel({ franchise, onUpdated, toast }) {
   return (
     <div className="space-y-4">
       <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="flex items-center gap-2 font-bold">
-              <Rocket className="h-5 w-5 text-orange-600" /> Launch Promo
-            </h3>
-            <p className="mt-1 text-sm text-slate-600">
-              Rider gets 100% of the delivery fee. Franchise keeps vendor commission + shop markup, minus royalty.
-            </p>
-          </div>
-          {busy === "promo" ? (
-            <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-          ) : (
-            <Switch
-              label="Launch promo"
-              checked={franchise.is_launch_promo_active}
-              onChange={(value) =>
-                save("promo", { is_launch_promo_active: value }, (f) =>
-                  f.is_launch_promo_active ? "🚀 Launch promo ON" : "Launch promo OFF"
-                )
-              }
-            />
-          )}
-        </div>
-        <p className="mt-2 text-xs text-slate-500">Applies to orders picked up from now on.</p>
+        <h3 className="flex items-center gap-2 font-bold">
+          <Rocket className="h-5 w-5 text-orange-600" /> How orders are split
+        </h3>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-600">
+          <li>The rider always keeps 100% of the delivery fee.</li>
+          <li>Storefront orders: franchise earns the vendor commission, minus royalty. The hotel settles it with you from the Hotels tab.</li>
+          <li>“Call Rider Now” orders: no commission while the hotel’s free trial runs, then 1% of the food amount. The royalty is charged on every order, trial or not.</li>
+        </ul>
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">

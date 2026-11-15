@@ -67,6 +67,7 @@ export default function FranchisesPanel({ franchises, current, onSelect, onChang
                 {f.slug}.{BASE_DOMAIN} · wallet {inr(f.wallet_balance)} · {f.counts?.vendors ?? 0} vendors · {f.counts?.riders ?? 0} riders · {f.counts?.orders ?? 0} orders
               </p>
             </div>
+            <CommissionDefault franchise={f} onChanged={onChanged} toast={toast} />
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -120,4 +121,56 @@ function slugify(name) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 63);
+}
+
+/** Super Admin: the commission % hotels of this franchise get by default. */
+function CommissionDefault({ franchise, onChanged, toast }) {
+  const [rate, setRate] = useState(String(Number(franchise.default_commission_rate ?? 10)));
+  const [busy, setBusy] = useState(null);
+
+  async function save(applyToHotels) {
+    setBusy(applyToHotels ? "apply" : "save");
+    try {
+      const { data } = await api.patch(`/super/franchises/${franchise.id}`, {
+        default_commission_rate: Number(rate),
+        ...(applyToHotels ? { apply_to_hotels: true } : {}),
+      });
+      toast(
+        applyToHotels
+          ? `Default ${rate}% saved and set on ${data.data.hotels_updated} hotel(s)`
+          : `Default commission ${rate}% saved (new hotels only)`,
+        "success"
+      );
+      onChanged();
+    } catch (error) {
+      toast(getErrorMessage(error), "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="flex w-full flex-wrap items-center gap-2 text-sm">
+      <label htmlFor={`dc-${franchise.id}`} className="text-xs font-semibold text-slate-600">
+        Default hotel commission
+      </label>
+      <input
+        id={`dc-${franchise.id}`}
+        type="number"
+        min="0"
+        max="100"
+        step="0.01"
+        value={rate}
+        onChange={(e) => setRate(e.target.value)}
+        className="w-20 rounded-lg border border-slate-300 px-2 py-1"
+      />
+      <span className="text-xs text-slate-500">%</span>
+      <button type="button" disabled={busy !== null} onClick={() => save(false)} className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold disabled:opacity-50">
+        {busy === "save" ? "…" : "Save"}
+      </button>
+      <button type="button" disabled={busy !== null} onClick={() => save(true)} className="rounded-lg bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50">
+        {busy === "apply" ? "…" : "Save & apply to all hotels"}
+      </button>
+    </div>
+  );
 }

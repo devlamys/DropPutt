@@ -6,8 +6,9 @@ import { prisma } from "../config/prisma.js";
 import { authenticate, requireRole } from "../middleware/auth.js";
 import { buildPage, parsePagination } from "../utils/pagination.js";
 import { AppError, asyncHandler, forbidden, ok } from "../utils/response.js";
-import { moneyStr } from "../utils/serializers.js";
+import { isCommissionFreeOrder, moneyStr } from "../utils/serializers.js";
 import { parse, parseId, zId, zMoney } from "../utils/validate.js";
+import { settlementView } from "../services/vendorSettlementService.js";
 import { idempotency } from "../middleware/idempotency.js";
 import { money } from "../utils/orderMath.js";
 import {
@@ -38,6 +39,9 @@ const shopView = (vendor) => ({
   address: vendor.address,
   is_open: vendor.is_open,
   min_order_value: moneyStr(vendor.min_order_value),
+  // Call Rider Now free trial (§10.1): no commission until this moment.
+  commission_free_until: vendor.commission_free_until,
+  trial_active: Boolean(vendor.commission_free_until) && vendor.commission_free_until > new Date(),
 });
 
 const productView = (product) => ({
@@ -115,20 +119,36 @@ router.get(
       take: limit + 1,
       include: {
         order: {
-          select: { order_number: true, payment_method: true, item_total: true, delivered_at: true },
+          select: {
+            order_number: true,
+            vendor_id: true,
+            commission_rate: true,
+            payment_method: true,
+            item_total: true,
+            vendor_commission: true,
+            delivered_at: true,
+          },
         },
       },
     });
     const page = buildPage(rows, limit);
+    const settlements = await prisma.vendorSettlement.findMany({
+      where: { franchise_id: req.franchise_id, vendor_id: req.vendor.id },
+      orderBy: { id: "desc" },
+      take: 20,
+    });
     ok(
       res,
       {
         admin_payable_balance: moneyStr(req.vendor.admin_payable_balance),
+        settlements: settlements.map(settlementView),
         items: page.items.map((row) => ({
           id: row.id,
           order_number: row.order.order_number,
           payment_method: row.order.payment_method,
           item_total: moneyStr(row.order.item_total),
+          commission: moneyStr(row.order.vendor_commission),
+          commission_free: isCommissionFreeOrder({ ...row.order }),
           amount: moneyStr(row.amount),
           delivered_at: row.order.delivered_at,
           created_at: row.created_at,

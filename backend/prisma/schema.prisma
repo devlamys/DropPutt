@@ -109,6 +109,8 @@ model Franchise {
   rain_surge_fee         Decimal  @default(0) @db.Decimal(12, 2)
   daily_milestone_target Int      @default(20)
   daily_milestone_bonus  Decimal  @default(50) @db.Decimal(12, 2)
+  // Commission % given to hotels of this franchise (Super Admin sets it).
+  default_commission_rate Decimal @default(10) @db.Decimal(5, 2)
   is_active              Boolean  @default(true)
   created_at             DateTime @default(now())
 
@@ -176,6 +178,8 @@ model Vendor {
   lat                   Decimal      @db.Decimal(10, 7)
   lng                   Decimal      @db.Decimal(10, 7)
   commission_rate       Decimal      @default(10) @db.Decimal(5, 2)
+  // "Call Rider Now" orders are commission- and royalty-free until this moment (§10.1).
+  commission_free_until DateTime?
   min_order_value       Decimal      @default(150) @db.Decimal(12, 2)
   upi_id                String?
   is_open               Boolean      @default(true)
@@ -189,6 +193,7 @@ model Vendor {
   orders    Order[]
   settlement_entries SettlementEntry[]
   cash_handovers     RiderCashHandover[]
+  settlements        VendorSettlement[]
 
   @@unique([franchise_id, shop_name])
   @@index([franchise_id, shop_category, is_open])

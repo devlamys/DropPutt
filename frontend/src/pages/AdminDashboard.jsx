@@ -6,6 +6,7 @@ import FranchisesPanel from "../components/admin/FranchisesPanel.jsx";
 import ReconciliationPanel from "../components/admin/ReconciliationPanel.jsx";
 import SettlementLedger from "../components/admin/SettlementLedger.jsx";
 import StuckOrders from "../components/admin/StuckOrders.jsx";
+import VendorSettlements from "../components/admin/VendorSettlements.jsx";
 import WalletPassbook from "../components/admin/WalletPassbook.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -15,7 +16,8 @@ import api, { getActingSlug, getErrorMessage, setActingSlug } from "../utils/api
 const TABS = [
   { key: "radar", label: "Fleet Radar", icon: Radar },
   { key: "ledger", label: "Settlement", icon: Gauge },
-  { key: "controls", label: "Promo & Surge", icon: Settings2 },
+  { key: "vendors", label: "Hotels", icon: Store },
+  { key: "controls", label: "Split rules", icon: Settings2 },
   { key: "wallet", label: "Wallet", icon: Wallet },
   { key: "reconcile", label: "Reconcile", icon: Receipt },
   { key: "franchises", label: "Franchises", icon: Building2, superOnly: true },
@@ -220,6 +222,7 @@ function FranchiseWorkspace({ slug, tab, isSuper, franchises, onSelectFranchise,
         </>
       )}
       {tab === "ledger" && <SettlementLedger date={overview.date} riders={overview.riders} onSettled={load} toast={toast} />}
+      {tab === "vendors" && <VendorSettlements toast={toast} />}
       {tab === "controls" && <ControlsPanel franchise={overview.franchise} onUpdated={updateFranchise} toast={toast} />}
       {tab === "wallet" && (
         <WalletPassbook

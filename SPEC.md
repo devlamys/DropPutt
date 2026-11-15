@@ -757,7 +757,7 @@ vendor_commission =
     item_total × vendor.commission_rate / 100
 ```
 
-rounded to two decimal places. The rate used is copied onto `Order.commission_rate` at rider pickup (null when there is no partner vendor), so the split can be re-derived after the vendor's rate changes.
+`vendor.commission_rate` defaults to 10% for new hotels. The Super Admin sets each franchise's default (`Franchise.default_commission_rate`, default 10) with `PATCH /api/v1/super/franchises/:id` `{ default_commission_rate, apply_to_hotels? }` (`apply_to_hotels: true` also sets it on every hotel already in that franchise) and can change a single hotel's rate with `PATCH /api/v1/admin/vendors/:id`. The franchise admin sees the rate but cannot edit it. Rounded to two decimal places. The rate used is copied onto `Order.commission_rate` at rider pickup (null when there is no partner vendor), so the split can be re-derived after the vendor's rate changes.
 
 ```text
 vendor_earning =
@@ -766,19 +766,33 @@ vendor_earning =
 
 For a custom-buy order with no partner vendor, vendor commission is zero.
 
+## 10.1 "Call Rider Now" free trial
+
+An order started by the vendor's "Call Rider Now" button is `order_type = HOTEL_DIRECT` (with or without a cart). Each hotel has `Vendor.commission_free_until` (set by the franchise admin, editable per hotel). The franchise admin or Super Admin sets the date per hotel (`PATCH /api/v1/admin/vendors/:id` with `commission_free_until`, end of that IST day, or `null` for no trial). Evaluated once at rider pickup:
+
+```text
+if order_type = HOTEL_DIRECT and now < vendor.commission_free_until:
+    commission_rate   = 0   (stored on the order)
+    vendor_commission = 0
+    vendor_earning    = item_total
+else:
+    normal commission (vendor.commission_rate) on item_total
+```
+
+The Super Admin royalty (`royalty_per_order`) is charged on every order, during the trial as well; a trial order therefore has `franchise_profit = shop_markup_profit - royalty_per_order` (negative is kept). Storefront/marketplace orders (`FOOD_MARKETPLACE`) never get a trial. Commission is never taken from the delivery fee; the rider keeps all of it (§11). Stored values are never recomputed, so changing the date affects only orders picked up afterwards.
+
 ---
 
-# 11. Normal Four-Way Split
+# 11. Four-Way Split
 
-Normal mode uses:
+The rider always keeps the whole delivery fee:
 
 ```text
 rider_earning =
-    zone.rider_commission + rider_tip
+    zone.delivery_fee + rider_tip
 
 franchise_profit =
-    zone.franchise_profit
-  + shop_markup_profit
+    shop_markup_profit
   + vendor_commission
   - royalty_per_order
 
@@ -786,48 +800,15 @@ super_admin_profit =
     royalty_per_order
 ```
 
-The royalty is therefore represented as a separate Super Admin economic share while also being deducted from the franchise's net profit.
+`zone.rider_commission` and `zone.franchise_profit` no longer take part in the split. The royalty is a separate Super Admin share that is also deducted from the franchise's net profit. During a Call Rider Now trial (§10.1) `vendor_commission` is 0; `royalty_per_order` is unchanged.
 
 All four values MUST be rounded to two decimals.
 
 ---
 
-# 12. Correct Launch Promo Math
+# 12. Launch Promo (retired)
 
-The launch-promo rule is explicitly:
-
-```text
-franchise_profit =
-    shop_markup_profit
-  + vendor_commission
-  - royalty_per_order
-```
-
-The previous incorrect implementation that simply forced:
-
-```text
-franchise_profit = 0
-```
-
-MUST NOT be used.
-
-During launch promo:
-
-```text
-rider_earning =
-    zone.delivery_fee
-  + rider_tip
-
-franchise_profit =
-    shop_markup_profit
-  + vendor_commission
-  - royalty_per_order
-
-super_admin_profit =
-    royalty_per_order
-```
-
-Thus the launch promo gives 100% of the delivery fee to the rider while preserving vendor commission and shop markup economics.
+The rule in §11 (rider keeps 100% of the delivery fee) is now permanent, so `Franchise.is_launch_promo_active` no longer changes any amount. The column is kept for compatibility and the admin UI no longer shows a switch.
 
 If the resulting franchise profit is negative, it remains negative as a real accounting value; it MUST NOT silently be converted to zero.
 
@@ -992,6 +973,26 @@ order:{order_id}:vendor-payable
 
 so a retried delivery request cannot duplicate the payable.
 
+During a trial (§10.1) the payable is `item_total` under COD and `0` under `PREPAID_AT_HOTEL`; after it the normal rule applies (prepaid: `-vendor_commission`).
+
+## 16.1 Franchise ↔ hotel settlement
+
+`vendor.admin_payable_balance` is signed: positive = the franchise owes the hotel; negative = the hotel owes the franchise (storefront commission). The hotel never pays per order. The franchise admin settles it in person daily, weekly or monthly and records the payment (`VendorSettlement`: franchise_id, vendor_id, direction `VENDOR_PAID_FRANCHISE | FRANCHISE_PAID_VENDOR`, amount, method `CASH|UPI|BANK`, note, balance_before/after, recorded_by). One locked transaction (`SELECT … FOR UPDATE` on the vendor row):
+
+```text
+VENDOR_PAID_FRANCHISE: balance += amount   (amount <= -balance)
+FRANCHISE_PAID_VENDOR: balance -= amount   (amount <= balance)
+```
+
+Endpoints (franchise admin / super admin, `x-franchise-slug` required):
+
+- `PATCH /api/v1/admin/vendors/:id` — `commission_free_until` (franchise admin or Super Admin) and `commission_rate` 0-100 (Super Admin only; 403 for the franchise admin).
+- `GET /api/v1/admin/vendors` — balance, who owes whom, commission today / 7 days / 30 days, last settlement.
+- `GET /api/v1/admin/vendors/:id/statement?from&to` — delivered orders (order type, item total, commission, payable), totals and settlements in the range (max 31 days).
+- `POST /api/v1/admin/vendors/:id/settlements` — records a payment; `Idempotency-Key` required.
+
+`GET /api/v1/vendor/ledger` also returns `commission`, `commission_free` per row and the latest `settlements`. Socket event `vendor_settlement_recorded` goes to the vendor room.
+
 ---
 
 # 17. Rider Acceptance — PostgreSQL Row-Level Lock
@@ -1060,6 +1061,8 @@ This is required to prevent two riders from simultaneously accepting the same or
 Endpoint:
 
 `POST /api/v1/orders/quick-call`
+
+A call started by a vendor always creates a `HOTEL_DIRECT` order, which is commission-free during the hotel's free trial and carries normal commission afterwards; the royalty is always charged (§10.1). This holds even when a cart is sent.
 
 ### Step 1 — Royalty wallet gate
 
@@ -1935,9 +1938,13 @@ Every discrepancy must be traceable through:
 
 Do not rely only on mutable aggregate balances for historical accounting.
 
+The vendor balance check compares `admin_payable_balance` with the expected ledger total in invariant 23 (VENDOR_PAYABLE entries, minus confirmed rider handovers, plus/minus hotel settlements).
+
 ---
 
 # 42. Required Test Cases
+
+Added with §10.1/§15.1/§16.1: trial HOTEL_DIRECT delivery (commission 0, royalty still charged, rider keeps the full fee); trial ended → the hotel's normal commission; storefront order inside a trial still pays commission; storefront order keeps commission and royalty; handover owed excludes the delivery fee; handover confirm/reject/idempotent/cross-tenant; vendor settlement partial/overpay/wrong direction/idempotent/role guard; reconciliation clean with handovers and settlements. See `backend/test/integration/{commissionFree,cashHandover,vendorSettlement}.test.js` and `backend/test/unit/money.test.js`.
 
 ## Tenant uniqueness
 

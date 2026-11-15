@@ -114,7 +114,14 @@ async function main() {
     await prisma.vendor.upsert({
       where: { user_id: vendorUser.id },
       update: { ...shop, franchise_id },
-      create: { ...shop, franchise_id, user_id: vendorUser.id },
+      // New demo hotels start with a 6-month Call Rider Now free trial (§10.1);
+      // a re-run never extends an existing hotel's date.
+      create: {
+        ...shop,
+        franchise_id,
+        user_id: vendorUser.id,
+        commission_free_until: new Date(Date.now() + 183 * 86_400_000),
+      },
     });
   }
 

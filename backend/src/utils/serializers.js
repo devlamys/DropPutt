@@ -15,6 +15,18 @@ export const coordStr = (value) =>
  * Order as seen by the rider / vendor / franchise staff. Deliberately omits
  * franchise_profit and super_admin_profit.
  */
+/** Cash the rider hands the vendor: the food money of a COD order, never the delivery fee. */
+export function payToVendor(order) {
+  if (!order.vendor_id || order.payment_method !== "COD" || order.rider_paid_at_shop) return 0;
+  const food = Number(order.item_total);
+  const collect = Number(order.amount_to_collect);
+  return Math.min(food, collect);
+}
+
+/** True when the vendor order was priced without commission (rate stored as 0 at pickup). */
+export const isCommissionFreeOrder = (order) =>
+  Boolean(order.vendor_id) && order.commission_rate !== null && order.commission_rate !== undefined && Number(order.commission_rate) === 0;
+
 export function orderView(order) {
   return {
     id: order.id,

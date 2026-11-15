@@ -118,7 +118,14 @@ export default function SettlementLedger({ date, riders, onSettled, toast }) {
                 <div className="mb-1 flex justify-between text-xs">
                   <span className="text-slate-600">Cash in hand</span>
                   <span className="font-semibold">
-                    {inr(cash)} / {inr(limit)}
+                    {inr(cash)} / {inr(limit)}{" "}
+                    <button
+                      type="button"
+                      onClick={() => setLimiting(rider)}
+                      className="ml-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700"
+                    >
+                      Edit limit
+                    </button>
                   </span>
                 </div>
                 <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">

@@ -30,8 +30,8 @@ import {
 } from "../services/cashHandoverService.js";
 import { addMoney, money, subtractMoney } from "../utils/orderMath.js";
 import { buildPage, parsePagination } from "../utils/pagination.js";
-import { AppError, asyncHandler, ok, validationError } from "../utils/response.js";
-import { moneyStr } from "../utils/serializers.js";
+import { AppError, asyncHandler, forbidden, ok, validationError } from "../utils/response.js";
+import { isCommissionFreeOrder, moneyStr } from "../utils/serializers.js";
 import { parse, parseId, zMoney } from "../utils/validate.js";
 
 /**
@@ -316,6 +316,7 @@ const franchiseSettingsView = (franchise) => ({
   wallet_balance: moneyStr(franchise.wallet_balance),
   min_balance_limit: moneyStr(franchise.min_balance_limit),
   royalty_per_order: moneyStr(franchise.royalty_per_order),
+  default_commission_rate: moneyStr(franchise.default_commission_rate),
   is_launch_promo_active: franchise.is_launch_promo_active,
   rain_surge_fee: moneyStr(franchise.rain_surge_fee),
   daily_milestone_target: franchise.daily_milestone_target,

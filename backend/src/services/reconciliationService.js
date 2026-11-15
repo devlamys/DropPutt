@@ -364,7 +364,7 @@ async function balanceChecks(franchise_id) {
     vendors: vendors.map((vendor) => ({
       id: vendor.id,
       shop_name: vendor.shop_name,
-      ...compare(vendor.admin_payable_balance, vendorSums.get(vendor.id) ?? 0),
+      ...compare(vendor.admin_payable_balance, vendorExpected(vendor.id)),
     })),
     _warning:
       riders.length >= BALANCE_CHECK_CAP || vendors.length >= BALANCE_CHECK_CAP

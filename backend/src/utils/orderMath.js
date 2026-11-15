@@ -64,6 +64,23 @@ export function calculateItemTotal(lines) {
   );
 }
 
+// ─── §10.1 Commission-free orders ───────────────────────────────────────────
+
+/**
+ * "Call Rider Now" orders (HOTEL_DIRECT) are a delivery service for the
+ * hotel's own customer. While the hotel's free trial runs
+ * (vendor.commission_free_until, set by the franchise admin) the franchise
+ * takes no vendor commission. The Super Admin royalty is still charged to the
+ * franchise on every order, trial or not. Storefront orders never get a trial.
+ */
+export function isCommissionFree({ order_type, commission_free_until } = {}, at = new Date()) {
+  return (
+    order_type === "HOTEL_DIRECT" &&
+    Boolean(commission_free_until) &&
+    new Date(at) < new Date(commission_free_until)
+  );
+}
+
 // ─── §10 Vendor commission ──────────────────────────────────────────────────
 
 /**
@@ -184,6 +201,7 @@ export function calculateSplit({
  * @param {Decimal.Value} [input.discount_amount]
  * @param {Decimal.Value} [input.shop_markup_profit]
  * @param {boolean} [input.has_partner_vendor]       false for custom-buy / pick-drop
+ * @param {boolean} [input.commission_free]          inside the hotel's Call Rider Now trial (§10.1)
  */
 export function calculateOrderFinancials({
   item_total,
@@ -195,7 +213,10 @@ export function calculateOrderFinancials({
   discount_amount = 0,
   shop_markup_profit = 0,
   has_partner_vendor = true,
+  commission_free = false,
 }) {
+  // §10.1: no vendor commission during a hotel's Call Rider Now trial (royalty still applies).
+  const commissionFree = commission_free;
   const itemTotal = money(item_total);
   const delivery_fee = money(zone.delivery_fee);
   const tip = money(rider_tip);
@@ -222,12 +243,11 @@ export function calculateOrderFinancials({
 
   const { rider_earning, franchise_profit, super_admin_profit } =
     calculateSplit({
-      is_launch_promo_active: franchise.is_launch_promo_active,
       zone,
       rider_tip: tip,
       shop_markup_profit: markup,
       vendor_commission,
-      royalty_per_order: franchise.royalty_per_order,
+      royalty_per_order: franchise.royalty_per_order, // always charged, trial or not (§10.1)
     });
 
   return {
