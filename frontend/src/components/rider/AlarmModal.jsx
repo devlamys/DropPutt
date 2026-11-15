@@ -3,6 +3,12 @@ import { useState } from "react";
 import Modal from "../Modal.jsx";
 
 /** Full-screen order alert. The looping sound runs while this is mounted. */
+const REQUEST_LABELS = {
+  CUSTOM_BUY: "🛒 Shopping request — list shown after you accept",
+  PICK_DROP: "📦 Pick & drop — details shown after you accept",
+  MINI_TRUCK: "🚚 Mini truck — details shown after you accept",
+};
+
 export default function AlarmModal({ request, queued, onAccept, onDismiss }) {
   const [busy, setBusy] = useState(false);
   const addon = request.kind === "addon";
@@ -32,6 +38,9 @@ export default function AlarmModal({ request, queued, onAccept, onDismiss }) {
               <p className="font-semibold text-slate-800">
                 🍽️ {request.item_count} item{request.item_count === 1 ? "" : "s"}
               </p>
+            )}
+            {!(request.item_count > 0) && REQUEST_LABELS[request.order_type] && (
+              <p className="font-semibold text-slate-800">{REQUEST_LABELS[request.order_type]}</p>
             )}
             {request.pickup_address && <p className="truncate text-slate-600">📍 {request.pickup_address}</p>}
             {request.message && <p className="font-semibold text-orange-700">{request.message}</p>}

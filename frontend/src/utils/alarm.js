@@ -1,6 +1,8 @@
 // Looping order alarm built with Web Audio (no audio asset to ship).
-// Browsers only allow sound after a user gesture, so call unlock() from a
-// tap (the Online toggle does this).
+// Browsers only allow sound after a user gesture. The Online / "Turn on alerts"
+// buttons call unlockAlarm(), and so does the first tap, key press or touch
+// anywhere on the page (installed below), so a shop that forgot to turn sound
+// on still hears the next order after touching the screen once.
 
 let ctx = null;
 let timer = null;
@@ -13,9 +15,43 @@ function getContext() {
   return ctx;
 }
 
+const listeners = new Set();
+function notify() {
+  for (const listener of listeners) listener(alarmBlocked());
+}
+
 export function unlockAlarm() {
   const c = getContext();
-  if (c && c.state === "suspended") c.resume().catch(() => {});
+  if (!c) return;
+  if (!c.onstatechange) c.onstatechange = notify;
+  if (c.state === "suspended") c.resume().catch(() => {});
+}
+
+/** True while the browser is still holding sound back (no tap yet). */
+export function alarmBlocked() {
+  const c = getContext();
+  return !c || c.state !== "running";
+}
+
+/** Calls `callback(blocked)` whenever the sound lock opens or closes; returns an unsubscribe. */
+export function onAlarmBlockedChange(callback) {
+  listeners.add(callback);
+  getContext()?.addEventListener?.("statechange", notify);
+  return () => listeners.delete(callback);
+}
+
+if (typeof window !== "undefined") {
+  const unlockOnTouch = () => {
+    unlockAlarm();
+    if (!alarmBlocked()) {
+      for (const type of ["pointerdown", "touchstart", "keydown"]) {
+        window.removeEventListener(type, unlockOnTouch, true);
+      }
+    }
+  };
+  for (const type of ["pointerdown", "touchstart", "keydown"]) {
+    window.addEventListener(type, unlockOnTouch, true);
+  }
 }
 
 function beep(c, startAt, freq, duration) {

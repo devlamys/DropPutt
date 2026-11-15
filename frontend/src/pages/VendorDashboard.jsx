@@ -8,6 +8,7 @@ import EnableAlertsButton from "../components/EnableAlertsButton.jsx";
 import OrderItemList from "../components/OrderItemList.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useToast } from "../components/Toast.jsx";
+import { useAlarmBlocked } from "../hooks/useAlarmBlocked.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useSocket } from "../hooks/useSocket.js";
 import api, { getErrorMessage, idempotencyHeaders } from "../utils/api.js";
@@ -67,6 +68,7 @@ export default function VendorDashboard() {
   const [cancelling, setCancelling] = useState(null);
   const [now, setNow] = useState(Date.now());
   const [acked, setAcked] = useState(loadAcked);
+  const { blocked: soundBlocked, unlock: unlockSound } = useAlarmBlocked();
   const callLock = useRef(false); // state updates are async; this blocks a same-tick double tap
 
   const loadOrders = useCallback(async () => {
@@ -433,6 +435,15 @@ export default function VendorDashboard() {
                 <RiderLine order={alerts[0]} />
               </div>
             </div>
+            {soundBlocked && (
+              <button
+                type="button"
+                onClick={unlockSound}
+                className="w-full rounded-2xl bg-orange-600 py-3 text-base font-bold text-white shadow active:scale-95"
+              >
+                🔊 Tap here to turn the alert sound on
+              </button>
+            )}
             <OrderItemList items={alerts[0].items} big title="Prepare" />
             {alerts.length > 1 && <p className="text-center text-xs text-slate-500">+{alerts.length - 1} more waiting</p>}
             <button
