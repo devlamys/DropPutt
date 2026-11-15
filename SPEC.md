@@ -2565,6 +2565,8 @@ Customer registration endpoint (requires `FRANCHISE_ADMIN` or `VENDOR` role):
 }
 ```
 
+**WhatsApp (see §60):** a customer who orders by chatting with the franchise's WhatsApp number is identified by the number WhatsApp itself verified; no OTP and no login.
+
 **Phase 2 (future):**
 
 OTP-based customer login via an SMS gateway. The spec for the OTP flow will be added when the SMS provider is selected. No OTP implementation detail is mandated here.
@@ -3341,3 +3343,46 @@ Extend Section 45 with:
 ---
 
 This document is the authoritative production specification for the corrected multi-franchise hyperlocal delivery architecture.
+
+---
+
+# 60. WhatsApp Ordering
+
+Customers who cannot use the web storefront order by chatting with one WhatsApp number per franchise (Meta WhatsApp Cloud API). The sender's number is verified by WhatsApp, so no OTP or login is needed. Orders use the same checkout code as the storefront.
+
+## 60.1 Data
+
+| Item | Purpose |
+|---|---|
+| `Franchise.whatsapp_phone_number_id` (unique), `whatsapp_enabled` | Maps Meta's business phone-number id to a franchise. Set by the Super Admin (`PATCH /super/franchises/:id`). |
+| `WhatsappSession` (`franchise_id`, `wa_id`, `state`, `data`) | Where one customer is in the conversation: cart, shop, area, address, location. |
+| `WhatsappInbound` (`wamid`) | One row per received message id, so Meta's retries are handled once. |
+| `Order.channel` (`WEB` / `WHATSAPP`) | Source of the order. Status updates go to WhatsApp customers only. |
+
+## 60.2 Webhook
+
+`GET /api/v1/whatsapp/webhook` is Meta's verification handshake (`hub.verify_token`). `POST` receives messages. It lives outside `resolveTenant`: the franchise is found from `metadata.phone_number_id` (and must be enabled and active). The `X-Hub-Signature-256` HMAC (SHA-256 with `WHATSAPP_APP_SECRET`) is checked over the raw request bytes, kept by the JSON parser's `verify` hook. Without a secret, unsigned requests are accepted in development only. The handler answers 200 first and works afterwards. Messages from one customer are processed one at a time; a customer is limited to 30 messages a minute.
+
+## 60.3 Conversation
+
+Buttons and lists only (WhatsApp limits: 3 buttons, 10 list rows, short titles; `normalizeMessage` is the single guard; longer lists show 9 rows plus "More…"). Every message is Malayalam with English underneath.
+
+`START` → shop list (open shops) → item list (only sellable items: not archived, available, in stock, in time slot; offers shown with the old price; "only N left") → quantity (1 / 2 / other) → cart (more / order / clear) → area list (zones with delivery fee) → address (a returning customer is offered the last address) → location (WhatsApp's one-tap "Send location"; otherwise a landmark text, a voice note, or "Call me", which puts a note for the rider on the order) → confirmation (totals from `quoteMarketplaceOrder`, cash on delivery) → order placed.
+
+Keywords at any time: `menu` (start over), `status`, `cancel`, `help`. A session idle for 2 hours starts over. A customer with a saved verified location (from an earlier delivery, §23) is not asked for a location again.
+
+## 60.4 Rules
+
+1. **The bot never prices anything.** Totals, stock and offers come from `quoteMarketplaceOrder` / `placeMarketplaceOrder` (`services/checkoutService.js`), the same code as `POST /marketplace/checkout`. Stock is taken only when the order is placed.
+2. A customer may place at most 5 orders in 10 minutes (same rule as the web checkout's per-phone limit).
+3. Only Indian mobile numbers are accepted (`normalizePhone`); others get a polite refusal.
+4. A customer can cancel from the chat while the order is `RIDER_REQUESTED` (same `cancelOrder` path and role `CUSTOMER`, which restocks).
+5. **Status messages** (rider accepted, picked up, delivered, cancelled by anyone but the customer) are sent from the places that emit `order_status_changed`, only for `channel = WHATSAPP`, best-effort and never failing the request. They are free-form messages inside WhatsApp's 24-hour customer-service window, so no approved templates are needed in this phase.
+6. Sessions and message ids are purged by the daily maintenance job (ids after 7 days, sessions after 30).
+7. One server instance serialises a customer's messages in memory; running several API replicas needs a shared lock (not done yet).
+
+## 60.5 Configuration and development
+
+`WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_API_VERSION`, `PUBLIC_APP_URL` (tracking links). With no access token the bot runs in development mode: replies are only logged. `POST /whatsapp/dev/simulate` and `GET /whatsapp/dev/outbox` (never mounted in production) and `backend/scripts/whatsapp-sim.mjs` play a whole order without WhatsApp. Connecting a real Meta number needs business verification and a public HTTPS webhook URL, which is production-time work.
+
+**Invariants:** every WhatsApp order goes through `placeMarketplaceOrder`; a customer's chat can never read or change another customer's order (orders are looked up by franchise and the sender's own number).
