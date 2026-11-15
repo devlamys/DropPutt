@@ -52,8 +52,7 @@ function SearchBox({ value, onChange, placeholder, className = "" }) {
  * `links` is [{ label, onClick }] for the wide-screen nav.
  */
 export function StoreNav({ query, onQuery, searchPlaceholder, links = [] }) {
-  const { zone, openZones, totals, openCart } = useStorefront();
-  const area = zoneLabel(zone);
+  const { openZones, totals, openCart } = useStorefront();
   return (
     <header className="sticky top-0 z-30 bg-pine-900/95 text-white shadow-md backdrop-blur">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
@@ -72,11 +71,11 @@ export function StoreNav({ query, onQuery, searchPlaceholder, links = [] }) {
           <button
             type="button"
             onClick={openZones}
-            aria-label={area ? `Delivering to ${area}. Change area` : "Choose your delivery area"}
+            aria-label="Delivery charges"
             className="flex h-9 max-w-[9.5rem] items-center gap-1.5 rounded-full bg-white px-3 text-xs font-semibold text-pine-900 transition hover:bg-flame-50 sm:max-w-[13rem]"
           >
             <MapPin className="h-4 w-4 shrink-0 text-flame-600" />
-            <span className="truncate">{area ?? "Choose area"}</span>
+            <span className="truncate">Delivery charges</span>
           </button>
           <button
             type="button"
@@ -102,7 +101,7 @@ export function StoreNav({ query, onQuery, searchPlaceholder, links = [] }) {
 
 /** Dark footer: what DropPutt is, how it works, delivery areas, your order. */
 export function StoreFooter() {
-  const { zones, zone, pickZone, totals, openCart } = useStorefront();
+  const { zones, totals, openCart } = useStorefront();
   const lastOrder = readLastOrder();
   const place = placeName();
   return (
@@ -124,21 +123,15 @@ export function StoreFooter() {
           </ol>
         </div>
         <div>
-          <h2 className="text-sm font-semibold text-white">Delivery areas</h2>
+          <h2 className="text-sm font-semibold text-white">Delivery charges</h2>
           <ul className="mt-4 space-y-2 text-sm">
-            {zones.map((z) => (
-              <li key={z.id}>
-                <button
-                  type="button"
-                  onClick={() => pickZone(z.id)}
-                  className={`flex w-full justify-between gap-3 text-left transition hover:text-flame-300 ${zone?.id === z.id ? "text-flame-400" : "text-pine-200"}`}
-                >
-                  <span>{zoneLabel(z)}</span>
-                  <span className="shrink-0 tabular-nums">{inr(z.delivery_fee)}</span>
-                </button>
+            {zones.map((z, i) => (
+              <li key={z.id} className="flex w-full justify-between gap-3 text-pine-200">
+                <span>{i === 0 ? `Up to ${Number(z.max_km)} km` : `${Number(zones[i - 1].max_km)}–${Number(z.max_km)} km`}</span>
+                <span className="shrink-0 tabular-nums">{inr(z.delivery_fee)}</span>
               </li>
             ))}
-            {zones.length === 0 && <li className="text-pine-300">Areas are being set up.</li>}
+            {zones.length === 0 && <li className="text-pine-300">Charges are being set up.</li>}
           </ul>
         </div>
         <div>

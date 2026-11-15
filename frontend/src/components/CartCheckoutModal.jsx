@@ -1,7 +1,8 @@
-import { Banknote, Loader2, MapPin, Plus, Smartphone, X } from "lucide-react";
+import { Banknote, Loader2, Plus, Smartphone, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import api, { getErrorMessage, idempotencyHeaders } from "../utils/api.js";
 import { inr } from "../utils/format.js";
+import LocationPicker from "./shop/LocationPicker.jsx";
 import Stepper from "./shop/Stepper.jsx";
 import { readProfile, saveProfile, useStorefront } from "./shop/StorefrontContext.jsx";
 import { productEmoji } from "./shop/visuals.js";
@@ -55,7 +56,7 @@ function Section({ title, ml, children, action }) {
  * on success the storefront redirects to the live tracking page /drop/:token.
  * Prices shown are for display; the server prices every line itself.
  */
-export default function CartCheckoutModal({ cart, totals, zones, zoneId, onZone, minOrder, onQuantity, onAddMore, onClose, onPlaced }) {
+export default function CartCheckoutModal({ cart, totals, shop, minOrder, onQuantity, onAddMore, onClose, onPlaced }) {
   const { toast } = useStorefront();
   const profile = readProfile();
   const [phone, setPhone] = useState(profile.phone || "");
@@ -66,7 +67,9 @@ export default function CartCheckoutModal({ cart, totals, zones, zoneId, onZone,
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [touched, setTouched] = useState(false);
-  const [zonesTimedOut, setZonesTimedOut] = useState(false);
+  // Where to deliver: the zone and the fee come from the distance, never from a choice.
+  const [pin, setPin] = useState(profile.lat != null && profile.lng != null ? { lat: profile.lat, lng: profile.lng } : null);
+  const [quote, setQuote] = useState(null);
   // One key per attempt: a retry after a flaky network replays the same order.
   const attempt = useRef(null);
 
@@ -81,14 +84,8 @@ export default function CartCheckoutModal({ cart, totals, zones, zoneId, onZone,
     };
   }, [busy, onClose]);
 
-  useEffect(() => {
-    if (zones.length) return undefined;
-    const t = setTimeout(() => setZonesTimedOut(true), 6000);
-    return () => clearTimeout(t);
-  }, [zones.length]);
-
-  const zone = zones.find((z) => String(z.id) === String(zoneId));
-  const fee = zone ? Number(zone.delivery_fee) : null;
+  const deliverable = Boolean(quote?.deliverable);
+  const fee = deliverable ? Number(quote.delivery_fee) : null;
   const total = fee == null ? null : totals.subtotal + fee;
   const short = minOrder - totals.subtotal;
   const upi = payment === "UPI_TO_ADMIN";
@@ -97,7 +94,9 @@ export default function CartCheckoutModal({ cart, totals, zones, zoneId, onZone,
   if (short > 0) problems.push(`Add ${inr(short)} more to reach the minimum order`);
   if (!validPhone(phone)) problems.push("Enter your 10-digit mobile number");
   if (turning.trim().length < 3) problems.push("Add a turning point or landmark near your house");
-  if (!zone) problems.push("Choose your delivery area");
+  if (!pin) problems.push("Choose your delivery location on the map");
+  else if (quote && !quote.deliverable) problems.push(quote.message || "We cannot deliver to this location");
+  else if (!quote) problems.push("Wait for the delivery charge to appear");
   const blocked = problems.length > 0;
 
   const submit = async (event) => {
@@ -112,7 +111,8 @@ export default function CartCheckoutModal({ cart, totals, zones, zoneId, onZone,
         "/marketplace/checkout",
         {
           vendor_id: cart.vendor_id,
-          zone_id: Number(zoneId),
+          drop_lat: pin.lat,
+          drop_lng: pin.lng,
           customer_phone: phone,
           customer_name: name.trim() || undefined,
           turning_point: turning.trim(),
@@ -122,7 +122,7 @@ export default function CartCheckoutModal({ cart, totals, zones, zoneId, onZone,
         },
         { skipAuth: true, headers: attempt.current }
       );
-      saveProfile({ phone, name: name.trim(), turning_point: turning.trim(), house: house.trim(), payment, zone_id: zoneId });
+      saveProfile({ phone, name: name.trim(), turning_point: turning.trim(), house: house.trim(), payment, lat: pin.lat, lng: pin.lng });
       onPlaced(data.data);
     } catch (err) {
       const message = getErrorMessage(err);
@@ -186,29 +186,15 @@ export default function CartCheckoutModal({ cart, totals, zones, zoneId, onZone,
               <textarea className={field} rows={2} placeholder="e.g. After the old mosque, left turn, blue gate" value={turning} onChange={(e) => setTurning(e.target.value)} maxLength={300} />
             </label>
             <input className={`${field} mt-2.5`} aria-label="House name (optional)" placeholder="House name or number (optional)" value={house} onChange={(e) => setHouse(e.target.value)} maxLength={300} />
-            <p className="mb-2 mt-3 text-xs font-semibold text-slate-600">Delivery area</p>
-            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Delivery area">
-              {zones.length === 0 && !zonesTimedOut && Array.from({ length: 3 }, (_, i) => <span key={i} className="h-12 w-40 animate-pulse rounded-full bg-slate-200" aria-hidden="true" />)}
-              {zones.length === 0 && zonesTimedOut && <p className="text-sm text-slate-500">No delivery areas are set up yet. Please try again later.</p>}
-              {zones.map((z) => {
-                const active = String(z.id) === String(zoneId);
-                return (
-                  <button
-                    key={z.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    aria-label={`${z.zone_name}, delivery ${inr(z.delivery_fee)}`}
-                    onClick={() => onZone(z.id)}
-                    className={`flex h-12 items-center gap-1.5 rounded-full border-2 px-4 text-sm font-bold ${press} ${active ? "border-emerald-600 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-white text-slate-700"}`}
-                  >
-                    <MapPin className="h-4 w-4 shrink-0" />
-                    {z.zone_name.split("—").pop().trim()}
-                    <span className="tabular-nums text-slate-500">· {inr(z.delivery_fee)}</span>
-                  </button>
-                );
-              })}
-            </div>
+            <p className="mb-2 mt-3 text-xs font-semibold text-slate-600">Delivery location • ഡെലിവറി ലൊക്കേഷൻ</p>
+            <LocationPicker
+              shop={shop}
+              pin={pin}
+              onChange={(next, nextQuote) => {
+                setPin(next);
+                setQuote(nextQuote);
+              }}
+            />
             <p className="mt-3 text-xs text-slate-500">After ordering you can share your exact location and record a voice route for the rider.</p>
           </Section>
 
@@ -245,7 +231,7 @@ export default function CartCheckoutModal({ cart, totals, zones, zoneId, onZone,
           <Section title="Bill details" ml="ബിൽ">
             <dl className="space-y-1.5 text-sm">
               <div className="flex justify-between"><dt className="text-slate-600">Item total</dt><dd className="font-semibold tabular-nums">{inr(totals.subtotal)}</dd></div>
-              <div className="flex justify-between"><dt className="text-slate-600">Delivery fee</dt><dd className="font-semibold tabular-nums">{fee == null ? "Choose area" : inr(fee)}</dd></div>
+              <div className="flex justify-between"><dt className="text-slate-600">Delivery fee</dt><dd className="font-semibold tabular-nums">{fee == null ? "Set location" : inr(fee)}</dd></div>
               <div className="mt-2 flex justify-between border-t border-dashed border-slate-300 pt-2 text-base">
                 <dt className="font-extrabold text-slate-900">Total</dt>
                 <dd className="font-extrabold tabular-nums text-slate-900">{total == null ? "—" : inr(total)}</dd>

@@ -1,6 +1,7 @@
 import { Building2, Gauge, Loader2, LogOut, Radar, Receipt, Settings2, Store, Wallet } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ControlsPanel from "../components/admin/ControlsPanel.jsx";
+import ZonesPanel from "../components/admin/ZonesPanel.jsx";
 import FleetRadar from "../components/admin/FleetRadar.jsx";
 import FranchisesPanel from "../components/admin/FranchisesPanel.jsx";
 import ReconciliationPanel from "../components/admin/ReconciliationPanel.jsx";
@@ -223,7 +224,12 @@ function FranchiseWorkspace({ slug, tab, isSuper, franchises, onSelectFranchise,
       )}
       {tab === "ledger" && <SettlementLedger date={overview.date} riders={overview.riders} onSettled={load} toast={toast} />}
       {tab === "vendors" && <VendorSettlements toast={toast} />}
-      {tab === "controls" && <ControlsPanel franchise={overview.franchise} onUpdated={updateFranchise} toast={toast} />}
+      {tab === "controls" && (
+        <>
+          <ControlsPanel franchise={overview.franchise} onUpdated={updateFranchise} toast={toast} />
+          <ZonesPanel franchise={overview.franchise} onUpdated={updateFranchise} toast={toast} />
+        </>
+      )}
       {tab === "wallet" && (
         <WalletPassbook
           franchise={overview.franchise}

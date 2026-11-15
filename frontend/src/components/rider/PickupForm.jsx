@@ -1,5 +1,5 @@
 import { Camera, Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import api, { MULTIPART, getErrorMessage } from "../../utils/api.js";
 import { PAYMENT_LABELS, inr } from "../../utils/format.js";
 import { compressImage } from "../../utils/image.js";
@@ -50,6 +50,9 @@ export default function PickupForm({ order, zones, onPickedUp, onError }) {
   const [amount, setAmount] = useState(itemized ? order.item_total : "");
   const [payment, setPayment] = useState(order.payment_method || "COD");
   const [zoneId, setZoneId] = useState(order.zone_id ?? null);
+  // The software suggests the zone from the customer's location; the rider's own choice wins once made.
+  const [suggested, setSuggested] = useState(null);
+  const chosenByRider = useRef(false);
   const [paidAtShop, setPaidAtShop] = useState(false);
   const [lookup, setLookup] = useState(null);
   const [lookingUp, setLookingUp] = useState(false);
@@ -58,6 +61,21 @@ export default function PickupForm({ order, zones, onPickedUp, onError }) {
 
   const previewUrl = useMemo(() => (photo ? URL.createObjectURL(photo) : null), [photo]);
   useEffect(() => () => previewUrl && URL.revokeObjectURL(previewUrl), [previewUrl]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get(`/orders/${order.id}/suggested-zone`, { params: phone.length === 10 ? { customer_phone: phone } : {} })
+      .then(({ data }) => {
+        if (cancelled) return;
+        setSuggested(data.data.suggested);
+        if (data.data.suggested && !chosenByRider.current) setZoneId(data.data.suggested.zone_id);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [order.id, phone.length === 10 ? phone : ""]);
 
   // Auto-lookup as soon as 10 digits are typed.
   useEffect(() => {
@@ -216,7 +234,10 @@ export default function PickupForm({ order, zones, onPickedUp, onError }) {
             <button
               key={zone.id}
               type="button"
-              onClick={() => setZoneId(zone.id)}
+              onClick={() => {
+                chosenByRider.current = true;
+                setZoneId(zone.id);
+              }}
               aria-pressed={zoneId === zone.id}
               className={`rounded-full border px-4 py-2 text-sm font-semibold ${
                 zoneId === zone.id
@@ -228,6 +249,14 @@ export default function PickupForm({ order, zones, onPickedUp, onError }) {
             </button>
           ))}
         </div>
+        {suggested ? (
+          <p className="mt-1.5 text-xs text-slate-600">
+            Decided from the customer&apos;s location: {suggested.zone_name.split("—")[0].trim()} ({suggested.km} km).
+            {zoneId !== suggested.zone_id && <span className="font-semibold text-amber-700"> You changed it, and this is recorded.</span>}
+          </p>
+        ) : (
+          <p className="mt-1.5 text-xs text-slate-500">The customer&apos;s location is not known yet, so choose the zone yourself.</p>
+        )}
       </div>
 
       {order.order_type === "CUSTOM_BUY" && (

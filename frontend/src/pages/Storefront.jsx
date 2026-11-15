@@ -191,12 +191,7 @@ export default function Storefront() {
           <CartCheckoutModal
             cart={cart}
             totals={totals}
-            zones={zones}
-            zoneId={zoneId}
-            onZone={(id) => {
-              setZoneId(id);
-              saveProfile({ zone_id: id });
-            }}
+            shop={cartShop}
             minOrder={minOrder}
             onQuantity={setQuantity}
             onAddMore={() => {
@@ -247,7 +242,7 @@ export default function Storefront() {
 
         {ordersOpen && <OrdersDrawer onClose={() => { setOrdersOpen(false); setOrderCount(readOrders().length); }} />}
 
-        {zoneOpen && <ZoneSheet zones={zones} value={zoneId} onPick={pickZone} onClose={() => setZoneOpen(false)} />}
+        {zoneOpen && <ZoneSheet zones={zones} onClose={() => setZoneOpen(false)} />}
 
         {switching && (
           <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/50 p-4 motion-safe:animate-fade-in sm:items-center" role="alertdialog" aria-modal="true" aria-label="Start a new cart?">

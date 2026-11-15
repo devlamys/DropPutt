@@ -1,6 +1,6 @@
 import { ChevronDown, ClipboardList, Clock, MapPin, Search, ShoppingBag, ShoppingBasket, Truck, Utensils, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { placeName, zoneLabel } from "../components/shop/chrome.jsx";
+import { placeName } from "../components/shop/chrome.jsx";
 import Stepper from "../components/shop/Stepper.jsx";
 import { useStorefront } from "../components/shop/StorefrontContext.jsx";
 import { categoryOf, productEmoji } from "../components/shop/visuals.js";
@@ -163,8 +163,8 @@ export default function StorefrontHome() {
           <div className="min-w-0 flex-1">
             <p className="truncate text-[11px] font-semibold text-slate-500">Delivering in • നമ്മുടെ നാട്</p>
             <h1 className="truncate text-lg font-extrabold leading-tight text-slate-900">{town}</h1>
-            <button type="button" onClick={openZones} aria-label={zone ? `Delivery area ${zoneLabel(zone)}. Change` : "Choose your delivery area"} className="flex items-center gap-1 text-xs font-semibold text-emerald-700">
-              {zoneLabel(zone) ?? "Choose your area"} <ChevronDown className="h-3.5 w-3.5" strokeWidth={3} />
+            <button type="button" onClick={openZones} aria-label="Delivery charges" className="flex items-center gap-1 text-xs font-semibold text-emerald-700">
+              Delivery charges <ChevronDown className="h-3.5 w-3.5" strokeWidth={3} />
             </button>
           </div>
           <button type="button" onClick={openOrders} aria-label={orderCount ? `My orders, ${orderCount}` : "My orders"} className={`relative flex h-12 shrink-0 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 ${press}`}>
