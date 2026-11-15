@@ -11,6 +11,7 @@ import { emitTo, rooms } from "../socket/socketHandler.js";
 import { audit } from "../utils/audit.js";
 import { AppError, orderNotFound } from "../utils/response.js";
 import { pushToUsers } from "../utils/push.js";
+import { notifyWhatsappOrder } from "./whatsapp/notify.js";
 
 const BEFORE_PICKUP = ["RIDER_REQUESTED", "RIDER_ASSIGNED"];
 
@@ -134,6 +135,7 @@ export async function cancelOrder({ orderId, franchise_id, role, vendor_id, reas
     };
     // The customer's tracking page and every board refresh from this one event.
     emitTo(rooms.order(order.id), "order_status_changed", event);
+    void notifyWhatsappOrder(order.id, "cancelled", { by: role });
     emitTo(rooms.franchise(franchise_id), "order_cancelled", event);
     if (order.vendor_id) emitTo(rooms.vendor(order.vendor_id), "order_cancelled", event);
     if (order.rider_id) emitTo(rooms.rider(order.rider_id), "order_cancelled", event);

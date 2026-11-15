@@ -44,6 +44,7 @@ import {
 } from "../utils/response.js";
 import { moneyStr, orderView } from "../utils/serializers.js";
 import { saveUpload } from "../utils/storage.js";
+import { notifyWhatsappOrder } from "../services/whatsapp/notify.js";
 import { istDayRange } from "../utils/time.js";
 import { parse, parseId, zBoolean, zId, zLat, zLng, zMoney } from "../utils/validate.js";
 
@@ -315,6 +316,7 @@ router.post(
     const event = { order_id: order.id, order_number: order.order_number };
     emitTo(rooms.franchiseRiders(franchiseId), "order_taken", event);
     emitTo(rooms.franchise(franchiseId), "order_accepted", event);
+    void notifyWhatsappOrder(order.id, "accepted");
     if (order.vendor_id) {
       emitTo(rooms.vendor(order.vendor_id), "order_accepted", event);
       pushToUsers([order.vendor.user_id], {
@@ -562,6 +564,7 @@ router.put(
       refreshRouteFromRider(order.id);
       const event = { order_id: order.id, order_status: order.order_status };
       emitTo(rooms.order(order.id), "order_status_changed", event);
+      void notifyWhatsappOrder(order.id, "picked_up");
       if (order.vendor_id) {
         emitTo(rooms.vendor(order.vendor_id), "order_picked_up", event);
         pushToUsers([order.vendor.user_id], {
@@ -934,6 +937,7 @@ router.post(
       const event = { order_id: order.id, order_status: "DELIVERED" };
       emitTo(rooms.order(order.id), "order_status_changed", event);
       emitTo(rooms.franchise(franchise_id), "order_delivered", event);
+      void notifyWhatsappOrder(order.id, "delivered");
       if (order.vendor_id) emitTo(rooms.vendor(order.vendor_id), "order_delivered", event);
 
       if (result.milestone) {

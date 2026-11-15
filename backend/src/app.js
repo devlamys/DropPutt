@@ -22,6 +22,7 @@ import vendorRoutes from "./routes/vendorRoutes.js";
 import marketplaceRoutes from "./routes/marketplaceRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import publicRoutes from "./routes/publicRoutes.js";
+import whatsappRoutes from "./routes/whatsappRoutes.js";
 import { fail, ok } from "./utils/response.js";
 
 export function createApp() {
@@ -48,7 +49,15 @@ export function createApp() {
       exposedHeaders: ["X-Request-ID", "Retry-After"],
     })
   );
-  app.use(express.json({ limit: "100kb" }));
+  // The WhatsApp webhook signature is computed over the exact bytes Meta sent.
+  app.use(
+    express.json({
+      limit: "100kb",
+      verify: (req, res, buf) => {
+        if (req.originalUrl.startsWith("/api/v1/whatsapp/")) req.rawBody = buf;
+      },
+    })
+  );
 
   // Local-disk uploads are a development fallback only (production uses R2).
   if (!env.isProduction) {
@@ -75,6 +84,7 @@ export function createApp() {
 
   app.use("/api/v1/auth", authRoutes);
   app.use("/api/v1/public", publicRoutes); // tenant derived from the token
+  app.use("/api/v1/whatsapp", whatsappRoutes); // tenant derived from the business phone-number id
   app.use("/api/v1/orders", resolveTenant, orderRoutes);
   app.use("/api/v1/marketplace", resolveTenant, marketplaceRoutes);
   app.use("/api/v1/admin", resolveTenant, adminRoutes);

@@ -29,6 +29,8 @@ const franchiseView = (franchise) => ({
   min_balance_limit: moneyStr(franchise.min_balance_limit),
   royalty_per_order: moneyStr(franchise.royalty_per_order),
   default_commission_rate: moneyStr(franchise.default_commission_rate),
+  whatsapp_phone_number_id: franchise.whatsapp_phone_number_id,
+  whatsapp_enabled: franchise.whatsapp_enabled,
   is_launch_promo_active: franchise.is_launch_promo_active,
   created_at: franchise.created_at,
   counts: franchise._count
@@ -155,10 +157,20 @@ const patchSchema = z
     default_commission_rate: z.coerce.number().min(0).max(100).optional(),
     // Also set this rate on every hotel already in the franchise.
     apply_to_hotels: z.boolean().optional(),
+    // WhatsApp ordering: Meta's phone-number id (digits) for this franchise's number, and the switch.
+    whatsapp_phone_number_id: z.string().trim().regex(/^\d{5,32}$/, "digits only").nullable().optional(),
+    whatsapp_enabled: z.boolean().optional(),
   })
-  .refine((body) => body.is_active !== undefined || body.default_commission_rate !== undefined, {
-    message: "nothing to update",
-  })
+  .refine(
+    (body) =>
+      body.is_active !== undefined ||
+      body.default_commission_rate !== undefined ||
+      body.whatsapp_phone_number_id !== undefined ||
+      body.whatsapp_enabled !== undefined,
+    {
+      message: "nothing to update",
+    }
+  )
   .refine((body) => !body.apply_to_hotels || body.default_commission_rate !== undefined, {
     message: "apply_to_hotels needs default_commission_rate",
     path: ["apply_to_hotels"],
@@ -181,6 +193,8 @@ router.patch(
         data: {
           ...(body.is_active !== undefined ? { is_active: body.is_active } : {}),
           ...(rate !== undefined ? { default_commission_rate: rate } : {}),
+          ...(body.whatsapp_phone_number_id !== undefined ? { whatsapp_phone_number_id: body.whatsapp_phone_number_id } : {}),
+          ...(body.whatsapp_enabled !== undefined ? { whatsapp_enabled: body.whatsapp_enabled } : {}),
         },
       });
       if (body.apply_to_hotels) {

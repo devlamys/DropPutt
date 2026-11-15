@@ -46,6 +46,17 @@ export async function purgeExpiredRefreshTokens(now = new Date()) {
   return count;
 }
 
+/** WhatsApp webhook message ids (Meta retries within hours) and chats idle for 30 days. */
+export async function purgeOldWhatsappRecords(now = new Date()) {
+  const inbound = await prisma.whatsappInbound.deleteMany({
+    where: { created_at: { lt: new Date(now.getTime() - 7 * DAY_MS) } },
+  });
+  const sessions = await prisma.whatsappSession.deleteMany({
+    where: { updated_at: { lt: new Date(now.getTime() - 30 * DAY_MS) } },
+  });
+  return inbound.count + sessions.count;
+}
+
 async function runJob(name, job) {
   try {
     const removed = await job();
@@ -58,6 +69,7 @@ async function runJob(name, job) {
 export async function runDailyMaintenance() {
   await runJob("idempotency records", purgeExpiredIdempotencyRecords);
   await runJob("expired refresh tokens", purgeExpiredRefreshTokens);
+  await runJob("old whatsapp records", purgeOldWhatsappRecords);
 }
 
 export async function runWeeklyMaintenance() {

@@ -59,6 +59,11 @@ enum DeliveryHandledBy {
   VENDOR_STAFF
 }
 
+enum OrderChannel {
+  WEB
+  WHATSAPP
+}
+
 enum PaymentMethod {
   COD
   PREPAID_AT_HOTEL
@@ -113,6 +118,9 @@ model Franchise {
   daily_milestone_bonus  Decimal  @default(50) @db.Decimal(12, 2)
   // Commission % given to hotels of this franchise (Super Admin sets it).
   default_commission_rate Decimal @default(10) @db.Decimal(5, 2)
+  // WhatsApp ordering: the Meta phone-number id customers message, and the switch.
+  whatsapp_phone_number_id String? @unique
+  whatsapp_enabled         Boolean @default(false)
   is_active              Boolean  @default(true)
   created_at             DateTime @default(now())
 
@@ -128,6 +136,7 @@ model Franchise {
   cash_handovers      RiderCashHandover[]
   vendor_settlements  VendorSettlement[]
   rider_payouts       RiderPayout[]
+  whatsapp_sessions   WhatsappSession[]
 
   @@map("franchises")
 }
@@ -434,6 +443,7 @@ model Order {
   zone_id              Int?
   customer_phone       String?
   customer_name        String?
+  channel              OrderChannel      @default(WEB)
 
   custom_shop_name     String?
   custom_items_text    String?
@@ -614,4 +624,29 @@ model IdempotencyRecord {
   @@index([key, expires_at])
   @@index([franchise_id])
   @@map("idempotency_records")
+}
+
+// One chat per customer number per franchise: where they are in the order flow.
+model WhatsappSession {
+  id           Int      @id @default(autoincrement())
+  franchise_id Int
+  wa_id        String
+  state        String   @default("START")
+  data         Json     @default("{}")
+  updated_at   DateTime @updatedAt
+  created_at   DateTime @default(now())
+
+  franchise Franchise @relation(fields: [franchise_id], references: [id])
+
+  @@unique([franchise_id, wa_id])
+  @@map("whatsapp_sessions")
+}
+
+// Meta retries webhooks; one row per message id makes handling exactly-once.
+model WhatsappInbound {
+  wamid      String   @id
+  created_at DateTime @default(now())
+
+  @@index([created_at])
+  @@map("whatsapp_inbound")
 }

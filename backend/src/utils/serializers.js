@@ -34,6 +34,7 @@ export function orderView(order) {
     order_type: order.order_type,
     order_category: order.order_category,
     order_status: order.order_status,
+    channel: order.channel,
     vendor_id: order.vendor_id,
     rider_id: order.rider_id,
     zone_id: order.zone_id,

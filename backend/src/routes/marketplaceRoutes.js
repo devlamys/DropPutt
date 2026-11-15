@@ -7,7 +7,7 @@ import { prisma, TX_OPTIONS } from "../config/prisma.js";
 import { idempotency } from "../middleware/idempotency.js";
 import { customRequestUpload } from "../middleware/upload.js";
 import { checkoutIpLimiter, checkoutPhoneLimiter } from "../middleware/rateLimit.js";
-import { buildCart } from "../services/cartService.js";
+import { placeMarketplaceOrder } from "../services/checkoutService.js";
 import { dispatchOrder } from "../services/dispatchService.js";
 import { emitTo, rooms } from "../socket/socketHandler.js";
 import { CHAYAKADI_LABEL, SNACK_MIN_ORDER_VALUE } from "../utils/constants.js";
@@ -188,13 +188,6 @@ router.get(
   })
 );
 
-const CATEGORY_BY_SHOP = Object.freeze({
-  HOTEL: "FOOD",
-  BAKERY_COOLBAR: "EVENING_SNACKS",
-  GROCERY: "GROCERY",
-  FISH_MEAT: "FISH_MEAT",
-  MEDICAL_PHARMACY: "MEDICAL",
-});
 
 const checkoutSchema = z.object({
   vendor_id: zId,
@@ -233,116 +226,11 @@ router.post(
   idempotency(),
   asyncHandler(async (req, res) => {
     const body = parse(checkoutSchema, req.body);
-    const franchise_id = req.franchise_id;
-
     const customer_phone = normalizePhone(body.customer_phone);
     if (!customer_phone) throw fieldError("customer_phone", "must be a valid 10-digit mobile number");
 
-    const vendor = await prisma.vendor.findFirst({
-      where: { id: body.vendor_id, franchise_id },
-    });
-    if (!vendor) throw fieldError("vendor_id", "shop not found");
-    if (!vendor.is_open) throw fieldError("vendor_id", `${vendor.shop_name} is closed right now`);
-
-    const createOrder = () =>
-      prisma.$transaction(async (tx) => {
-        const franchise = await tx.franchise.findUnique({ where: { id: franchise_id } });
-        if (!franchise.wallet_balance.gt(franchise.min_balance_limit)) {
-          throw new AppError(
-            403,
-            "FRANCHISE_WALLET_LOW",
-            "Delivery is temporarily unavailable in this area."
-          );
-        }
-        const zone = await tx.zone.findFirst({ where: { id: body.zone_id, franchise_id } });
-        if (!zone) throw fieldError("zone_id", "area not found");
-
-        const cart = await buildCart(tx, vendor, body.items, new Date());
-
-        await tx.customer.upsert({
-          where: { franchise_id_phone: { franchise_id, phone: customer_phone } },
-          create: {
-            franchise_id,
-            phone: customer_phone,
-            name: body.customer_name ?? null,
-            turning_point: body.turning_point ?? null,
-          },
-          update: {
-            ...(body.customer_name ? { name: body.customer_name } : {}),
-            ...(body.turning_point ? { turning_point: body.turning_point } : {}),
-          },
-        });
-
-        const datePart = istDayRange().date.replaceAll("-", "").slice(2);
-        const order = await tx.order.create({
-          data: {
-            franchise_id,
-            order_number: `DP-${datePart}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`,
-            location_token: crypto.randomBytes(24).toString("base64url"),
-            payment_method: body.payment_method,
-            turning_point: body.turning_point ?? null,
-            order_type: "FOOD_MARKETPLACE",
-            order_category: CATEGORY_BY_SHOP[vendor.shop_category] ?? "FOOD",
-            order_status: "RIDER_REQUESTED",
-            vendor_id: vendor.id,
-            zone_id: zone.id,
-            customer_phone,
-            customer_name: body.customer_name ?? null,
-            pickup_address: vendor.address ?? null,
-            pickup_lat: vendor.lat ?? null,
-            pickup_lng: vendor.lng ?? null,
-            drop_address: body.drop_address,
-            item_total: moneyStr(cart.item_total),
-            items: { create: cart.lines },
-          },
-          include: { items: { include: { product: { select: { name: true } } } } },
-        });
-        return { order, zone, cart };
-      }, TX_OPTIONS);
-
-    let created;
-    for (let attempt = 1; ; attempt += 1) {
-      try {
-        created = await createOrder();
-        break;
-      } catch (error) {
-        const collision =
-          error?.code === "P2002" && String(error.meta?.target).includes("order_number");
-        if (!collision || attempt >= 3) throw error;
-      }
-    }
-    const { order, zone, cart } = created;
-
-    await dispatchOrder(order, {
-      franchise_slug: req.franchise.slug,
-      shop_name: vendor.shop_name,
-    });
-    // Refresh the shop's and the admin's order boards.
-    const event = { order_id: order.id, order_status: order.order_status };
-    emitTo(rooms.vendor(vendor.id), "order_status_changed", event);
-    emitTo(rooms.franchise(franchise_id), "order_status_changed", event);
-
-    ok(
-      res,
-      {
-        order_number: order.order_number,
-        location_token: order.location_token,
-        shop_name: vendor.shop_name,
-        items: order.items.map((item) => ({
-          name: item.product.name,
-          quantity: item.quantity,
-          unit_price: moneyStr(item.unit_price),
-          line_total: moneyStr(item.line_total),
-        })),
-        item_total: moneyStr(cart.item_total),
-        delivery_fee: moneyStr(zone.delivery_fee),
-        estimated_total: moneyStr(addMoney(cart.item_total, money(zone.delivery_fee))),
-        payment_method: order.payment_method,
-        // Cash the rider will ask for: nothing when the customer pays by UPI.
-        cash_to_rider: order.payment_method === "UPI_TO_ADMIN" ? "0.00" : moneyStr(addMoney(cart.item_total, money(zone.delivery_fee))),
-      },
-      { status: 201 }
-    );
+    const { summary } = await placeMarketplaceOrder({ franchise: req.franchise, body, customer_phone });
+    ok(res, summary, { status: 201 });
   })
 );
 

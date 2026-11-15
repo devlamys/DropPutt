@@ -79,6 +79,16 @@ export const env = Object.freeze({
     android: process.env.APP_STORE_URL_ANDROID || "",
     ios: process.env.APP_STORE_URL_IOS || "",
   },
+  // WhatsApp ordering (Meta Cloud API). With no access token the bot runs in dev
+  // mode: replies are only logged and returned by the simulator.
+  whatsapp: {
+    accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
+    appSecret: process.env.WHATSAPP_APP_SECRET || "",
+    verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || "",
+    apiVersion: process.env.WHATSAPP_API_VERSION || "v21.0",
+  },
+  // Where customers open their tracking link (Magic Link) from WhatsApp.
+  publicAppUrl: (process.env.PUBLIC_APP_URL || "http://localhost:5173").replace(/\/$/, ""),
   uploadDir: process.env.UPLOAD_DIR || "uploads",
   r2: {
     endpoint: process.env.R2_ENDPOINT || "",
