@@ -2420,6 +2420,9 @@ The `request_id` MUST be generated server-side (UUID v4) and returned in every r
 | `ORDER_ALREADY_DELIVERED` | 409 | Idempotent delivery retry |
 | `OUT_OF_STOCK` | 409 | A cart item has no portions left (§40.1) |
 | `DUPLICATE_PRODUCT` | 409 | The shop already has an item with this name |
+| `OUTSIDE_DELIVERY_AREA` | 422 | The delivery pin is further than the franchise's maximum delivery distance (§61) |
+| `DUPLICATE_ZONE` / `DUPLICATE_BAND` | 409 | A zone with this name, or ending at this distance, already exists |
+| `ZONE_IN_USE` / `LAST_ZONE` | 409 | A zone with orders, or the franchise's last zone, cannot be deleted |
 | `VALIDATION_ERROR` | 422 | Request body schema error |
 | `CASH_LIMIT_EXCEEDED` | 422 | Rider `cash_in_hand >= max_cash_limit` |
 | `MAX_ORDERS_EXCEEDED` | 422 | Rider at max concurrent orders |
@@ -3367,9 +3370,9 @@ Customers who cannot use the web storefront order by chatting with one WhatsApp 
 
 Buttons and lists only (WhatsApp limits: 3 buttons, 10 list rows, short titles; `normalizeMessage` is the single guard; longer lists show 9 rows plus "More…"). Every message is Malayalam with English underneath.
 
-`START` → shop list (open shops) → item list (only sellable items: not archived, available, in stock, in time slot; offers shown with the old price; "only N left") → quantity (1 / 2 / other) → cart (more / order / clear) → area list (zones with delivery fee) → address (a returning customer is offered the last address) → location (WhatsApp's one-tap "Send location"; otherwise a landmark text, a voice note, or "Call me", which puts a note for the rider on the order) → confirmation (totals from `quoteMarketplaceOrder`, cash on delivery) → order placed.
+`START` → shop list (open shops) → item list (only sellable items: not archived, available, in stock, in time slot; offers shown with the old price; "only N left") → quantity (1 / 2 / other) → cart (more / order / clear) → address (a returning customer is offered the last address) → **location (required)**: WhatsApp's one-tap "Send location" button (a customer can also pick another place on WhatsApp's map and send that) → confirmation (totals and the delivery fee from `quoteMarketplaceOrder`, which works out the zone from the distance, cash on delivery) → order placed. There is no area list. A location outside the delivery area is refused and asked for again; a customer who cannot share one gets the hotel's phone number (the hotel then uses Call Rider Now). A landmark text or a voice note is kept for the rider but does not replace the location.
 
-Keywords at any time: `menu` (start over), `status`, `cancel`, `help`. A session idle for 2 hours starts over. A customer with a saved verified location (from an earlier delivery, §23) is not asked for a location again.
+Keywords at any time: `menu` (start over), `status`, `cancel`, `help`. A session idle for 2 hours starts over. A customer with a saved location (from an earlier delivery or order) is shown the saved address and not asked for a location again.
 
 ## 60.4 Rules
 
@@ -3386,3 +3389,39 @@ Keywords at any time: `menu` (start over), `status`, `cancel`, `help`. A session
 `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_API_VERSION`, `PUBLIC_APP_URL` (tracking links). With no access token the bot runs in development mode: replies are only logged. `POST /whatsapp/dev/simulate` and `GET /whatsapp/dev/outbox` (never mounted in production) and `backend/scripts/whatsapp-sim.mjs` play a whole order without WhatsApp. Connecting a real Meta number needs business verification and a public HTTPS webhook URL, which is production-time work.
 
 **Invariants:** every WhatsApp order goes through `placeMarketplaceOrder`; a customer's chat can never read or change another customer's order (orders are looked up by franchise and the sender's own number).
+
+---
+
+# 61. Delivery Zones by Distance
+
+The delivery zone, and so the delivery fee, is decided by the software from the distance between the **hotel** and the customer's **pin**. Customers never choose a zone: they share their current location, search a place by name, or drag a pin on a map (for example, a customer abroad ordering for a home in Kizhissery).
+
+## 61.1 Data
+
+| Item | Purpose |
+|---|---|
+| `Zone.max_km` | Upper edge of a distance band; a band starts where the previous (smaller) one ends. `delivery_fee` is the charge for the band. `rider_commission` and `franchise_profit` default to 0 and take no part in the split (§15). |
+| `Franchise.max_delivery_km` (default 8) | Orders further than this are refused. Edited by the franchise admin. |
+| `Order.zone_source` | `AUTO` (from the customer's location), `MANUAL` (no location was known; the rider chose) or `RIDER_OVERRIDE` (the rider changed the automatic zone). |
+
+## 61.2 Rule
+
+`resolveDelivery` (`services/deliveryZoneService.js`) is the only place the rule lives; the storefront, WhatsApp and Call Rider Now all use it:
+
+1. Distance in km (one decimal): the road distance from OSRM when `ROUTING_URL` is set, else a straight line (haversine) stretched by 1.3. A failed router call falls back to the straight line.
+2. Farther than `max_delivery_km`: not deliverable (`OUTSIDE_DELIVERY_AREA`).
+3. Otherwise the first band, by `max_km`, that reaches this far (a band includes its upper edge). Beyond the last band but within the limit: the last band.
+
+## 61.3 Where it applies
+
+- **Storefront checkout** (`POST /marketplace/checkout`): `drop_lat` and `drop_lng` are required; any `zone_id` is ignored. `POST /marketplace/delivery-quote { vendor_id, lat, lng }` (public) returns the fee for a pin, so the map shows it while the pin moves. Custom orders (Buy Anything, Pick & Drop, Mini Truck) have no hotel and still use the zone list.
+- **WhatsApp** (§60): the location the customer sends decides the zone.
+- **Call Rider Now** (hotel-started, no pin at creation): at rider pickup the server computes the zone when the customer's location is known (the pin shared on the Magic Link, the rider-verified gate of an earlier delivery, or their last saved pin); `GET /orders/:id/suggested-zone` lets the pickup form preselect it. The rider may choose another zone: it is stored as `RIDER_OVERRIDE` and logged (`order.zone_override`). With no known location the rider chooses (`MANUAL`).
+- **After delivery**, the rider's gate position is compared with the band the customer was charged; a difference is logged (`order.zone_mismatch`) for review. The fee a customer was quoted is never changed.
+
+## 61.4 Management and place search
+
+- Franchise admin: `GET/POST/PATCH/DELETE /admin/zones` (name, `max_km`, `delivery_fee`; names and band edges are unique per franchise; a zone with orders and the last zone cannot be deleted) and `max_delivery_km` in `PATCH /admin/franchise/settings` (0.5 to 50). Every change is audited.
+- `GET /public/geocode?q=&near_lat=&near_lng=` searches a place by name for the map (India only, results prefer the shop's area). The browser never calls the geocoder: the API caches answers for 24 hours, paces requests (about one a second) and rate-limits callers (20 a minute). `GEOCODER_URL` points at a self-hosted Nominatim/Photon; the public Nominatim default is for development and low volume only (no type-ahead).
+
+**Invariants:** a customer cannot choose or influence the zone except by the location they give; the zone is decided on the server; the delivery fee quoted to a customer is the fee charged.
