@@ -7,6 +7,9 @@ import { inr } from "../../utils/format.js";
 /** Nightly cash hand-over: settling cash_in_hand unlocks capped riders. */
 export default function SettlementLedger({ date, riders, onSettled, toast }) {
   const [settling, setSettling] = useState(null);
+  const [limiting, setLimiting] = useState(null);
+  const [paying, setPaying] = useState(null);
+  const [netting, setNetting] = useState(null);
   const [handovers, setHandovers] = useState([]);
   const [busyId, setBusyId] = useState(null);
   const outstanding = riders.reduce((sum, r) => sum + Number(r.cash_in_hand), 0);
@@ -135,11 +138,78 @@ export default function SettlementLedger({ date, riders, onSettled, toast }) {
                   />
                 </div>
               </div>
-              <p className="mt-2 text-xs text-slate-500">Earnings wallet: {inr(rider.wallet_earnings)}</p>
+              {/* §15.2: cash the rider owes vs earnings the franchise owes, netted */}
+              {(cash > 0 || Number(rider.wallet_earnings) > 0) && (
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 p-2.5 text-xs">
+                  <span className="text-slate-600">
+                    Earnings to pay {inr(rider.wallet_earnings)} ·{" "}
+                    <strong className={Number(rider.net_due) >= 0 ? "text-slate-900" : "text-green-700"}>
+                      {Number(rider.net_due) >= 0
+                        ? `Net: rider gives ${inr(rider.net_due)}`
+                        : `Net: you give rider ${inr(Math.abs(Number(rider.net_due)))}`}
+                    </strong>
+                  </span>
+                  <span className="flex gap-2">
+                    {Number(rider.wallet_earnings) > 0 && (
+                      <button type="button" onClick={() => setPaying(rider)} className="rounded-lg bg-white px-2.5 py-1 font-semibold ring-1 ring-slate-300">
+                        Pay earnings
+                      </button>
+                    )}
+                    <button type="button" onClick={() => setNetting(rider)} className="rounded-lg bg-slate-900 px-2.5 py-1 font-semibold text-white">
+                      Net settle
+                    </button>
+                  </span>
+                </div>
+              )}
             </li>
           );
         })}
       </ul>
+
+      {paying && (
+        <PayEarningsModal
+          rider={paying}
+          onClose={() => setPaying(null)}
+          onDone={(data) => {
+            setPaying(null);
+            toast(`Paid ${inr(data.payout.amount)} to ${paying.name}`, "success");
+            onSettled();
+          }}
+        />
+      )}
+      {netting && (
+        <NetSettleModal
+          rider={netting}
+          onClose={() => setNetting(null)}
+          onDone={(data) => {
+            setNetting(null);
+            toast(
+              data.direction === "RIDER_PAYS"
+                ? `${netting.name} handed over ${inr(data.net)}. Settled.`
+                : data.direction === "FRANCHISE_PAYS"
+                  ? `You paid ${netting.name} ${inr(Math.abs(Number(data.net)))}. Settled.`
+                  : `${netting.name} is settled.`,
+              "success"
+            );
+            onSettled();
+          }}
+        />
+      )}
+
+      {limiting && (
+        <LimitModal
+          rider={limiting}
+          onClose={() => setLimiting(null)}
+          onDone={(data) => {
+            setLimiting(null);
+            toast(
+              `${limiting.name}: limit ${inr(data.max_cash_limit)}.${data.is_cash_locked ? " Rider is blocked until cash is settled." : " Rider can take orders."}`,
+              data.is_cash_locked ? "warn" : "success"
+            );
+            onSettled();
+          }}
+        />
+      )}
 
       {settling && (
         <SettleModal
@@ -227,6 +297,163 @@ function SettleModal({ rider, onClose, onDone }) {
           Confirm cash received
         </button>
       </form>
+    </Modal>
+  );
+}
+
+function LimitModal({ rider, onClose, onDone }) {
+  const [limit, setLimit] = useState(String(Number(rider.max_cash_limit)));
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState("");
+  const blocked = Number(limit) > 0 && Number(rider.cash_in_hand) >= Number(limit);
+
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true);
+    setProblem("");
+    try {
+      const { data } = await api.patch(`/admin/riders/${rider.id}/cash-limit`, { max_cash_limit: String(limit) });
+      onDone(data.data);
+    } catch (error) {
+      setProblem(getErrorMessage(error, "Could not change the limit."));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={`Cash limit · ${rider.name}`} onClose={busy ? () => {} : onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <p className="text-sm text-slate-600">
+          Cash in hand: <strong>{inr(rider.cash_in_hand)}</strong>. The rider cannot accept orders while cash in hand is at or above the limit.
+        </p>
+        <input
+          type="number"
+          inputMode="decimal"
+          min="1"
+          max="100000"
+          step="1"
+          required
+          aria-label="Cash limit"
+          value={limit}
+          onChange={(e) => setLimit(e.target.value)}
+          className="w-full rounded-xl border border-slate-300 px-3 py-3 text-lg font-bold"
+        />
+        <div className="flex gap-2">
+          {[-500, -100, 100, 500].map((step) => (
+            <button
+              key={step}
+              type="button"
+              onClick={() => setLimit(String(Math.max(1, Number(limit || 0) + step)))}
+              className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold"
+            >
+              {step > 0 ? `+${step}` : step}
+            </button>
+          ))}
+        </div>
+        {blocked && <p className="text-sm font-semibold text-amber-700">This rider will be blocked until cash is settled.</p>}
+        {problem && <p role="alert" className="text-sm font-semibold text-red-600">{problem}</p>}
+        <button type="submit" disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-3 font-bold text-white disabled:opacity-60">
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />} Save limit
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
+function PayEarningsModal({ rider, onClose, onDone }) {
+  const [amount, setAmount] = useState(String(Number(rider.wallet_earnings)));
+  const [method, setMethod] = useState("CASH");
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState("");
+  const headers = useRef(idempotencyHeaders());
+
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true);
+    setProblem("");
+    try {
+      const { data } = await api.post(`/admin/riders/${rider.id}/payouts`, { amount: String(amount), method }, { headers: headers.current });
+      onDone(data.data);
+    } catch (error) {
+      setProblem(getErrorMessage(error, "Could not record the payment."));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={`Pay earnings · ${rider.name}`} onClose={busy ? () => {} : onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <p className="text-sm text-slate-600">
+          Earnings the rider could not keep from cash (UPI orders, bonuses): <strong>{inr(rider.wallet_earnings)}</strong>.
+        </p>
+        <input
+          type="number"
+          inputMode="decimal"
+          min="0.01"
+          step="0.01"
+          max={rider.wallet_earnings}
+          required
+          aria-label="Amount paid"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className="w-full rounded-xl border border-slate-300 px-3 py-3 text-lg font-bold"
+        />
+        <div className="flex gap-2">
+          {["CASH", "UPI", "BANK"].map((m) => (
+            <button key={m} type="button" onClick={() => setMethod(m)} className={`rounded-full px-3 py-1 text-xs font-semibold ${method === m ? "bg-slate-900 text-white" : "bg-slate-100"}`}>
+              {m}
+            </button>
+          ))}
+        </div>
+        {problem && <p role="alert" className="text-sm font-semibold text-red-600">{problem}</p>}
+        <button type="submit" disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-3 font-bold text-white disabled:opacity-60">
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />} Record payment
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
+function NetSettleModal({ rider, onClose, onDone }) {
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState("");
+  const headers = useRef(idempotencyHeaders());
+  const net = Number(rider.net_due);
+
+  async function confirm() {
+    setBusy(true);
+    setProblem("");
+    try {
+      const { data } = await api.post(`/admin/riders/${rider.id}/net-settlement`, {}, { headers: headers.current });
+      onDone(data.data);
+    } catch (error) {
+      setProblem(getErrorMessage(error, "Could not settle."));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={`Net settle · ${rider.name}`} onClose={busy ? () => {} : onClose}>
+      <div className="space-y-4 text-sm">
+        <dl className="grid grid-cols-2 gap-1 rounded-xl bg-slate-50 p-3">
+          <dt>Cash the rider holds</dt>
+          <dd className="text-right font-semibold">{inr(rider.cash_in_hand)}</dd>
+          <dt>Earnings you owe the rider</dt>
+          <dd className="text-right font-semibold">{inr(rider.wallet_earnings)}</dd>
+        </dl>
+        <p className="rounded-xl bg-orange-50 p-3 text-base font-bold text-orange-800">
+          {net > 0
+            ? `${rider.name} gives you ${inr(net)}`
+            : net < 0
+              ? `You give ${rider.name} ${inr(Math.abs(net))}`
+              : "Nothing changes hands"}
+        </p>
+        <p className="text-xs text-slate-500">Both balances become ₹0. Only confirm after the money has changed hands.</p>
+        {problem && <p role="alert" className="font-semibold text-red-600">{problem}</p>}
+        <button type="button" disabled={busy} onClick={confirm} className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-3 font-bold text-white disabled:opacity-60">
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />} Confirm settled
+        </button>
+      </div>
     </Modal>
   );
 }

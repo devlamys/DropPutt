@@ -117,6 +117,16 @@ export default function RiderDashboard() {
       setCashTick((n) => n + 1);
       loadStatus().catch(() => {});
     },
+    cash_limit_changed: ({ is_cash_locked }) => {
+      toast(is_cash_locked ? "Your cash limit was changed — pay the hotel to get orders" : "Your cash limit was increased", is_cash_locked ? "warn" : "success");
+      setCashTick((n) => n + 1);
+      loadStatus().catch(() => {});
+    },
+    earnings_paid: ({ paid }) => {
+      if (Number(paid) > 0) toast(`💰 The franchise paid you ${inr(paid)}`, "success");
+      setCashTick((n) => n + 1);
+      loadStatus().catch(() => {});
+    },
     cash_handover_rejected: () => {
       toast("The hotel did not confirm your cash payment", "error");
       setCashTick((n) => n + 1);

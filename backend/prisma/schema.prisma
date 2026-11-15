@@ -96,6 +96,7 @@ enum SettlementType {
   ROYALTY
   MILESTONE_BONUS
   REVERSAL
+  PAID_FROM_CASH // rider earning kept from the customer's cash (negative)
 }
 
 model Franchise {
@@ -124,6 +125,8 @@ model Franchise {
   push_campaigns      PushCampaign[]
   settlement_entries  SettlementEntry[]
   cash_handovers      RiderCashHandover[]
+  vendor_settlements  VendorSettlement[]
+  rider_payouts       RiderPayout[]
 
   @@map("franchises")
 }
@@ -250,6 +253,7 @@ model Rider {
   orders    Order[]
   settlement_entries SettlementEntry[]
   cash_handovers     RiderCashHandover[]
+  payouts            RiderPayout[]
 
   @@index([franchise_id, is_online, is_approved])
   @@map("riders")
@@ -294,6 +298,73 @@ model RiderCashHandover {
   @@index([vendor_id, status])
   @@index([rider_id, created_at])
   @@map("rider_cash_handovers")
+}
+
+enum VendorSettlementDirection {
+  VENDOR_PAID_FRANCHISE // hotel pays the commission it owes
+  FRANCHISE_PAID_VENDOR // franchise pays the hotel what it owes
+}
+
+enum SettlementMethod {
+  CASH
+  UPI
+  BANK
+}
+
+// The franchise admin records a payment between the franchise and a hotel
+// (typically the storefront commission, settled daily / weekly / monthly).
+// It moves vendor.admin_payable_balance towards zero: vendor_paid_franchise
+// raises the signed balance, franchise_paid_vendor lowers it.
+model VendorSettlement {
+  id             Int                       @id @default(autoincrement())
+  franchise_id   Int
+  vendor_id      Int
+  direction      VendorSettlementDirection
+  amount         Decimal                   @db.Decimal(12, 2)
+  method         SettlementMethod          @default(CASH)
+  note           String?
+  period_from    DateTime?
+  period_to      DateTime?
+  balance_before Decimal                   @db.Decimal(12, 2)
+  balance_after  Decimal                   @db.Decimal(12, 2)
+  recorded_by    Int
+  created_at     DateTime                  @default(now())
+
+  franchise Franchise @relation(fields: [franchise_id], references: [id])
+  vendor    Vendor    @relation(fields: [vendor_id], references: [id])
+
+  @@index([franchise_id, created_at])
+  @@index([vendor_id, created_at])
+  @@map("vendor_settlements")
+}
+
+enum PayoutMethod {
+  CASH
+  UPI
+  BANK
+  NETTED // set against the rider's cash in a net settlement
+}
+
+// The franchise pays a rider the earnings they could not keep from cash
+// (UPI orders, milestone bonuses). wallet_earnings -= amount (§15.2).
+model RiderPayout {
+  id            Int          @id @default(autoincrement())
+  franchise_id  Int
+  rider_id      Int
+  amount        Decimal      @db.Decimal(12, 2)
+  method        PayoutMethod @default(CASH)
+  note          String?
+  wallet_before Decimal      @db.Decimal(12, 2)
+  wallet_after  Decimal      @db.Decimal(12, 2)
+  recorded_by   Int
+  created_at    DateTime     @default(now())
+
+  franchise Franchise @relation(fields: [franchise_id], references: [id])
+  rider     Rider     @relation(fields: [rider_id], references: [id])
+
+  @@index([franchise_id, created_at])
+  @@index([rider_id, created_at])
+  @@map("rider_payouts")
 }
 
 model Customer {

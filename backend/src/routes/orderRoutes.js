@@ -751,11 +751,27 @@ router.post(
         }
       }
 
+      // §15: the rider keeps this order's earning (fee + tip + surge) out of
+      // the customer's cash. Only the rest counts as cash owed to others, and
+      // only what could not be kept (UPI orders, bonuses) goes to the wallet
+      // for the franchise to pay — so an earning is paid exactly once.
+      const earning = money(order.rider_earning);
+      const kept = cash.lt(earning) ? cash : earning;
+      if (kept.gt(0)) {
+        await entry({
+          rider_id: riderId,
+          party: "RIDER_EARNING",
+          type: "PAID_FROM_CASH",
+          amount: moneyStr(kept.negated()),
+          reference_key: `order:${orderId}:earning-from-cash`,
+          description: `Rider kept their earning from the cash for order ${order.order_number}`,
+        });
+      }
       await tx.rider.update({
         where: { id: riderId },
         data: {
-          cash_in_hand: { increment: moneyStr(cash) },
-          wallet_earnings: { increment: moneyStr(riderCredit) },
+          cash_in_hand: { increment: moneyStr(subtractMoney(cash, kept)) },
+          wallet_earnings: { increment: moneyStr(subtractMoney(riderCredit, kept)) },
         },
       });
 
@@ -813,6 +829,7 @@ router.post(
         order: delivered,
         already_delivered: false,
         cash_collected: moneyStr(cash),
+        earning_kept: moneyStr(kept),
         milestone,
       };
     }, TX_OPTIONS);
@@ -867,7 +884,11 @@ router.post(
       already_delivered: result.already_delivered,
       settlement: result.already_delivered
         ? null
-        : { cash_collected: result.cash_collected, milestone: result.milestone },
+        : {
+            cash_collected: result.cash_collected,
+            earning_kept: result.earning_kept,
+            milestone: result.milestone,
+          },
     });
   })
 );

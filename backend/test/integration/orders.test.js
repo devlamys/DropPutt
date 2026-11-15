@@ -198,19 +198,34 @@ describe("customer tip (§20)", () => {
 });
 
 describe("delivery settlement (§23–§25)", () => {
-  it("COD: cash in hand grows by the grand total", async () => {
+  it("COD: the rider keeps the fee from the cash; cash in hand is only the food money (§15)", async () => {
     const order = await readyToDeliver(api, w, w.riders[0], { payment_method: "COD" });
     const res = await deliver(api, w.riders[0], order.id);
     assert.equal(res.status, 200);
+    assert.equal(res.body.data.settlement.cash_collected, "230.00");
+    assert.equal(res.body.data.settlement.earning_kept, "30.00");
     const rider = await riderRow();
-    assert.equal(rider.cash_in_hand.toFixed(2), "230.00");
-    assert.equal(rider.wallet_earnings.toFixed(2), "20.00");
+    assert.equal(rider.cash_in_hand.toFixed(2), "200.00");
+    assert.equal(rider.wallet_earnings.toFixed(2), "0.00"); // paid once: kept from cash
+    const kept = await prisma.settlementEntry.findFirst({ where: { order_id: order.id, type: "PAID_FROM_CASH" } });
+    assert.equal(kept.amount.toFixed(2), "-30.00");
   });
 
-  it("prepaid at hotel: only delivery + tip is cash", async () => {
+  it("prepaid at hotel: the rider keeps the delivery fee; nothing is owed either way", async () => {
     const order = await readyToDeliver(api, w, w.riders[0], { payment_method: "PREPAID_AT_HOTEL" });
     await deliver(api, w.riders[0], order.id);
-    assert.equal((await riderRow()).cash_in_hand.toFixed(2), "30.00");
+    const rider = await riderRow();
+    assert.equal(rider.cash_in_hand.toFixed(2), "0.00");
+    assert.equal(rider.wallet_earnings.toFixed(2), "0.00");
+  });
+
+  it("UPI to admin: the rider collects nothing, so the franchise owes the fee", async () => {
+    const order = await readyToDeliver(api, w, w.riders[0], { payment_method: "UPI_TO_ADMIN" });
+    await deliver(api, w.riders[0], order.id);
+    const rider = await riderRow();
+    assert.equal(rider.cash_in_hand.toFixed(2), "0.00");
+    assert.equal(rider.wallet_earnings.toFixed(2), "30.00");
+    assert.equal(await prisma.settlementEntry.count({ where: { order_id: order.id, type: "PAID_FROM_CASH" } }), 0);
   });
 
   it("UPI to admin: no cash collected", async () => {
@@ -234,8 +249,9 @@ describe("delivery settlement (§23–§25)", () => {
     assert.equal(await prisma.walletTransaction.count({ where: { order_id: order.id, type: "DEBIT" } }), 1);
 
     const rider = await riderRow();
-    assert.equal(rider.cash_in_hand.toFixed(2), "230.00");
-    assert.equal(rider.wallet_earnings.toFixed(2), "20.00");
+    assert.equal(rider.cash_in_hand.toFixed(2), "200.00");
+    assert.equal(rider.wallet_earnings.toFixed(2), "0.00");
+    assert.equal(count(":earning-from-cash"), 1);
     const vendor = await prisma.vendor.findUnique({ where: { id: w.vendor.id } });
     assert.equal(vendor.admin_payable_balance.toFixed(2), "180.00");
     const franchise = await prisma.franchise.findUnique({ where: { id: w.franchise.id } });
@@ -323,11 +339,11 @@ describe("daily milestone (§25)", () => {
       const o2 = await readyToDeliver(api, w);
       await deliver(api, w.riders[0], o2.id);
       assert.equal(await prisma.settlementEntry.count({ where: { type: "MILESTONE_BONUS" } }), 1);
-      assert.equal((await riderRow()).wallet_earnings.toFixed(2), "90.00"); // 20 + 20 + 50
+      assert.equal((await riderRow()).wallet_earnings.toFixed(2), "50.00"); // fees kept from cash; only the bonus is owed
 
       await deliver(api, w.riders[0], o2.id, uuid()); // repeated request
       assert.equal(await prisma.settlementEntry.count({ where: { type: "MILESTONE_BONUS" } }), 1);
-      assert.equal((await riderRow()).wallet_earnings.toFixed(2), "90.00");
+      assert.equal((await riderRow()).wallet_earnings.toFixed(2), "50.00");
 
       const o3 = await readyToDeliver(api, w); // 3rd delivery: past the target
       await deliver(api, w.riders[0], o3.id);

@@ -308,7 +308,7 @@ const BALANCE_CHECK_CAP = 500;
 
 /** Stored balances vs. their ledger rows (all time). */
 async function balanceChecks(franchise_id) {
-  const [franchise, lastTx, riders, vendors, riderLedger, vendorLedger] = await Promise.all([
+  const [franchise, lastTx, riders, vendors, riderLedger, vendorLedger, riderPaid, vendorHandovers, vendorSettled] = await Promise.all([
     prisma.franchise.findUnique({ where: { id: franchise_id }, select: { wallet_balance: true } }),
     prisma.walletTransaction.findFirst({
       where: { franchise_id },
@@ -334,7 +334,8 @@ async function balanceChecks(franchise_id) {
       where: {
         franchise_id,
         party: "RIDER_EARNING",
-        type: { in: ["ORDER_DELIVERY", "MILESTONE_BONUS"] },
+        // PAID_FROM_CASH rows are negative: the earning the rider kept from cash.
+        type: { in: ["ORDER_DELIVERY", "MILESTONE_BONUS", "PAID_FROM_CASH"] },
       },
       _sum: { amount: true },
     }),
@@ -343,10 +344,44 @@ async function balanceChecks(franchise_id) {
       where: { franchise_id, party: "VENDOR_PAYABLE" },
       _sum: { amount: true },
     }),
+    // Earnings the franchise already paid out (§15.2).
+    prisma.riderPayout.groupBy({
+      by: ["rider_id"],
+      where: { franchise_id },
+      _sum: { amount: true },
+    }),
+    // Cash a rider handed the hotel lowers what the franchise owes it (§15.1).
+    prisma.riderCashHandover.groupBy({
+      by: ["vendor_id"],
+      where: { franchise_id, status: "CONFIRMED", vendor_id: { not: null } },
+      _sum: { amount: true },
+    }),
+    // Payments recorded between the franchise and the hotel (§16.1).
+    prisma.vendorSettlement.groupBy({
+      by: ["vendor_id", "direction"],
+      where: { franchise_id },
+      _sum: { amount: true },
+    }),
   ]);
 
-  const riderSums = new Map(riderLedger.map((row) => [row.rider_id, row._sum.amount]));
+  const riderPaidSums = new Map(riderPaid.map((row) => [row.rider_id, row._sum.amount ?? 0]));
+  const riderSums = new Map(
+    riderLedger.map((row) => [row.rider_id, subtractMoney(row._sum.amount ?? 0, riderPaidSums.get(row.rider_id) ?? 0)])
+  );
   const vendorSums = new Map(vendorLedger.map((row) => [row.vendor_id, row._sum.amount]));
+  const vendorExpected = (id) => {
+    let total = money(vendorSums.get(id) ?? 0);
+    const handed = vendorHandovers.find((row) => row.vendor_id === id);
+    if (handed) total = subtractMoney(total, handed._sum.amount ?? 0);
+    for (const row of vendorSettled) {
+      if (row.vendor_id !== id) continue;
+      total =
+        row.direction === "VENDOR_PAID_FRANCHISE"
+          ? addMoney(total, row._sum.amount ?? 0)
+          : subtractMoney(total, row._sum.amount ?? 0);
+    }
+    return total;
+  };
   const compare = (stored, ledger) => ({
     stored: moneyStr(stored),
     ledger: moneyStr(ledger),

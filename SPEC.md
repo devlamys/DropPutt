@@ -919,25 +919,49 @@ if rider.cash_in_hand >= rider.max_cash_limit:
 
 Use `>=`, not only `>`.
 
-At delivery:
+At delivery the rider keeps their own earning out of the customer's cash, so an earning is paid exactly once:
 
 ```text
-rider.cash_in_hand += amount_to_collect
+cash      = amount_to_collect
+            (custom-buy with rider_paid_at_shop = true: grand_total - item_total)
+kept      = min(cash, rider_earning)          -- delivery fee + tip + surge
+rider.cash_in_hand    += cash - kept          -- money owed to the hotel / franchise
+rider.wallet_earnings += rider_earning - kept -- what the franchise still owes the rider
+                       + milestone bonus
 ```
 
-For custom-buy where the rider paid the shop personally:
+COD: `cash_in_hand` grows by the food money, wallet 0. Prepaid at hotel: both 0. UPI to admin: cash 0, wallet += fee. Ledger: the `RIDER_CASH / ORDER_PAYMENT` entry records the full cash collected; a `RIDER_EARNING / PAID_FROM_CASH` entry of `-kept` (key `order:{id}:earning-from-cash`) records the earning kept. The rider's own advance on a custom-buy is never counted as customer cash.
 
-```text
-rider.cash_in_hand += grand_total - item_total
-```
+---
 
-provided that:
+## 15.1 Rider → hotel cash handover
 
-```text
-rider_paid_at_shop = true
-```
+A rider at or above `max_cash_limit` cannot accept orders. The block is computed (`cash_in_hand >= max_cash_limit`), so any confirmed handover below the limit lifts it.
 
-This prevents the rider's own advance payment from being incorrectly counted as customer cash collected.
+The rider hands the hotel the **food money only**: for each COD order with a partner vendor (not rider-paid), `min(item_total, cash collected)`. The delivery fee, tip and rain surge stay in the rider's `cash_in_hand` and are settled with the franchise admin. The hotel's own bill therefore equals the cash it receives.
+
+`RiderCashHandover` (franchise_id, rider_id, vendor_id nullable, amount, status `PENDING|CONFIRMED|REJECTED`, initiated_by `RIDER|VENDOR|ADMIN`, cash_before/after, note, resolved_by/at):
+
+- Rider reports "I paid" → `PENDING`; the hotel confirms or rejects with one tap. Amount ≤ food owed to that vendor (pending counts) and ≤ `cash_in_hand`. Partial amounts are allowed.
+- The vendor can record cash received directly (confirmed at once). The franchise admin can confirm/reject any pending row, and the direct admin cash settlement now also writes a `RiderCashHandover` (`ADMIN`, no vendor).
+- On confirm, in one transaction with `FOR UPDATE` on the rider row: `rider.cash_in_hand -= amount`; for a vendor handover `vendor.admin_payable_balance -= amount`. Confirming twice is a no-op.
+
+The franchise admin and the Super Admin can raise or lower each rider's limit: `PATCH /api/v1/admin/riders/:id/cash-limit` `{ max_cash_limit }` (1-100000). It emits `cash_limit_changed` to the rider and the franchise room; the rider is unblocked or blocked at once because the block is computed.
+
+Endpoints: `GET /rider/me/cash-owed`, `POST /rider/me/cash-handover` (Idempotency-Key); `GET /vendor/cash-handovers`, `GET /vendor/cash-riders`, `POST /vendor/cash-handovers` (Idempotency-Key), `POST /vendor/cash-handovers/:id/confirm|reject`; `GET /admin/cash-handovers`, `POST /admin/cash-handovers/:id/confirm|reject`.
+
+Socket events: `cash_limit_reached` (rider, after the delivery that reaches the limit), `cash_handover_requested` (vendor, franchise), `cash_handover_resolved` (vendor), `cash_settled` (rider, franchise), `cash_handover_rejected` (rider). Push types: `CASH_LIMIT_REACHED`, `CASH_HANDOVER_REQUESTED`, `CASH_SETTLED`, `CASH_HANDOVER_REJECTED`.
+
+## 15.2 Rider earnings payout and net settlement
+
+`wallet_earnings` holds only what the rider could not keep from cash (UPI orders, milestone bonuses). The franchise pays it with `RiderPayout` (franchise_id, rider_id, amount, method `CASH|UPI|BANK|NETTED`, note, wallet_before/after, recorded_by); one locked transaction, `amount <= wallet_earnings`.
+
+- `POST /api/v1/admin/riders/:id/payouts` `{ amount, method, note? }` (Idempotency-Key) — part or all of the wallet.
+- `POST /api/v1/admin/riders/:id/net-settlement` (Idempotency-Key) — collects all `cash_in_hand` (an `ADMIN` `RiderCashHandover`) and pays all `wallet_earnings` (`NETTED` payout) together; returns `net = cash - wallet` and `direction` `RIDER_PAYS | FRANCHISE_PAYS | EVEN`. 409 `NOTHING_TO_SETTLE` when both are 0.
+- `/admin/overview` and `/admin/riders` return `net_due = cash_in_hand - wallet_earnings`.
+- Socket `earnings_paid` to the rider and franchise rooms; push type `EARNINGS_PAID`.
+
+Balances from before this rule (cash that still includes fees, wallet that still includes the same fees) are cleared with a net settlement.
 
 ---
 
@@ -1327,7 +1351,7 @@ Inside one transaction:
 8. Apply customer gate verification.
 9. Apply cash collection.
 10. Apply vendor payable.
-11. Apply rider earnings.
+11. Apply rider earnings (kept from cash first, the rest to the wallet, §15).
 12. Apply milestone bonus if earned.
 13. Deduct royalty exactly once.
 14. Write all settlement entries.
