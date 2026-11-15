@@ -59,6 +59,12 @@ enum DeliveryHandledBy {
   VENDOR_STAFF
 }
 
+enum ZoneSource {
+  AUTO            // decided from the customer's location
+  MANUAL          // no location was known; the rider chose it
+  RIDER_OVERRIDE  // the rider changed the automatic zone
+}
+
 enum OrderChannel {
   WEB
   WHATSAPP
@@ -121,6 +127,8 @@ model Franchise {
   // WhatsApp ordering: the Meta phone-number id customers message, and the switch.
   whatsapp_phone_number_id String? @unique
   whatsapp_enabled         Boolean @default(false)
+  // Orders further than this (km, hotel to customer) are refused. Franchise admin edits it.
+  max_delivery_km          Decimal @default(8) @db.Decimal(5, 2)
   is_active              Boolean  @default(true)
   created_at             DateTime @default(now())
 
@@ -417,9 +425,12 @@ model Zone {
   id               Int      @id @default(autoincrement())
   franchise_id     Int
   zone_name        String
+  // Upper edge of this distance band, in km from the hotel to the customer.
+  // A band starts where the previous (smaller) one ends.
+  max_km           Decimal  @db.Decimal(5, 2)
   delivery_fee     Decimal  @db.Decimal(12, 2)
-  rider_commission Decimal  @db.Decimal(12, 2)
-  franchise_profit Decimal  @db.Decimal(12, 2)
+  rider_commission Decimal  @default(0) @db.Decimal(12, 2)
+  franchise_profit Decimal  @default(0) @db.Decimal(12, 2)
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
 
@@ -441,6 +452,7 @@ model Order {
   vendor_id            Int?
   rider_id             Int?
   zone_id              Int?
+  zone_source          ZoneSource?
   customer_phone       String?
   customer_name        String?
   channel              OrderChannel      @default(WEB)

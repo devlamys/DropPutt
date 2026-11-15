@@ -689,6 +689,7 @@ const franchiseSettingsView = (franchise) => ({
   default_commission_rate: moneyStr(franchise.default_commission_rate),
   is_launch_promo_active: franchise.is_launch_promo_active,
   rain_surge_fee: moneyStr(franchise.rain_surge_fee),
+  max_delivery_km: moneyStr(franchise.max_delivery_km),
   daily_milestone_target: franchise.daily_milestone_target,
   daily_milestone_bonus: moneyStr(franchise.daily_milestone_bonus),
 });
@@ -807,10 +808,125 @@ router.get(
 );
 
 // PATCH /api/v1/admin/franchise/settings — launch promo and rain surge.
+// ─────────────────────────────────────────────────────────────────────────────
+// Delivery zones: distance bands (hotel -> customer). SPEC "Delivery zones by distance".
+// ─────────────────────────────────────────────────────────────────────────────
+
+const km2 = (value) => (Math.round(Number(value) * 100) / 100).toFixed(2);
+
+const zoneView = (zone) => ({
+  id: zone.id,
+  zone_name: zone.zone_name,
+  max_km: moneyStr(zone.max_km),
+  delivery_fee: moneyStr(zone.delivery_fee),
+});
+
+const zoneFields = {
+  zone_name: z.string().trim().min(2).max(80),
+  max_km: z.coerce.number().min(0.5).max(50),
+  delivery_fee: zMoney,
+};
+const zoneCreateSchema = z.object(zoneFields);
+const zoneUpdateSchema = z
+  .object(zoneFields)
+  .partial()
+  .refine((body) => Object.keys(body).length > 0, { message: "nothing to update" });
+
+/** Two bands cannot end at the same distance, and a name is unique per franchise. */
+async function checkZone(franchise_id, { zone_name, max_km }, exceptId) {
+  const others = await prisma.zone.findMany({ where: { franchise_id, ...(exceptId ? { id: { not: exceptId } } : {}) } });
+  if (zone_name !== undefined && others.some((z) => z.zone_name.toLowerCase() === zone_name.toLowerCase())) {
+    throw new AppError(409, "DUPLICATE_ZONE", "A zone with this name already exists");
+  }
+  if (max_km !== undefined && others.some((z) => Number(z.max_km) === Number(km2(max_km)))) {
+    throw new AppError(409, "DUPLICATE_BAND", "Another zone already ends at this distance");
+  }
+}
+
+router.get(
+  "/zones",
+  requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
+  asyncHandler(async (req, res) => {
+    const zones = await prisma.zone.findMany({
+      where: { franchise_id: req.franchise_id },
+      orderBy: [{ max_km: "asc" }, { id: "asc" }],
+    });
+    ok(res, { zones: zones.map(zoneView) });
+  })
+);
+
+router.post(
+  "/zones",
+  requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
+  asyncHandler(async (req, res) => {
+    const body = parse(zoneCreateSchema, req.body);
+    await checkZone(req.franchise_id, body);
+    const zone = await prisma.zone.create({
+      data: {
+        franchise_id: req.franchise_id,
+        zone_name: body.zone_name,
+        max_km: km2(body.max_km),
+        delivery_fee: moneyStr(body.delivery_fee),
+      },
+    });
+    audit("zone.created", { franchise_id: req.franchise_id, by_user_id: req.user.id, zone_id: zone.id });
+    ok(res, { zone: zoneView(zone) }, { status: 201 });
+  })
+);
+
+router.patch(
+  "/zones/:id",
+  requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id);
+    const body = parse(zoneUpdateSchema, req.body);
+    const current = await prisma.zone.findFirst({ where: { id, franchise_id: req.franchise_id } });
+    if (!current) throw new AppError(404, "NOT_FOUND", "Zone not found");
+    await checkZone(req.franchise_id, body, id);
+    const zone = await prisma.zone.update({
+      where: { id },
+      data: {
+        ...(body.zone_name !== undefined ? { zone_name: body.zone_name } : {}),
+        ...(body.max_km !== undefined ? { max_km: km2(body.max_km) } : {}),
+        ...(body.delivery_fee !== undefined ? { delivery_fee: moneyStr(body.delivery_fee) } : {}),
+      },
+    });
+    audit("zone.updated", {
+      franchise_id: req.franchise_id,
+      by_user_id: req.user.id,
+      zone_id: id,
+      before: zoneView(current),
+      after: zoneView(zone),
+    });
+    ok(res, { zone: zoneView(zone) });
+  })
+);
+
+router.delete(
+  "/zones/:id",
+  requireRole("FRANCHISE_ADMIN", "SUPER_ADMIN"),
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id);
+    const zone = await prisma.zone.findFirst({ where: { id, franchise_id: req.franchise_id } });
+    if (!zone) throw new AppError(404, "NOT_FOUND", "Zone not found");
+    if ((await prisma.zone.count({ where: { franchise_id: req.franchise_id } })) <= 1) {
+      throw new AppError(409, "LAST_ZONE", "Keep at least one zone");
+    }
+    if ((await prisma.order.count({ where: { franchise_id: req.franchise_id, zone_id: id } })) > 0) {
+      throw new AppError(409, "ZONE_IN_USE", "Orders were delivered in this zone, so it cannot be deleted. Edit it instead.");
+    }
+    await prisma.zone.delete({ where: { id } });
+    audit("zone.deleted", { franchise_id: req.franchise_id, by_user_id: req.user.id, zone_id: id });
+    ok(res, { id });
+  })
+);
+
 const settingsSchema = z
   .object({
     is_launch_promo_active: z.boolean().optional(),
     rain_surge_fee: zMoney.optional(),
+    // Orders further than this from the hotel are refused (SPEC "Delivery zones by distance").
+    max_delivery_km: z.coerce.number().min(0.5).max(50).optional(),
   })
   .refine((body) => Object.keys(body).length > 0, { message: "nothing to update" })
   .refine((body) => body.rain_surge_fee === undefined || Number(body.rain_surge_fee) <= 200, {
@@ -833,6 +949,7 @@ router.patch(
         ...(body.rain_surge_fee !== undefined
           ? { rain_surge_fee: moneyStr(body.rain_surge_fee) }
           : {}),
+        ...(body.max_delivery_km !== undefined ? { max_delivery_km: km2(body.max_delivery_km) } : {}),
       },
     });
     audit("franchise.settings", {
@@ -841,10 +958,12 @@ router.patch(
       before: {
         is_launch_promo_active: before.is_launch_promo_active,
         rain_surge_fee: moneyStr(before.rain_surge_fee),
+        max_delivery_km: moneyStr(before.max_delivery_km),
       },
       after: {
         is_launch_promo_active: franchise.is_launch_promo_active,
         rain_surge_fee: moneyStr(franchise.rain_surge_fee),
+        max_delivery_km: moneyStr(franchise.max_delivery_km),
       },
     });
     emitTo(rooms.franchise(req.franchise_id), "franchise_settings_changed", {

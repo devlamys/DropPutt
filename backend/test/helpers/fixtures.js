@@ -25,14 +25,14 @@ export const tokenFor = (user) => signAccessToken(user, null);
 export async function makeWorld({ slug = "tf", name = "Test Franchise", franchise = {} } = {}) {
   const f = await prisma.franchise.create({ data: { name, slug, ...franchise } });
   const zones = [];
-  for (const [zone_name, delivery_fee, rider_commission, franchise_profit] of [
-    ["Zone 1", 30, 20, 10],
-    ["Zone 2", 40, 27, 13],
-    ["Zone 3", 50, 35, 15],
+  for (const [zone_name, delivery_fee, max_km] of [
+    ["Zone 1", 30, 2],
+    ["Zone 2", 40, 5],
+    ["Zone 3", 50, 8],
   ]) {
     zones.push(
       await prisma.zone.create({
-        data: { franchise_id: f.id, zone_name, delivery_fee, rider_commission, franchise_profit },
+        data: { franchise_id: f.id, zone_name, delivery_fee, max_km },
       })
     );
   }
@@ -95,3 +95,10 @@ export async function makeWorld({ slug = "tf", name = "Test Franchise", franchis
 
 /** A second, unrelated franchise for tenant-isolation tests. */
 export const makeOtherWorld = () => makeWorld({ slug: "other", name: "Other Franchise" });
+
+/**
+ * A delivery pin about `roadKm` km (by the no-router estimate, which stretches a straight
+ * line by 1.3) from the test vendor, who is at 11.0, 76.0. `pinAt(1)` is in Zone 1 (up to 2 km),
+ * `pinAt(3)` in Zone 2 (up to 5), `pinAt(7)` in Zone 3 (up to 8), `pinAt(9)` is out of range.
+ */
+export const pinAt = (roadKm) => ({ drop_lat: Number((11.0 + roadKm / 1.3 / 111.195).toFixed(6)), drop_lng: 76.0 });

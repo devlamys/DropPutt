@@ -48,12 +48,6 @@ export const M = {
     ],
   }),
   cartEmpty: () => text(both("കാർട്ട് ഒഴിഞ്ഞു.", "Your cart is empty.")),
-  pickZone: (rows) => ({
-    type: "list",
-    body: both("ഏത് പ്രദേശത്തേക്കാണ് ഡെലിവറി?", "Which area should we deliver to?"),
-    button: "Area / പ്രദേശം",
-    rows,
-  }),
   savedAddress: (address) => ({
     type: "buttons",
     body: both(`ഈ വിലാസത്തിലേക്കാണോ?\n${address}`, "Deliver to this address?"),
@@ -66,26 +60,30 @@ export const M = {
   askLocation: () => ({
     type: "location_request",
     body: both(
-      "📍 ലൊക്കേഷൻ അയച്ചാൽ റൈഡർക്ക് എളുപ്പം എത്താം. താഴെയുള്ള ബട്ടൺ അമർത്തിയാൽ മതി.",
-      "Tap the button to share your location. If you can't, type a nearby landmark or send a voice note."
+      "📍 ഡെലിവറി വിലാസത്തിന്റെ ലൊക്കേഷൻ അയക്കൂ. ദൂരം നോക്കി ഡെലിവറി ചാർജ് ഉടൻ അറിയിക്കാം. താഴെയുള്ള ബട്ടൺ അമർത്തിയാൽ മതി (വേറെ സ്ഥലത്തെ വീടാണെങ്കിൽ ആ സ്ഥലം മാപ്പിൽ തിരഞ്ഞെടുത്ത് അയക്കാം).",
+      "Share the delivery location and we will show the delivery charge from the distance. Tap the button (for a home elsewhere, pick that place on the map and send it)."
     ),
   }),
   noLocation: () => ({
     type: "buttons",
-    body: both("ലൊക്കേഷൻ അയക്കാൻ പറ്റുന്നില്ലേ?", "Can't share it?"),
-    buttons: [
-      { id: "loc:call", title: "Call me / വിളിക്കൂ" },
-      { id: "loc:skip", title: "Skip / വേണ്ട" },
-    ],
+    body: both("ലൊക്കേഷൻ അയക്കാൻ പറ്റുന്നില്ലേ?", "Can't share a location?"),
+    buttons: [{ id: "loc:help", title: "Help / സഹായം" }],
   }),
+  callShop: (shop, phone) =>
+    text(
+      both(
+        `ലൊക്കേഷൻ ഇല്ലാതെ ഓർഡർ എടുക്കാൻ കഴിയില്ല. ${shop}-നെ ${phone ?? "ഫോണിൽ"} വിളിച്ചാൽ അവർ ഡെലിവറി ഏർപ്പാടാക്കും.`,
+        `We need a location to price the delivery. Call ${shop}${phone ? ` on ${phone}` : ""} and they will arrange it.`
+      )
+    ),
   gotLocation: () => text(both("ലൊക്കേഷൻ കിട്ടി ✅", "Location received ✅")),
   gotLandmark: () => text(both("അടയാളം കിട്ടി ✅", "Landmark noted ✅")),
   gotVoice: () => text(both("വോയിസ് നോട്ട് കിട്ടി ✅", "Voice note received ✅")),
-  confirm: ({ shop, lines, quote, address }) => ({
+  confirm: ({ shop, lines, quote, address, km }) => ({
     type: "buttons",
     body:
       `${both("ഓർഡർ ഉറപ്പിക്കട്ടെ?", "Please confirm")}\n${shop}\n${lines}\n` +
-      `${label("ഭക്ഷണം", "Items")}: ${rupees(quote.item_total)}\n${label("ഡെലിവറി", "Delivery")}: ${rupees(quote.delivery_fee)}\n` +
+      `${label("ഭക്ഷണം", "Items")}: ${rupees(quote.item_total)}\n${label("ഡെലിവറി", "Delivery")}: ${rupees(quote.delivery_fee)}${km != null ? ` (${km} km)` : ""}\n` +
       `${label("ആകെ", "Total")}: ${rupees(quote.estimated_total)} (${label("പണമായി", "cash on delivery")})\n📍 ${address}`,
     buttons: [
       { id: "confirm:yes", title: "Confirm / ഉറപ്പ്" },

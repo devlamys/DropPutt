@@ -8,7 +8,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma, TX_OPTIONS } from "../config/prisma.js";
 import { idempotency } from "../middleware/idempotency.js";
-import { publicLimiter, publicWriteLimiter } from "../middleware/rateLimit.js";
+import { geocodeLimiter, publicLimiter, publicWriteLimiter } from "../middleware/rateLimit.js";
+import { searchPlaces } from "../services/geocodeService.js";
 import { voiceUpload } from "../middleware/upload.js";
 import { cancelOrder } from "../services/orderCancelService.js";
 import { refreshRouteFromRider, routeView } from "../services/routeService.js";
@@ -27,6 +28,24 @@ import { parse, zLat, zLng } from "../utils/validate.js";
 
 const router = Router();
 router.use(publicLimiter);
+
+const geocodeSchema = z.object({
+  q: z.string().trim().min(3).max(120),
+  near_lat: zLat.optional(),
+  near_lng: zLng.optional(),
+});
+
+// GET /api/v1/public/geocode?q=Kizhissery&near_lat=..&near_lng=.. — find a place by name
+// for the delivery-location map. Results prefer the area around the shop.
+router.get(
+  "/geocode",
+  geocodeLimiter,
+  asyncHandler(async (req, res) => {
+    const query = parse(geocodeSchema, req.query);
+    const near = query.near_lat !== undefined && query.near_lng !== undefined ? { lat: query.near_lat, lng: query.near_lng } : null;
+    ok(res, { places: await searchPlaces(query.q, near) });
+  })
+);
 
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
 

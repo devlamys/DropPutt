@@ -12,6 +12,7 @@ import { AppError, fieldError } from "../utils/response.js";
 import { moneyStr } from "../utils/serializers.js";
 import { istDayRange } from "../utils/time.js";
 import { buildCart } from "./cartService.js";
+import { requireDelivery, resolveDelivery } from "./deliveryZoneService.js";
 import { dispatchOrder } from "./dispatchService.js";
 
 export const CATEGORY_BY_SHOP = Object.freeze({
@@ -33,18 +34,25 @@ async function loadOpenVendor(franchise_id, vendor_id) {
  * What this cart would cost right now, without taking any stock: the same
  * validation as checkout, rolled back at the end.
  */
-export async function quoteMarketplaceOrder({ franchise_id, vendor_id, zone_id, items }) {
+export async function quoteMarketplaceOrder({ franchise_id, vendor_id, drop_lat, drop_lng, items }) {
   const vendor = await loadOpenVendor(franchise_id, vendor_id);
+  const delivery = requireDelivery(
+    await resolveDelivery({
+      franchise_id,
+      from: { lat: vendor.lat, lng: vendor.lng },
+      to: { lat: drop_lat, lng: drop_lng },
+    })
+  );
+  const zone = delivery.zone;
   const rollback = Symbol("rollback");
   let quote;
   try {
     await prisma.$transaction(async (tx) => {
-      const zone = await tx.zone.findFirst({ where: { id: zone_id, franchise_id } });
-      if (!zone) throw fieldError("zone_id", "area not found");
       const cart = await buildCart(tx, vendor, items, new Date());
       quote = {
         vendor,
         zone,
+        km: delivery.km,
         lines: cart.lines,
         item_total: moneyStr(cart.item_total),
         delivery_fee: moneyStr(zone.delivery_fee),
@@ -60,13 +68,22 @@ export async function quoteMarketplaceOrder({ franchise_id, vendor_id, zone_id, 
 
 /**
  * Creates the order and calls the riders.
- * `body`: { vendor_id, zone_id, customer_phone (10 digits), customer_name?, drop_address,
- *           turning_point?, payment_method, items, drop_lat?, drop_lng?, voice_note_url? }
+ * `body`: { vendor_id, customer_name?, drop_address, turning_point?, payment_method, items,
+ *           drop_lat, drop_lng (required: the zone and fee come from the distance), voice_note_url? }
  */
 export async function placeMarketplaceOrder({ franchise, body, customer_phone, channel = "WEB" }) {
   const franchise_id = franchise.id;
   const vendor = await loadOpenVendor(franchise_id, body.vendor_id);
   const hasPin = body.drop_lat != null && body.drop_lng != null;
+  if (!hasPin) throw fieldError("drop_lat", "choose the delivery location on the map");
+  // The zone is decided here, from the distance: the customer cannot choose it.
+  const delivery = requireDelivery(
+    await resolveDelivery({
+      franchise_id,
+      from: { lat: vendor.lat, lng: vendor.lng },
+      to: { lat: body.drop_lat, lng: body.drop_lng },
+    })
+  );
 
   const createOrder = () =>
     prisma.$transaction(async (tx) => {
@@ -74,8 +91,7 @@ export async function placeMarketplaceOrder({ franchise, body, customer_phone, c
       if (!current.wallet_balance.gt(current.min_balance_limit)) {
         throw new AppError(403, "FRANCHISE_WALLET_LOW", "Delivery is temporarily unavailable in this area.");
       }
-      const zone = await tx.zone.findFirst({ where: { id: body.zone_id, franchise_id } });
-      if (!zone) throw fieldError("zone_id", "area not found");
+      const zone = delivery.zone;
 
       const cart = await buildCart(tx, vendor, body.items, new Date());
 
@@ -109,6 +125,7 @@ export async function placeMarketplaceOrder({ franchise, body, customer_phone, c
           order_status: "RIDER_REQUESTED",
           vendor_id: vendor.id,
           zone_id: zone.id,
+          zone_source: "AUTO",
           customer_phone,
           customer_name: body.customer_name ?? null,
           pickup_address: vendor.address ?? null,
@@ -159,6 +176,7 @@ export async function placeMarketplaceOrder({ franchise, body, customer_phone, c
       })),
       item_total: moneyStr(cart.item_total),
       delivery_fee: moneyStr(zone.delivery_fee),
+      distance_km: delivery.km,
       estimated_total: moneyStr(total),
       payment_method: order.payment_method,
       // Cash the rider will ask for: nothing when the customer pays by UPI.

@@ -4,7 +4,7 @@ import { io as connect } from "socket.io-client";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { client, prisma, startServer } from "../helpers/app.js";
 import { resetDb } from "../helpers/db.js";
-import { makeOtherWorld, makeWorld, nextPhone } from "../helpers/fixtures.js";
+import { makeOtherWorld, makeWorld, nextPhone, pinAt } from "../helpers/fixtures.js";
 import { accept, pickup, placeOrder, uuid } from "../helpers/flow.js";
 
 let server, api, w, other;
@@ -25,7 +25,7 @@ const checkout = (body, headers) =>
     headers,
     body: {
       vendor_id: w.vendor.id,
-      zone_id: w.zones[0].id,
+      ...pinAt(1),
       customer_phone: nextPhone(),
       drop_address: "Near the mosque",
       ...body,
@@ -70,7 +70,7 @@ describe("marketplace cart rules (§7, §42)", () => {
   });
 
   it("estimate = items + the zone's delivery fee", async () => {
-    const res = await checkout({ zone_id: w.zones[1].id, items: [item(w.products.biryani, 2)] });
+    const res = await checkout({ ...pinAt(3), items: [item(w.products.biryani, 2)] });
     assert.equal(res.body.data.delivery_fee, "40.00");
     assert.equal(res.body.data.estimated_total, "240.00");
   });
@@ -388,7 +388,7 @@ describe("checkout: payment method and turning point", () => {
     api("POST", "/marketplace/checkout", {
       body: {
         vendor_id: w.vendor.id,
-        zone_id: w.zones[0].id,
+        ...pinAt(1),
         customer_phone: nextPhone(),
         drop_address: "Blue gate house",
         items: [{ product_id: w.products.biryani.id, quantity: 2 }],

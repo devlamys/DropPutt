@@ -73,3 +73,6 @@ export const checkoutPhoneLimiter = limiter({
   limit: 5,
   keyGenerator: (req) => `checkout:${normalizePhone(req.body?.customer_phone) || req.ip}`,
 });
+
+// Place search goes to a shared outside service: keep one address from using it up.
+export const geocodeLimiter = limiter({ windowMs: MINUTE, limit: 20 });

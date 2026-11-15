@@ -26,7 +26,8 @@ const MAX_ORDERS_PER_WINDOW = 5;
 const PAGE = 9; // rows per page when a list needs a "More" row (WhatsApp allows 10)
 
 const trackUrl = (token) => `${env.publicAppUrl}/drop/${token}`;
-const reasonOf = (error) => error?.details?.[0]?.issue ?? error?.message ?? "something went wrong";
+const reasonOf = (error) =>
+  error?.code === "OUTSIDE_DELIVERY_AREA" ? error.message : (error?.details?.[0]?.issue ?? error?.message ?? "something went wrong");
 
 /** Up to 10 rows; longer lists get 9 rows plus a "More…" row. */
 function pageRows(items, page, kind, toRow) {
@@ -106,23 +107,6 @@ function showCart(ctx) {
   ctx.say(M.cart(ctx.data.shop_name, cartLines(ctx.data.cart), cartItemsTotal(ctx.data.cart)));
 }
 
-async function showZones(ctx, page = 0) {
-  const zones = await prisma.zone.findMany({
-    where: { franchise_id: ctx.franchise.id },
-    orderBy: [{ delivery_fee: "asc" }, { id: "asc" }],
-  });
-  ctx.state = "ZONE";
-  ctx.say(
-    M.pickZone(
-      pageRows(zones, page, "zones", (z) => ({
-        id: `zone:${z.id}`,
-        title: z.zone_name,
-        description: `Delivery ${rupees(moneyStr(z.delivery_fee))}`,
-      }))
-    )
-  );
-}
-
 function askForLocation(ctx) {
   ctx.state = "LOCATION";
   ctx.say(M.askLocation());
@@ -130,17 +114,25 @@ function askForLocation(ctx) {
 }
 
 async function showConfirm(ctx) {
+  // The zone and the delivery fee come from the distance to this pin; no pin, no fee.
+  if (ctx.data.lat == null || ctx.data.lng == null) return askForLocation(ctx);
   let quote;
   try {
     quote = await quoteMarketplaceOrder({
       franchise_id: ctx.franchise.id,
       vendor_id: ctx.data.vendor_id,
-      zone_id: ctx.data.zone_id,
+      drop_lat: ctx.data.lat,
+      drop_lng: ctx.data.lng,
       items: ctx.data.cart.map((l) => ({ product_id: l.product_id, quantity: l.qty })),
     });
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
     ctx.say(M.failed(reasonOf(error)));
+    if (error.code === "OUTSIDE_DELIVERY_AREA") {
+      ctx.data.lat = null;
+      ctx.data.lng = null;
+      return askForLocation(ctx);
+    }
     return showCart(ctx);
   }
   const byId = new Map(quote.lines.map((l) => [l.product_id, l]));
@@ -148,7 +140,7 @@ async function showConfirm(ctx) {
     .map((l) => `• ${l.qty} × ${l.name} – ${rupees(byId.get(l.product_id)?.line_total ?? "")}`)
     .join("\n");
   ctx.state = "CONFIRM";
-  ctx.say(M.confirm({ shop: ctx.data.shop_name, lines, quote, address: ctx.data.address }));
+  ctx.say(M.confirm({ shop: ctx.data.shop_name, lines, quote, address: ctx.data.address, km: quote.km }));
 }
 
 async function reprompt(ctx) {
@@ -158,7 +150,6 @@ async function reprompt(ctx) {
     case "QTY": return ctx.data.pending ? ctx.say(M.askQty(ctx.data.pending.name, ctx.data.pending.price)) : showItems(ctx);
     case "QTY_OTHER": return ctx.say(M.typeQty());
     case "CART": return showCart(ctx);
-    case "ZONE": return showZones(ctx);
     case "ADDRESS_CONFIRM": return ctx.say(M.savedAddress(ctx.data.saved.address));
     case "ADDRESS_TEXT": return ctx.say(M.askAddress());
     case "LOCATION": return askForLocation(ctx);
@@ -224,13 +215,7 @@ async function addToCart(ctx, qty) {
   return showCart(ctx);
 }
 
-async function afterZone(ctx, id) {
-  const zone = await prisma.zone.findFirst({ where: { id, franchise_id: ctx.franchise.id } });
-  if (!zone) {
-    ctx.say(M.failed("area not found"));
-    return showZones(ctx);
-  }
-  ctx.data.zone_id = zone.id;
+async function afterCart(ctx) {
   const last = await prisma.order.findFirst({
     where: { franchise_id: ctx.franchise.id, customer_phone: ctx.phone, drop_address: { not: null } },
     orderBy: { id: "desc" },
@@ -271,6 +256,14 @@ function askNewAddress(ctx) {
   ctx.say(M.askAddress());
 }
 
+/** Cannot share a location: no pin means no delivery fee, so the shop takes the order by phone. */
+async function shopHelp(ctx) {
+  const vendor = ctx.data.vendor_id
+    ? await prisma.vendor.findUnique({ where: { id: ctx.data.vendor_id }, select: { shop_name: true, user: { select: { phone: true } } } })
+    : null;
+  ctx.say(M.callShop(vendor?.shop_name ?? "the shop", vendor?.user?.phone));
+}
+
 async function placeOrder(ctx) {
   const since = new Date(ctx.now.getTime() - ORDER_WINDOW_MS);
   const recent = await prisma.order.count({
@@ -280,9 +273,8 @@ async function placeOrder(ctx) {
     ctx.say(M.tooMany());
     return;
   }
-  const { cart, vendor_id, zone_id, address } = ctx.data;
-  const landmark =
-    ctx.data.landmark ?? (ctx.data.call_first ? "Customer could not share location - please call before coming" : null);
+  const { cart, vendor_id, address } = ctx.data;
+  const landmark = ctx.data.landmark ?? null;
   try {
     const { summary } = await placeMarketplaceOrder({
       franchise: ctx.franchise,
@@ -290,7 +282,6 @@ async function placeOrder(ctx) {
       channel: "WHATSAPP",
       body: {
         vendor_id,
-        zone_id,
         customer_name: ctx.name || undefined,
         drop_address: address,
         turning_point: landmark || undefined,
@@ -368,7 +359,7 @@ async function takeVoice(ctx, media_id) {
     `voice/whatsapp/${ctx.franchise.id}`
   );
   ctx.say(M.gotVoice());
-  return showConfirm(ctx);
+  return askForLocation(ctx);
 }
 
 // ── Routing ──────────────────────────────────────────────────────────────────
@@ -401,24 +392,21 @@ async function route(ctx, message) {
       }
       case "cart":
         if (a === "add") return showItems(ctx);
-        if (a === "checkout") return ctx.data.cart?.length ? showZones(ctx) : showShops(ctx);
+        if (a === "checkout") return ctx.data.cart?.length ? afterCart(ctx) : showShops(ctx);
         if (a === "clear") {
           ctx.data.cart = [];
           return showCart(ctx);
         }
         break;
-      case "zone": return afterZone(ctx, num);
       case "more": {
         const page = Number(b);
         if (a === "shops") return showShops(ctx, page);
         if (a === "items") return showItems(ctx, page);
-        if (a === "zones") return showZones(ctx, page);
         break;
       }
       case "addr": return a === "saved" ? useSavedAddress(ctx) : askNewAddress(ctx);
       case "loc":
-        if (a === "call") ctx.data.call_first = true;
-        return showConfirm(ctx);
+        return shopHelp(ctx);
       case "confirm":
         if (a === "yes" && ctx.state === "CONFIRM") return placeOrder(ctx);
         ctx.say(M.cartEmpty());
@@ -453,9 +441,10 @@ async function route(ctx, message) {
       return askForLocation(ctx);
     }
     if (ctx.state === "LOCATION" && raw.length >= 2) {
+      // A landmark helps the rider, but the delivery fee needs the pin.
       ctx.data.landmark = raw.slice(0, 300);
       ctx.say(M.gotLandmark());
-      return showConfirm(ctx);
+      return askForLocation(ctx);
     }
   }
 

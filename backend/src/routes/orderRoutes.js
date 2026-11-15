@@ -45,6 +45,7 @@ import {
 import { moneyStr, orderView } from "../utils/serializers.js";
 import { saveUpload } from "../utils/storage.js";
 import { notifyWhatsappOrder } from "../services/whatsapp/notify.js";
+import { autoZoneForOrder, zoneAtGate } from "../services/deliveryZoneService.js";
 import { istDayRange } from "../utils/time.js";
 import { parse, parseId, zBoolean, zId, zLat, zLng, zMoney } from "../utils/validate.js";
 
@@ -366,6 +367,27 @@ function navigationView(order, customer) {
   };
 }
 
+// GET /api/v1/orders/:id/suggested-zone — the zone the software would pick from the
+// customer's location (null while it is unknown). The pickup form preselects it.
+router.get(
+  "/:id/suggested-zone",
+  requireRole("RIDER"),
+  loadRider,
+  asyncHandler(async (req, res) => {
+    const franchise_id = req.franchise_id;
+    const order = await prisma.order.findFirst({ where: { id: parseId(req.params.id), franchise_id } });
+    if (!order) throw orderNotFound();
+    if (order.rider_id !== req.rider.id) throw forbidden("This order is not assigned to you");
+    const phone = req.query.customer_phone ? normalizePhone(req.query.customer_phone) : undefined;
+    const auto = await autoZoneForOrder({ franchise_id, order, customer_phone: phone ?? undefined });
+    ok(res, {
+      suggested: auto
+        ? { zone_id: auto.zone.id, zone_name: auto.zone.zone_name, delivery_fee: moneyStr(auto.zone.delivery_fee), km: auto.km }
+        : null,
+    });
+  })
+);
+
 router.put(
   "/:id/rider-pickup",
   requireRole("RIDER"),
@@ -379,10 +401,25 @@ router.put(
     // Cheap pre-check so a rejected or repeated request never stores a file.
     const current = await prisma.order.findFirst({
       where: { id: orderId, franchise_id },
-      select: { rider_id: true, order_status: true },
+      select: {
+        rider_id: true,
+        order_status: true,
+        customer_phone: true,
+        pickup_lat: true,
+        pickup_lng: true,
+        drop_lat: true,
+        drop_lng: true,
+      },
     });
     if (!current) throw orderNotFound();
     if (current.rider_id !== req.rider.id) throw forbidden("This order is not assigned to you");
+
+    // The zone comes from the customer's location when it is known (SPEC "Delivery zones by distance").
+    const customerPhoneNow = body.customer_phone !== undefined ? normalizePhone(body.customer_phone) : current.customer_phone;
+    const auto =
+      current.order_status === "RIDER_ASSIGNED"
+        ? await autoZoneForOrder({ franchise_id, order: current, customer_phone: customerPhoneNow })
+        : null;
 
     let bill_image_url = body.bill_image_url ?? null;
     if (req.file && current.order_status === "RIDER_ASSIGNED") {
@@ -431,10 +468,13 @@ router.put(
         throw fieldError("customer_phone", "a valid 10-digit mobile number is required");
       }
 
-      const zoneId = body.zone_id ?? order.zone_id;
+      // Known location: the software decides. The rider may still pick another zone
+      // (stored as RIDER_OVERRIDE and logged); with no location it is their choice (MANUAL).
+      const zoneId = body.zone_id ?? auto?.zone.id ?? order.zone_id;
       if (!zoneId) throw fieldError("zone_id", "required");
       const zone = await tx.zone.findFirst({ where: { id: zoneId, franchise_id } });
       if (!zone) throw fieldError("zone_id", "zone not found in this franchise");
+      const zone_source = auto ? (zone.id === auto.zone.id ? "AUTO" : "RIDER_OVERRIDE") : "MANUAL";
 
       const payment_method = body.payment_method ?? order.payment_method;
       if (["PREPAID_AT_HOTEL", "PREPAID_FULL_AT_HOTEL"].includes(payment_method) && !order.vendor_id) {
@@ -502,6 +542,7 @@ router.put(
           customer_phone,
           customer_name,
           zone_id: zone.id,
+          zone_source,
           payment_method,
           bill_image_url: bill_image_url ?? order.bill_image_url,
           rider_paid_at_shop:
@@ -561,6 +602,16 @@ router.put(
 
     const { order, customer, already_picked_up } = result;
     if (!already_picked_up) {
+      if (order.zone_source === "RIDER_OVERRIDE") {
+        audit("order.zone_override", {
+          franchise_id,
+          order_id: order.id,
+          rider_id: req.rider.id,
+          auto_zone_id: auto?.zone.id ?? null,
+          chosen_zone_id: order.zone_id,
+          km: auto?.km ?? null,
+        });
+      }
       refreshRouteFromRider(order.id);
       const event = { order_id: order.id, order_status: order.order_status };
       emitTo(rooms.order(order.id), "order_status_changed", event);
@@ -934,6 +985,21 @@ router.post(
 
     const { order } = result;
     if (!result.already_delivered) {
+      // Was the gate in the band the customer paid for? Audit only: the fee is never changed.
+      zoneAtGate({ franchise_id, order, gate: { lat: body.rider_lat, lng: body.rider_lng } })
+        .then((gate) => {
+          if (gate && order.zone_id && gate.zone_id !== order.zone_id) {
+            audit("order.zone_mismatch", {
+              franchise_id,
+              order_id: order.id,
+              charged_zone_id: order.zone_id,
+              gate_zone_id: gate.zone_id,
+              gate_km: gate.km,
+              zone_source: order.zone_source,
+            });
+          }
+        })
+        .catch(() => {});
       const event = { order_id: order.id, order_status: "DELIVERED" };
       emitTo(rooms.order(order.id), "order_status_changed", event);
       emitTo(rooms.franchise(franchise_id), "order_delivered", event);

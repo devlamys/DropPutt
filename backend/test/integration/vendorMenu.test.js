@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { client, prisma, startServer } from "../helpers/app.js";
 import { resetDb } from "../helpers/db.js";
-import { makeOtherWorld, makeWorld, nextPhone } from "../helpers/fixtures.js";
+import { makeOtherWorld, makeWorld, nextPhone, pinAt } from "../helpers/fixtures.js";
 
 let server, api, w, other;
 before(async () => {
@@ -23,7 +23,7 @@ const checkout = (items) =>
   api("POST", "/marketplace/checkout", {
     body: {
       vendor_id: w.vendor.id,
-      zone_id: w.zones[0].id,
+      ...pinAt(1),
       customer_phone: nextPhone(),
       drop_address: "Near the mosque",
       items,

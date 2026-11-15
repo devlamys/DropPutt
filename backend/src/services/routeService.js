@@ -114,6 +114,41 @@ export async function fetchRoute(from, to) {
   }
 }
 
+const distanceCache = new Map(); // "lat,lng>lat,lng" (rounded ~100 m) → metres | null
+const roundKey = ([lat, lng]) => `${Number(lat).toFixed(3)},${Number(lng).toFixed(3)}`;
+
+/**
+ * Road distance in metres between two [lat, lng] points, or null when no
+ * router is configured / it fails. Light: no geometry, and cached by
+ * location (rounded to ~100 m) so a customer dragging a pin does not hammer OSRM.
+ */
+export async function fetchRoadDistance(from, to) {
+  const base = routingUrl();
+  if (!base) return null;
+  const key = `${roundKey(from)}>${roundKey(to)}`;
+  if (distanceCache.has(key)) return distanceCache.get(key);
+  const path = `${from[1]},${from[0]};${to[1]},${to[0]}`;
+  try {
+    const res = await fetch(`${base}/route/v1/driving/${path}?overview=false&alternatives=false&steps=false`, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      headers: { "user-agent": "DropPutt-routing/1.0" },
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    const metres = body?.code === "Ok" ? body.routes?.[0]?.distance : null;
+    if (!Number.isFinite(metres)) return null;
+    if (distanceCache.size >= CACHE_MAX) distanceCache.delete(distanceCache.keys().next().value);
+    distanceCache.set(key, Math.round(metres));
+    return Math.round(metres);
+  } catch {
+    return null;
+  }
+}
+
+export function clearDistanceCache() {
+  distanceCache.clear();
+}
+
 // ── per-order refresh ───────────────────────────────────────────────────────
 
 function remember(orderId, value) {

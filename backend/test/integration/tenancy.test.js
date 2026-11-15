@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { client, prisma, startServer } from "../helpers/app.js";
 import { resetDb } from "../helpers/db.js";
-import { PIN, makeOtherWorld, makeWorld, nextPhone } from "../helpers/fixtures.js";
+import { PIN, makeOtherWorld, makeWorld, nextPhone, pinAt } from "../helpers/fixtures.js";
 import { accept, placeOrder, uuid } from "../helpers/flow.js";
 
 let server, api, a, b;
@@ -113,7 +113,7 @@ describe("tenant isolation", () => {
       slug: "other",
       body: {
         vendor_id: a.vendor.id,
-        zone_id: b.zones[0].id,
+        ...pinAt(1),
         customer_phone: nextPhone(),
         drop_address: "Somewhere",
         items: [{ product_id: a.products.biryani.id, quantity: 2 }],

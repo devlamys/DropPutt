@@ -241,7 +241,7 @@ describe("input handling (§37.3)", () => {
       api("POST", "/orders/9999999999999999999/accept", { token: w.riders[0].token, body: {} }),
       api("POST", "/orders/2147483648/accept", { token: w.riders[0].token, body: {} }),
       api("GET", "/orders?cursor=" + Buffer.from(JSON.stringify({ id: 99999999999 })).toString("base64"), { token: w.adminToken }),
-      api("POST", "/marketplace/checkout", { body: { vendor_id: 99999999999, zone_id: 1, customer_phone: "9876543210", drop_address: "abc", items: [{ product_id: 1, quantity: 1 }] } }),
+      api("POST", "/marketplace/checkout", { body: { vendor_id: 99999999999, drop_lat: 11, drop_lng: 76, customer_phone: "9876543210", drop_address: "abc", items: [{ product_id: 1, quantity: 1 }] } }),
       api("POST", "/riders/location-batch", { token: w.riders[0].token, body: { order_id: 99999999999, locations: [{ lat: 1, lng: 1, timestamp: Date.now() }] } }),
     ];
     for (const res of await Promise.all(attempts)) {

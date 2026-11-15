@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 import { client, prisma, startServer } from "../helpers/app.js";
 import { resetDb } from "../helpers/db.js";
-import { makeWorld, nextPhone } from "../helpers/fixtures.js";
+import { makeWorld, nextPhone, pinAt } from "../helpers/fixtures.js";
 import { accept, deliver, pickup, placeOrder, waitFor } from "../helpers/flow.js";
 import { setWhatsappClientForTests } from "../../src/services/whatsapp/client.js";
 
@@ -40,19 +40,19 @@ const tap = (replies, title) => {
 };
 const bodies = (replies) => replies.map((r) => r.body).join("\n");
 
-/** Walks hi -> shop -> item -> qty -> checkout -> area; returns the replies at the address step. */
-async function toAddress(from, { item = "Biryani", qty = "qty:2", area = w.zones[0].zone_name } = {}) {
+/** Walks hi -> shop -> item -> qty -> checkout; returns the replies at the address step. */
+async function toAddress(from, { item = "Biryani", qty = "qty:2" } = {}) {
   let r = await chat(from, { text: "hi" });
   r = await chat(from, tap(r, w.vendor.shop_name));
   r = await chat(from, tap(r, item));
   r = await chat(from, { button_id: qty });
-  r = await chat(from, tap(r, "Order"));
-  return chat(from, tap(r, area));
+  return chat(from, tap(r, "Order"));
 }
-async function placeViaChat(from) {
+const near = (km) => ({ lat: pinAt(km).drop_lat, lng: pinAt(km).drop_lng });
+async function placeViaChat(from, km = 1) {
   let r = await toAddress(from);
   r = await chat(from, { text: "Kizhissery, near the mosque" });
-  r = await chat(from, { location: { lat: 11.2, lng: 76.05 } });
+  r = await chat(from, { location: near(km) });
   assert.match(bodies(r), /Total/);
   return chat(from, { button_id: "confirm:yes" });
 }
@@ -60,7 +60,7 @@ const FROM = "919847000011";
 
 // ── the order conversation ───────────────────────────────────────────────────
 describe("WhatsApp ordering flow", () => {
-  it("a full order: shop -> item -> quantity -> area -> address -> location -> confirm", async () => {
+  it("a full order: shop -> item -> quantity -> address -> location -> confirm (zone from distance)", async () => {
     const placed = await placeViaChat(FROM);
     assert.match(bodies(placed), /Order placed/);
     const order = await prisma.order.findFirst({ include: { items: true } });
@@ -69,7 +69,9 @@ describe("WhatsApp ordering flow", () => {
     assert.equal(order.order_status, "RIDER_REQUESTED");
     assert.equal(order.item_total.toString(), "200");
     assert.equal(order.drop_address, "Kizhissery, near the mosque");
-    assert.equal(Number(order.drop_lat), 11.2);
+    assert.equal(Number(order.drop_lat), near(1).lat);
+    assert.equal(order.zone_id, w.zones[0].id);
+    assert.equal(order.zone_source, "AUTO");
     assert.equal(order.items[0].quantity, 2);
     assert.equal(order.vendor_id, w.vendor.id);
   });
@@ -140,13 +142,15 @@ describe("WhatsApp ordering flow", () => {
     const phone = "9847000012";
     for (let i = 0; i < 5; i++) {
       const res = await api("POST", "/marketplace/checkout", {
-        body: { vendor_id: w.vendor.id, zone_id: w.zones[0].id, customer_phone: phone, drop_address: "Somewhere", items: [{ product_id: w.products.biryani.id, quantity: 2 }] },
+        body: { vendor_id: w.vendor.id, ...pinAt(1), customer_phone: phone, drop_address: "Somewhere", items: [{ product_id: w.products.biryani.id, quantity: 2 }] },
       });
       assert.equal(res.status, 201);
     }
     let r = await toAddress("91" + phone);
+    assert.match(bodies(r), /Somewhere/); // a returning customer is offered the saved address
+    r = await chat("91" + phone, { button_id: "addr:new" });
     r = await chat("91" + phone, { text: "Kizhissery, near the mosque" });
-    r = await chat("91" + phone, { button_id: "loc:skip" });
+    r = await chat("91" + phone, { location: near(1) });
     r = await chat("91" + phone, { button_id: "confirm:yes" });
     assert.match(bodies(r), /Too many orders/);
     assert.equal(await prisma.order.count({ where: { channel: "WHATSAPP" } }), 0);
@@ -170,14 +174,34 @@ describe("WhatsApp ordering flow", () => {
     assert.match(bodies(r), /\/drop\//);
   });
 
-  it("'I can't share it' + Call me puts a note for the rider on the order", async () => {
+  it("the delivery charge follows the distance: ~3 km is Zone 2 (Rs 40) and the confirmation shows it", async () => {
     let r = await toAddress(FROM);
     r = await chat(FROM, { text: "Kizhissery, near the mosque" });
-    r = await chat(FROM, { button_id: "loc:call" });
+    r = await chat(FROM, { location: near(3) });
+    assert.match(bodies(r), /₹40/);
+    assert.match(bodies(r), /km\)/);
     await chat(FROM, { button_id: "confirm:yes" });
     const order = await prisma.order.findFirst();
-    assert.match(order.turning_point, /call/i);
-    assert.equal(order.drop_lat, null);
+    assert.equal(order.zone_id, w.zones[1].id);
+  });
+
+  it("a location outside the delivery area is refused and asked for again", async () => {
+    let r = await toAddress(FROM);
+    r = await chat(FROM, { text: "Kizhissery, near the mosque" });
+    r = await chat(FROM, { location: near(9) });
+    assert.match(bodies(r), /outside our delivery area/);
+    assert.ok(r.some((m) => m.type === "location_request"));
+    assert.equal(await prisma.order.count(), 0);
+  });
+
+  it("no location, no order: the Help button gives the hotel's number", async () => {
+    let r = await toAddress(FROM);
+    r = await chat(FROM, { text: "Kizhissery, near the mosque" });
+    assert.ok(r.some((m) => m.type === "location_request"));
+    r = await chat(FROM, { button_id: "loc:help" });
+    assert.match(bodies(r), new RegExp(w.vendor.shop_name));
+    r = await chat(FROM, { button_id: "confirm:yes" }); // cannot skip to the end
+    assert.equal(await prisma.order.count(), 0);
   });
 });
 

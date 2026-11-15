@@ -8,6 +8,7 @@ import { idempotency } from "../middleware/idempotency.js";
 import { customRequestUpload } from "../middleware/upload.js";
 import { checkoutIpLimiter, checkoutPhoneLimiter } from "../middleware/rateLimit.js";
 import { placeMarketplaceOrder } from "../services/checkoutService.js";
+import { deliveryMessage, resolveDelivery } from "../services/deliveryZoneService.js";
 import { dispatchOrder } from "../services/dispatchService.js";
 import { emitTo, rooms } from "../socket/socketHandler.js";
 import { CHAYAKADI_LABEL, SNACK_MIN_ORDER_VALUE } from "../utils/constants.js";
@@ -20,7 +21,7 @@ import { saveUpload } from "../utils/storage.js";
 import { hasStock, isOfferActive, isSellable, stockLeft } from "../utils/menu.js";
 import { slotWindowLabel } from "../utils/slots.js";
 import { isChayakadiWindow, istDayRange, istMinutesOfDay } from "../utils/time.js";
-import { parse, zId } from "../utils/validate.js";
+import { parse, zId, zLat, zLng } from "../utils/validate.js";
 
 const router = Router();
 
@@ -88,6 +89,8 @@ router.get(
         shop_name: true,
         shop_category: true,
         address: true,
+        lat: true,
+        lng: true,
         min_order_value: true,
         products: { where: { is_archived: false }, orderBy: [{ is_combo: "desc" }, { id: "asc" }] },
       },
@@ -120,6 +123,8 @@ router.get(
         shop_name: vendor.shop_name,
         shop_category: vendor.shop_category,
         address: vendor.address,
+        lat: Number(vendor.lat),
+        lng: Number(vendor.lng),
         min_order_value: moneyStr(vendor.min_order_value),
         products: products.map(productView),
         unavailable,
@@ -175,13 +180,14 @@ router.get(
   asyncHandler(async (req, res) => {
     const zones = await prisma.zone.findMany({
       where: { franchise_id: req.franchise_id },
-      orderBy: { delivery_fee: "asc" },
-      select: { id: true, zone_name: true, delivery_fee: true },
+      orderBy: [{ max_km: "asc" }, { id: "asc" }],
+      select: { id: true, zone_name: true, delivery_fee: true, max_km: true },
     });
     ok(res, {
       zones: zones.map((zone) => ({
         id: zone.id,
         zone_name: zone.zone_name,
+        max_km: moneyStr(zone.max_km),
         delivery_fee: moneyStr(zone.delivery_fee),
       })),
     });
@@ -191,7 +197,10 @@ router.get(
 
 const checkoutSchema = z.object({
   vendor_id: zId,
-  zone_id: zId,
+  // Where the customer wants it. The zone and the delivery fee come from the
+  // distance from the shop to this pin; a client-sent zone is ignored.
+  drop_lat: zLat,
+  drop_lng: zLng,
   customer_phone: z.union([z.string(), z.number()]),
   customer_name: z.string().trim().min(1).max(100).optional(),
   drop_address: z.string().trim().min(3).max(300),
@@ -211,6 +220,32 @@ const checkoutSchema = z.object({
     .min(1)
     .max(50),
 });
+
+const quoteSchema = z.object({ vendor_id: zId, lat: zLat, lng: zLng });
+
+// POST /api/v1/marketplace/delivery-quote — "if I deliver here, what is the fee?" Public.
+// The storefront map calls this while the customer moves the pin.
+router.post(
+  "/delivery-quote",
+  checkoutIpLimiter,
+  asyncHandler(async (req, res) => {
+    const body = parse(quoteSchema, req.body);
+    const vendor = await prisma.vendor.findFirst({ where: { id: body.vendor_id, franchise_id: req.franchise_id } });
+    if (!vendor) throw fieldError("vendor_id", "shop not found");
+    const result = await resolveDelivery({
+      franchise_id: req.franchise_id,
+      from: { lat: vendor.lat, lng: vendor.lng },
+      to: { lat: body.lat, lng: body.lng },
+    });
+    ok(res, {
+      deliverable: result.deliverable,
+      km: result.km,
+      zone_name: result.zone?.zone_name ?? null,
+      delivery_fee: result.zone ? moneyStr(result.zone.delivery_fee) : null,
+      message: result.deliverable ? null : deliveryMessage(result.reason),
+    });
+  })
+);
 
 // POST /api/v1/marketplace/checkout — a customer orders from one shop.
 //

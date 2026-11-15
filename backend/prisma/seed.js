@@ -183,9 +183,9 @@ async function main() {
 
   // ─── Zones (delivery_fee = rider_commission + franchise_profit) ───────────
   const zones = [
-    { zone_name: "Zone 1 — Kizhissery Town (0–2 km)", delivery_fee: "30.00", rider_commission: "20.00", franchise_profit: "10.00" },
-    { zone_name: "Zone 2 — Nearby (2–5 km)", delivery_fee: "40.00", rider_commission: "27.00", franchise_profit: "13.00" },
-    { zone_name: "Zone 3 — Outer (5–8 km)", delivery_fee: "50.00", rider_commission: "35.00", franchise_profit: "15.00" },
+    { zone_name: "Zone 1 — Kizhissery Town (0–2 km)", max_km: "2.00", delivery_fee: "30.00", rider_commission: "20.00", franchise_profit: "10.00" },
+    { zone_name: "Zone 2 — Nearby (2–5 km)", max_km: "5.00", delivery_fee: "40.00", rider_commission: "27.00", franchise_profit: "13.00" },
+    { zone_name: "Zone 3 — Outer (5–8 km)", max_km: "8.00", delivery_fee: "50.00", rider_commission: "35.00", franchise_profit: "15.00" },
   ];
 
   for (const zone of zones) {
