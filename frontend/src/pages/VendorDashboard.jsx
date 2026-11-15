@@ -282,12 +282,17 @@ export default function VendorDashboard() {
 
         {/* Menu availability */}
         <section aria-labelledby="menu-heading">
-          <h2 id="menu-heading" className="mb-2 text-base font-bold">
-            Menu availability
-          </h2>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 id="menu-heading" className="text-base font-bold">
+              Menu availability
+            </h2>
+            <Link to="/vendor/menu" className="rounded-full bg-green-600 px-3 py-1.5 text-xs font-bold text-white">
+              Manage menu
+            </Link>
+          </div>
           {products.length === 0 ? (
             <p className="rounded-2xl bg-white p-6 text-center text-sm text-slate-500 ring-1 ring-slate-200">
-              No menu items yet.
+              No menu items yet. Use “Manage menu” to add your dishes.
             </p>
           ) : (
             <ul className="divide-y overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">
@@ -298,7 +303,8 @@ export default function VendorDashboard() {
                       {product.name}
                     </p>
                     <p className="text-xs text-slate-500">
-                      {inr(product.price)}
+                      {product.offer_active ? `${inr(product.effective_price)} (offer)` : inr(product.price)}
+                      {product.stock_qty != null && ` · ${product.stock_qty === 0 ? "sold out" : `${product.stock_qty} left`}`}
                       {product.is_combo && " · Combo"}
                       {product.slot_type !== "ALL_DAY" && ` · ${product.slot_type.replaceAll("_", " ").toLowerCase()}`}
                     </p>

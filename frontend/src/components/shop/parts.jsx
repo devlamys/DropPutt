@@ -23,6 +23,25 @@ export function ProductImage({ product, shopCategory, className = "", dimmed = f
   return <PlateArt name={product.name} emoji={productEmoji(product.name, shopCategory)} dimmed={dimmed} className={className} />;
 }
 
+/** Price, with the hotel's offer shown as old price struck through + "N left". */
+export function PriceTag({ product, className = "", light = false }) {
+  const old = light ? "text-pine-200" : "text-slate-400";
+  return (
+    <span className={`inline-flex flex-wrap items-baseline gap-x-1.5 ${className}`}>
+      <span className="tabular-nums">{inr(product.price)}</span>
+      {product.original_price && (
+        <span className={`text-xs font-normal line-through ${old}`}>{inr(product.original_price)}</span>
+      )}
+      {product.offer_label && (
+        <span className="rounded bg-flame-100 px-1.5 text-[10px] font-semibold text-flame-800">{product.offer_label}</span>
+      )}
+      {product.stock_left ? (
+        <span className="text-[10px] font-semibold text-red-500">Only {product.stock_left} left</span>
+      ) : null}
+    </span>
+  );
+}
+
 /** Orange "Add" pill that turns into a − n + stepper. */
 export function AddButton({ quantity, onAdd, onRemove, label, size = "md" }) {
   const box = size === "sm" ? "h-8 min-w-[76px] text-xs" : "h-9 min-w-[92px] text-sm";
@@ -66,7 +85,7 @@ export function ProductTile({ product, shop, quantity, onAdd, onRemove, showShop
         </div>
         <div className="mt-auto flex items-center justify-between gap-2">
           <AddButton size="sm" quantity={quantity} onAdd={onAdd} onRemove={onRemove} label={product.name} />
-          <span className="text-sm font-semibold tabular-nums">{inr(product.price)}</span>
+          <span className="text-right text-sm font-semibold"><PriceTag product={product} light /></span>
         </div>
       </div>
     </div>
@@ -87,7 +106,7 @@ export function ProductRow({ product, shop, quantity, onAdd, onRemove, unavailab
       <div className={`min-w-0 flex-1 ${unavailable ? "opacity-60" : ""}`}>
         {product.is_combo && <span className="mb-1 inline-block rounded bg-flame-100 px-1.5 text-[10px] font-semibold uppercase tracking-wide text-flame-800">Combo</span>}
         <p className="font-medium leading-snug text-pine-950">{product.name}</p>
-        <p className="mt-0.5 font-semibold text-pine-900">{inr(product.price)}</p>
+        <p className="mt-0.5 font-semibold text-pine-900"><PriceTag product={product} /></p>
         {note && <p className="mt-1 text-xs font-medium text-slate-500">{note}</p>}
       </div>
       <div className="relative shrink-0 pb-4">

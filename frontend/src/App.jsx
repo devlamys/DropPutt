@@ -13,6 +13,7 @@ const StorefrontHome = lazy(() => import("./pages/StorefrontHome.jsx"));
 const ShopMenu = lazy(() => import("./pages/ShopMenu.jsx"));
 const RiderDashboard = lazy(() => import("./pages/RiderDashboard.jsx"));
 const RiderEarnings = lazy(() => import("./pages/RiderEarnings.jsx"));
+const VendorMenu = lazy(() => import("./pages/VendorMenu.jsx"));
 const VendorHistory = lazy(() => import("./pages/VendorHistory.jsx"));
 const VendorDashboard = lazy(() => import("./pages/VendorDashboard.jsx"));
 
@@ -67,6 +68,14 @@ export default function App() {
         element={
           <RequireAuth roles={["VENDOR"]}>
             <VendorDashboard />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/vendor/menu"
+        element={
+          <RequireAuth roles={["VENDOR"]}>
+            <VendorMenu />
           </RequireAuth>
         }
       />
