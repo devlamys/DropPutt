@@ -2,7 +2,8 @@
 
 import { SNACK_MIN_ORDER_VALUE } from "../utils/constants.js";
 import { addMoney, calculateLineTotal, money } from "../utils/orderMath.js";
-import { fieldError } from "../utils/response.js";
+import { AppError, fieldError } from "../utils/response.js";
+import { effectivePrice, hasStock } from "../utils/menu.js";
 import { moneyStr } from "../utils/serializers.js";
 import { isProductInSlot } from "../utils/slots.js";
 import { isChayakadiWindow, istMinutesOfDay } from "../utils/time.js";
@@ -21,7 +22,7 @@ export async function buildCart(tx, vendor, items, now) {
   // vendor_id pins the products to this vendor, and the vendor row was
   // already loaded with the tenant's franchise_id.
   const products = await tx.product.findMany({
-    where: { id: { in: [...quantities.keys()] }, vendor_id: vendor.id },
+    where: { id: { in: [...quantities.keys()] }, vendor_id: vendor.id, is_archived: false },
   });
   if (products.length !== quantities.size) {
     throw fieldError("items", "one or more products do not belong to this vendor");
@@ -33,11 +34,23 @@ export async function buildCart(tx, vendor, items, now) {
       throw fieldError("items", `"${product.name}" is not available right now`);
     }
     const quantity = quantities.get(product.id);
+    if (!hasStock(product) || (product.stock_qty != null && product.stock_qty < quantity)) {
+      throw new AppError(
+        409,
+        "OUT_OF_STOCK",
+        product.stock_qty
+          ? `Only ${product.stock_qty} of "${product.name}" left`
+          : `"${product.name}" is sold out`
+      );
+    }
+    // The hotel's offer is the price the customer pays; commission follows it.
+    const unit_price = effectivePrice(product, now);
     return {
       product_id: product.id,
       quantity,
-      unit_price: moneyStr(product.price),
-      line_total: moneyStr(calculateLineTotal(product.price, quantity)),
+      stock_qty: product.stock_qty,
+      unit_price: moneyStr(unit_price),
+      line_total: moneyStr(calculateLineTotal(unit_price, quantity)),
       slot_type: product.slot_type,
     };
   });
@@ -52,8 +65,21 @@ export async function buildCart(tx, vendor, items, now) {
     throw fieldError("items", `minimum order value is ₹${minimum.toFixed(2)}`);
   }
 
+  // Take the portions. The guard makes two orders for the last portion safe:
+  // exactly one of them gets it, the other rolls back with OUT_OF_STOCK.
+  for (const line of lines) {
+    if (line.stock_qty == null) continue;
+    const { count } = await tx.product.updateMany({
+      where: { id: line.product_id, stock_qty: { gte: line.quantity } },
+      data: { stock_qty: { decrement: line.quantity } },
+    });
+    if (count === 0) {
+      throw new AppError(409, "OUT_OF_STOCK", "An item in your cart just sold out");
+    }
+  }
+
   return {
     item_total,
-    lines: lines.map(({ slot_type, ...line }) => line),
+    lines: lines.map(({ slot_type, stock_qty, ...line }) => line),
   };
 }

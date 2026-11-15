@@ -17,7 +17,8 @@ import { buildPage, parsePagination } from "../utils/pagination.js";
 import { AppError, asyncHandler, fieldError, ok } from "../utils/response.js";
 import { moneyStr } from "../utils/serializers.js";
 import { saveUpload } from "../utils/storage.js";
-import { isProductInSlot, slotWindowLabel } from "../utils/slots.js";
+import { hasStock, isOfferActive, isSellable, stockLeft } from "../utils/menu.js";
+import { slotWindowLabel } from "../utils/slots.js";
 import { isChayakadiWindow, istDayRange, istMinutesOfDay } from "../utils/time.js";
 import { parse, zId } from "../utils/validate.js";
 
@@ -46,6 +47,16 @@ const productView = (product) => ({
   image_url: product.image_url,
   slot_type: product.slot_type,
   is_combo: product.is_combo,
+  // The hotel's own offer: `price` is what the customer pays.
+  ...(isOfferActive(product)
+    ? {
+        price: moneyStr(product.offer_price),
+        original_price: moneyStr(product.price),
+        offer_label: product.offer_label,
+      }
+    : {}),
+  description: product.description,
+  stock_left: stockLeft(product),
 });
 
 // GET /api/v1/marketplace/feed?shop_category=&limit=&cursor=
@@ -78,14 +89,14 @@ router.get(
         shop_category: true,
         address: true,
         min_order_value: true,
-        products: { orderBy: [{ is_combo: "desc" }, { id: "asc" }] },
+        products: { where: { is_archived: false }, orderBy: [{ is_combo: "desc" }, { id: "asc" }] },
       },
     });
     const page = buildPage(vendors, limit);
 
     const items = page.items.map((vendor) => {
       const products = vendor.products.filter(
-        (product) => product.is_available && isProductInSlot(product, minutes)
+        (product) => isSellable(product, minutes)
       );
       // Shown greyed-out on the menu ("Sold out" / "Available 11 AM – 3 PM").
       // They are display-only: checkout rejects them.
@@ -93,8 +104,8 @@ router.get(
         .filter((product) => !products.includes(product))
         .map((product) => ({
           ...productView(product),
-          reason: product.is_available ? "OUT_OF_SLOT" : "SOLD_OUT",
-          available_window: product.is_available ? slotWindowLabel(product) : null,
+          reason: product.is_available && hasStock(product) ? "OUT_OF_SLOT" : "SOLD_OUT",
+          available_window: product.is_available && hasStock(product) ? slotWindowLabel(product) : null,
         }));
       // During the window, snack products are listed first.
       if (chayakadi) {
@@ -121,6 +132,7 @@ router.get(
       const snacks = await prisma.product.findMany({
         where: {
           is_available: true,
+          is_archived: false,
           slot_type: "EVENING_SNACKS_3_TO_6",
           vendor: { franchise_id, is_open: true },
         },
@@ -132,7 +144,7 @@ router.get(
         label: CHAYAKADI_LABEL,
         min_order_value: SNACK_MIN_ORDER_VALUE,
         products: snacks
-          .filter((product) => isProductInSlot(product, minutes))
+          .filter((product) => isSellable(product, minutes))
           .map((product) => ({
             ...productView(product),
             shop_name: product.vendor.shop_name,
