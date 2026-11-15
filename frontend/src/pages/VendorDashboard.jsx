@@ -247,6 +247,11 @@ export default function VendorDashboard() {
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <StatusBadge status={order.order_status} />
+                      {Number(order.collect_from_hotel) > 0 && (
+                        <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-bold text-green-800">
+                          Give the rider {inr(order.collect_from_hotel)} delivery fee
+                        </span>
+                      )}
                       {SHOP_CAN_CANCEL.includes(order.order_status) && (
                         <button
                           type="button"

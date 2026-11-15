@@ -453,6 +453,10 @@ export default function CustomerDropPage() {
                 {order.payment_method === "COD" && `Pay the rider ${inr(order.amount_to_collect)} in cash`}
                 {order.payment_method === "PREPAID_AT_HOTEL" &&
                   `Food already paid at the shop. Pay the rider ${inr(order.amount_to_collect)} (delivery${Number(order.rider_tip) > 0 ? " + tip" : ""}).`}
+                {order.payment_method === "PREPAID_FULL_AT_HOTEL" &&
+                  (Number(order.amount_to_collect) > 0
+                    ? `Food and delivery already paid at the shop. Pay the rider ${inr(order.amount_to_collect)} (tip).`
+                    : "Food and delivery already paid at the shop. Nothing to pay the rider.")}
                 {order.payment_method === "UPI_TO_ADMIN" &&
                   (Number(order.amount_to_collect) > 0
                     ? `Paid online. Pay the rider ${inr(order.amount_to_collect)}.`

@@ -35,6 +35,13 @@ export default function ActiveDeliveryCard({ order, riderPosition, tracking, onD
         <StatusBadge status={order.order_status} />
       </div>
 
+      {/* §14.4: the hotel hands the rider the delivery fee at pickup */}
+      {Number(order.collect_from_hotel) > 0 && (
+        <p className="rounded-xl bg-green-50 p-3 text-center text-sm font-bold text-green-800 ring-1 ring-green-200">
+          Take your {inr(order.collect_from_hotel)} delivery fee from {order.shop_name ?? "the hotel"} now
+        </p>
+      )}
+
       {/* money to collect */}
       <div className="rounded-xl bg-orange-50 p-3 text-center">
         <p className="text-xs font-semibold uppercase tracking-wide text-orange-700">

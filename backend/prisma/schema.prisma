@@ -63,6 +63,7 @@ enum PaymentMethod {
   COD
   PREPAID_AT_HOTEL
   UPI_TO_ADMIN
+  PREPAID_FULL_AT_HOTEL // customer paid the hotel food + delivery; hotel hands the rider the fee at pickup
 }
 
 enum OrderStatus {

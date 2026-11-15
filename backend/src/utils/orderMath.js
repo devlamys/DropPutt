@@ -14,6 +14,9 @@ export const PAYMENT_METHODS = Object.freeze({
   COD: "COD",
   PREPAID_AT_HOTEL: "PREPAID_AT_HOTEL",
   UPI_TO_ADMIN: "UPI_TO_ADMIN",
+  // The customer paid the hotel food + delivery; the hotel hands the rider
+  // the delivery fee at pickup (§14.4).
+  PREPAID_FULL_AT_HOTEL: "PREPAID_FULL_AT_HOTEL",
 });
 
 export const ALLOWED_TIP_AMOUNTS = Object.freeze([10, 20, 30]);
@@ -128,6 +131,11 @@ export function calculateAmountToCollect({
         addMoney(delivery_fee, rider_tip),
         delivery_side_discount
       );
+    case PAYMENT_METHODS.PREPAID_FULL_AT_HOTEL: {
+      // Only the tip / rain surge is still collected at the door.
+      const due = subtractMoney(rider_tip, delivery_side_discount);
+      return due.isNegative() ? money(0) : due;
+    }
     case PAYMENT_METHODS.UPI_TO_ADMIN:
       return money(0);
     default:
@@ -152,7 +160,10 @@ export function calculateVendorAdminPayable({
   vendor_earning,
   vendor_commission,
 }) {
-  if (payment_method === PAYMENT_METHODS.PREPAID_AT_HOTEL) {
+  if (
+    payment_method === PAYMENT_METHODS.PREPAID_AT_HOTEL ||
+    payment_method === PAYMENT_METHODS.PREPAID_FULL_AT_HOTEL
+  ) {
     return money(new Decimal(vendor_commission ?? 0).negated());
   }
   return money(vendor_earning);
@@ -324,5 +335,13 @@ export function calculateCashInHandIncrease(order) {
   if (order.rider_paid_at_shop) {
     return subtractMoney(order.grand_total, order.item_total);
   }
-  return money(order.amount_to_collect);
+  // §14.4: the delivery fee comes from the hotel, the rest from the customer.
+  return addMoney(collectFromHotel(order), order.amount_to_collect);
+}
+
+/** Cash the hotel hands the rider at pickup (§14.4); 0 for every other method. */
+export function collectFromHotel(order) {
+  return order.payment_method === PAYMENT_METHODS.PREPAID_FULL_AT_HOTEL
+    ? money(order.delivery_fee)
+    : money(0);
 }

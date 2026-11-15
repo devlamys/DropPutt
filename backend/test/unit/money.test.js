@@ -94,6 +94,16 @@ describe("amount to collect (§14)", () => {
   it("prepaid at hotel collects delivery + tip only", () => {
     assert.equal(s(calculateAmountToCollect({ payment_method: "PREPAID_AT_HOTEL", ...order })), "50.00");
   });
+  it("paid at hotel incl. delivery collects only the tip (§14.4)", () => {
+    assert.equal(s(calculateAmountToCollect({ payment_method: "PREPAID_FULL_AT_HOTEL", ...order })), "20.00");
+    assert.equal(s(calculateAmountToCollect({ payment_method: "PREPAID_FULL_AT_HOTEL", ...order, rider_tip: 0 })), "0.00");
+    // the hotel hands over the fee, so the rider still receives fee + tip in cash
+    assert.equal(
+      s(calculateCashInHandIncrease({ payment_method: "PREPAID_FULL_AT_HOTEL", delivery_fee: 30, amount_to_collect: 20 })),
+      "50.00"
+    );
+    assert.equal(s(calculateVendorAdminPayable({ payment_method: "PREPAID_FULL_AT_HOTEL", vendor_earning: 90, vendor_commission: 10 })), "-10.00");
+  });
   it("UPI to admin collects nothing", () => {
     assert.equal(s(calculateAmountToCollect({ payment_method: "UPI_TO_ADMIN", ...order })), "0.00");
   });

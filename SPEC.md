@@ -847,6 +847,7 @@ The platform supports exactly:
 
 - `COD`
 - `PREPAID_AT_HOTEL`
+- `PREPAID_FULL_AT_HOTEL`
 - `UPI_TO_ADMIN`
 
 ## 14.1 COD
@@ -903,6 +904,19 @@ amount_to_collect = 0
 The rider MUST NOT be instructed to collect the prepaid amount in cash.
 
 The financial record still stores the full `grand_total` for reconciliation.
+
+## 14.4 PREPAID_FULL_AT_HOTEL
+
+The customer paid the hotel the whole bill, food and delivery (typical for a "Call Rider Now" order). Partner-vendor orders only; never offered on the storefront. The hotel hands the rider the delivery fee at pickup, so nobody owes anybody afterwards:
+
+```text
+collect_from_hotel  = delivery_fee                     -- at pickup, shown to rider and hotel
+amount_to_collect   = rider_tip - delivery_side_discount (never negative)  -- at the door
+cash received       = delivery_fee + amount_to_collect -- calculateCashInHandIncrease
+vendor_admin_payable = -vendor_commission              -- 0 during the Call Rider Now trial
+```
+
+At delivery the rider keeps all of it as their earning (§15), so `cash_in_hand` and `wallet_earnings` do not change. `orderView` exposes `collect_from_hotel`.
 
 ---
 
@@ -2186,13 +2200,16 @@ The following statements MUST always remain true:
 5. Every money-changing event has an idempotent reference.
 6. Rain surge can be applied only once per order.
 7. A tip increases rider_tip, rider_earning, grand_total and amount_to_collect together.
-8. Launch promo franchise profit =
-   shop_markup_profit + vendor_commission - royalty_per_order.
-9. COD cash-in-hand increase equals amount_to_collect.
-10. Prepaid-at-hotel does not make the rider collect the item amount.
+8. franchise_profit = shop_markup_profit + vendor_commission - royalty_per_order,
+   and the rider always keeps the whole delivery fee (rider_earning = delivery_fee + tip).
+9. COD cash-in-hand increase equals amount_to_collect minus the rider earning kept from it.
+10. Prepaid-at-hotel does not make the rider collect the item amount;
+    PREPAID_FULL_AT_HOTEL does not make the rider collect the delivery fee
+    from the customer either (the hotel hands it over at pickup).
 11. UPI-to-admin makes rider amount_to_collect zero.
 12. Vendor payable is vendor_earning, not raw item_total.
-13. Royalty is deducted once per delivered order.
+13. Royalty is deducted once per delivered order, including free-trial
+    HOTEL_DIRECT orders.
 14. Rider acceptance uses PostgreSQL FOR UPDATE.
 15. Delivery settlement is atomic.
 16. Verified gate GPS is franchise-scoped and preferred for future delivery.

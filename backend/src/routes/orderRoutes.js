@@ -341,7 +341,9 @@ const pickupSchema = z.object({
   customer_phone: z.union([z.string(), z.number()]).optional(),
   customer_name: z.string().trim().min(1).max(100).optional(),
   zone_id: zId.optional(),
-  payment_method: z.enum(["COD", "PREPAID_AT_HOTEL", "UPI_TO_ADMIN"]).optional(),
+  payment_method: z
+    .enum(["COD", "PREPAID_AT_HOTEL", "PREPAID_FULL_AT_HOTEL", "UPI_TO_ADMIN"])
+    .optional(),
   item_total: zMoney.optional(),
   rider_paid_at_shop: zBoolean.optional(),
   bill_image_url: z.string().trim().min(1).max(2048).optional(),
@@ -431,8 +433,8 @@ router.put(
       if (!zone) throw fieldError("zone_id", "zone not found in this franchise");
 
       const payment_method = body.payment_method ?? order.payment_method;
-      if (payment_method === "PREPAID_AT_HOTEL" && !order.vendor_id) {
-        throw fieldError("payment_method", "PREPAID_AT_HOTEL requires a partner vendor");
+      if (["PREPAID_AT_HOTEL", "PREPAID_FULL_AT_HOTEL"].includes(payment_method) && !order.vendor_id) {
+        throw fieldError("payment_method", `${payment_method} requires a partner vendor`);
       }
 
       // Marketplace orders: item total comes from OrderItem rows only.

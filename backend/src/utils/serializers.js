@@ -61,6 +61,13 @@ export function orderView(order) {
     grand_total: moneyStr(order.grand_total),
     amount_to_collect: moneyStr(order.amount_to_collect),
     rider_earning: moneyStr(order.rider_earning),
+    // Bill breakdown for the rider (§10.1): what to hand the hotel, and the
+    // commission the hotel settles with the franchise (0 for Call Rider Now).
+    vendor_commission: moneyStr(order.vendor_commission),
+    commission_free: isCommissionFreeOrder(order),
+    pay_vendor: moneyStr(payToVendor(order)),
+    // §14.4: delivery fee the hotel hands the rider at pickup.
+    collect_from_hotel: order.payment_method === "PREPAID_FULL_AT_HOTEL" ? moneyStr(order.delivery_fee) : "0.00",
     payment_method: order.payment_method,
     rain_surge_applied: order.rain_surge_applied,
     is_batched_addon: order.is_batched_addon,
