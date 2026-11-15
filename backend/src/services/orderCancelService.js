@@ -95,6 +95,17 @@ export async function cancelOrder({ orderId, franchise_id, role, vendor_id, reas
           cancel_reason: cleanReason,
         },
       });
+      // Give the portions back (only items that track stock; never after delivery).
+      const lines = await tx.orderItem.findMany({
+        where: { order_id: orderId },
+        select: { product_id: true, quantity: true },
+      });
+      for (const line of lines) {
+        await tx.product.updateMany({
+          where: { id: line.product_id, stock_qty: { not: null } },
+          data: { stock_qty: { increment: line.quantity } },
+        });
+      }
       audit("order.cancel", {
         franchise_id,
         order_id: orderId,

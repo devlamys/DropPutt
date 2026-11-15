@@ -34,6 +34,13 @@ export const voiceUpload = uploader({
   maxBytes: 10 * 1024 * 1024,
 });
 
+/** multipart field `image` — a menu item photo, JPEG / PNG / WebP up to 5 MB. */
+export const productImageUpload = uploader({
+  field: "image",
+  mimeTypes: IMAGE_MIME_TYPES,
+  maxBytes: 5 * 1024 * 1024,
+});
+
 /** multipart field `gate_photo` — JPEG / PNG / WebP up to 5 MB. */
 export const gatePhotoUpload = uploader({
   field: "gate_photo",

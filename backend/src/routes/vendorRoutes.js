@@ -5,12 +5,16 @@ import { z } from "zod";
 import { prisma } from "../config/prisma.js";
 import { authenticate, requireRole } from "../middleware/auth.js";
 import { buildPage, parsePagination } from "../utils/pagination.js";
-import { AppError, asyncHandler, forbidden, ok } from "../utils/response.js";
+import { AppError, asyncHandler, forbidden, ok, validationError } from "../utils/response.js";
 import { isCommissionFreeOrder, moneyStr } from "../utils/serializers.js";
 import { parse, parseId, zId, zMoney } from "../utils/validate.js";
 import { settlementView } from "../services/vendorSettlementService.js";
 import { idempotency } from "../middleware/idempotency.js";
 import { money } from "../utils/orderMath.js";
+import { audit } from "../utils/audit.js";
+import { effectivePrice, isOfferActive } from "../utils/menu.js";
+import { productImageUpload } from "../middleware/upload.js";
+import { saveUpload } from "../utils/storage.js";
 import {
   cashOwedByVendor,
   createHandover,
@@ -52,6 +56,15 @@ const productView = (product) => ({
   slot_type: product.slot_type,
   is_combo: product.is_combo,
   is_available: product.is_available,
+  description: product.description,
+  available_from: product.available_from,
+  available_to: product.available_to,
+  stock_qty: product.stock_qty,
+  offer_price: product.offer_price == null ? null : moneyStr(product.offer_price),
+  offer_label: product.offer_label,
+  offer_ends_at: product.offer_ends_at,
+  offer_active: isOfferActive(product),
+  effective_price: moneyStr(effectivePrice(product)),
 });
 
 // GET /api/v1/vendor/me — shop plus full menu.
@@ -59,28 +72,149 @@ router.get(
   "/me",
   asyncHandler(async (req, res) => {
     const products = await prisma.product.findMany({
-      where: { vendor_id: req.vendor.id },
+      where: { vendor_id: req.vendor.id, is_archived: false },
       orderBy: [{ is_combo: "desc" }, { id: "asc" }],
     });
     ok(res, { shop: shopView(req.vendor), products: products.map(productView) });
   })
 );
 
-const toggleSchema = z.object({ is_available: z.boolean() });
+const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:mm");
+const productFields = {
+  name: z.string().trim().min(2).max(80),
+  price: zMoney,
+  description: z.string().trim().max(300).nullable(),
+  slot_type: z.enum(["ALL_DAY", "LUNCH_ONLY", "EVENING_SNACKS_3_TO_6", "DINNER_ONLY"]),
+  available_from: hhmm.nullable(),
+  available_to: hhmm.nullable(),
+  is_combo: z.boolean(),
+  is_available: z.boolean(),
+  stock_qty: z.number().int().min(0).max(9999).nullable(),
+  offer_price: zMoney.nullable(),
+  offer_label: z.string().trim().max(30).nullable(),
+  offer_ends_at: z.coerce.date().nullable(),
+};
+const createSchema = z.object({
+  ...productFields,
+  description: productFields.description.optional(),
+  slot_type: productFields.slot_type.default("ALL_DAY"),
+  available_from: productFields.available_from.optional(),
+  available_to: productFields.available_to.optional(),
+  is_combo: productFields.is_combo.default(false),
+  is_available: productFields.is_available.default(true),
+  stock_qty: productFields.stock_qty.optional(),
+  offer_price: productFields.offer_price.optional(),
+  offer_label: productFields.offer_label.optional(),
+  offer_ends_at: productFields.offer_ends_at.optional(),
+});
+const updateSchema = z.object(productFields).partial();
 
-// PATCH /api/v1/vendor/products/:id — menu availability toggle.
+/** Cross-field rules, checked against the final values of the product. */
+function checkProduct(p, now = new Date()) {
+  const issues = [];
+  if (!money(p.price).gt(0)) issues.push({ field: "price", issue: "must be more than 0" });
+  if (p.offer_price != null) {
+    if (!money(p.offer_price).gt(0) || !money(p.offer_price).lt(money(p.price))) {
+      issues.push({ field: "offer_price", issue: "must be more than 0 and less than the price" });
+    }
+    if (p.offer_ends_at && p.offer_ends_at <= now) {
+      issues.push({ field: "offer_ends_at", issue: "must be in the future" });
+    }
+  }
+  if (Boolean(p.available_from) !== Boolean(p.available_to)) {
+    issues.push({ field: "available_to", issue: "set both the start and the end time, or neither" });
+  }
+  if (issues.length) throw validationError("Invalid menu item", issues);
+}
+
+/** Empty offer fields when the offer is cleared. */
+function normaliseOffer(data) {
+  if (data.offer_price === null) {
+    data.offer_label = null;
+    data.offer_ends_at = null;
+  }
+  return data;
+}
+
+// POST /api/v1/vendor/products — add a menu item.
+router.post(
+  "/products",
+  asyncHandler(async (req, res) => {
+    const body = parse(createSchema, req.body);
+    checkProduct(body);
+    const data = normaliseOffer({ ...body });
+    const duplicate = await prisma.product.findFirst({
+      where: { vendor_id: req.vendor.id, is_archived: false, name: { equals: data.name, mode: "insensitive" } },
+    });
+    if (duplicate) throw new AppError(409, "DUPLICATE_PRODUCT", "You already have an item with this name");
+    const product = await prisma.product.create({ data: { ...data, vendor_id: req.vendor.id } });
+    audit("menu.product_created", {
+      franchise_id: req.franchise_id,
+      vendor_id: req.vendor.id,
+      product_id: product.id,
+    });
+    ok(res, { product: productView(product) }, { status: 201 });
+  })
+);
+
+// PATCH /api/v1/vendor/products/:id — edit an item (on/off, price, stock, offer, ...).
 router.patch(
   "/products/:id",
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id);
-    const { is_available } = parse(toggleSchema, req.body);
+    const body = parse(updateSchema, req.body);
     // vendor_id in the filter keeps a vendor inside their own menu.
+    const current = await prisma.product.findFirst({
+      where: { id, vendor_id: req.vendor.id, is_archived: false },
+    });
+    if (!current) throw new AppError(404, "NOT_FOUND", "Product not found");
+    checkProduct({ ...current, ...body });
     const { count } = await prisma.product.updateMany({
       where: { id, vendor_id: req.vendor.id },
-      data: { is_available },
+      data: normaliseOffer({ ...body }),
     });
     if (count === 0) throw new AppError(404, "NOT_FOUND", "Product not found");
     const product = await prisma.product.findUnique({ where: { id } });
+    audit("menu.product_updated", {
+      franchise_id: req.franchise_id,
+      vendor_id: req.vendor.id,
+      product_id: id,
+      fields: Object.keys(body),
+    });
+    ok(res, { product: productView(product) });
+  })
+);
+
+// DELETE /api/v1/vendor/products/:id — hide the item (ordered items stay in history).
+router.delete(
+  "/products/:id",
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id);
+    const { count } = await prisma.product.updateMany({
+      where: { id, vendor_id: req.vendor.id, is_archived: false },
+      data: { is_archived: true, is_available: false },
+    });
+    if (count === 0) throw new AppError(404, "NOT_FOUND", "Product not found");
+    audit("menu.product_archived", { franchise_id: req.franchise_id, vendor_id: req.vendor.id, product_id: id });
+    ok(res, { id });
+  })
+);
+
+// POST /api/v1/vendor/products/:id/image — multipart field `image`.
+router.post(
+  "/products/:id/image",
+  productImageUpload,
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id);
+    if (!req.file) throw validationError("Image required", [{ field: "image", issue: "required" }]);
+    const owned = await prisma.product.findFirst({
+      where: { id, vendor_id: req.vendor.id, is_archived: false },
+      select: { id: true },
+    });
+    if (!owned) throw new AppError(404, "NOT_FOUND", "Product not found");
+    const image_url = await saveUpload(req.file, `products/${req.franchise_id}/${req.vendor.id}`);
+    const product = await prisma.product.update({ where: { id }, data: { image_url } });
+    audit("menu.product_image", { franchise_id: req.franchise_id, vendor_id: req.vendor.id, product_id: id });
     ok(res, { product: productView(product) });
   })
 );

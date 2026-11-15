@@ -354,6 +354,12 @@ model Product {
   available_to   String?
   is_combo       Boolean  @default(false)
   is_available   Boolean  @default(true)
+  description    String?
+  stock_qty      Int?                       // null = unlimited, 0 = sold out (§40.1)
+  offer_price    Decimal? @db.Decimal(12, 2)
+  offer_label    String?
+  offer_ends_at  DateTime?
+  is_archived    Boolean  @default(false)   // "delete" = hide; ordered items keep their history
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
 
@@ -1963,6 +1969,44 @@ The backend, not only the frontend, must enforce:
 
 ---
 
+
+## 40.1 Vendor Menu Management
+
+A hotel runs its own menu from the vendor app (`/vendor/menu`, "Manage menu" on the dashboard).
+
+**Endpoints** (role `VENDOR`; every query is pinned to the vendor's own `vendor_id`):
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/vendor/products` | Add an item |
+| `PATCH` | `/vendor/products/:id` | Edit any field: on/off, price, stock, offer, times, description |
+| `DELETE` | `/vendor/products/:id` | Archive (hide) the item |
+| `POST` | `/vendor/products/:id/image` | Photo, multipart field `image`, JPEG/PNG/WebP, up to 5 MB |
+
+**Rules**
+
+1. **Stock.** `stock_qty = null` means unlimited. Every order (checkout and Call Rider Now) takes its quantity with one
+   guarded `UPDATE ... WHERE stock_qty >= qty` inside the order transaction, so two orders for the last portion
+   cannot both win; the loser gets `409 OUT_OF_STOCK` and nothing is saved. At `0` the item is shown "Sold out".
+   The vendor can set the number again at any time. A cancelled order gives its quantities back; a delivered
+   order never does.
+2. **Offer / discount.** The hotel pays for it. While `offer_price` is set and `offer_ends_at` is empty or in the future,
+   `offer_price` is the item's price: it becomes `OrderItem.unit_price`, so `item_total`, commission, royalty and
+   the four-way split (§10, §15) all follow the lower price. `Order.discount_amount` is not used for offers.
+   `offer_price` must be more than 0 and less than `price`. Clearing the offer clears its label and end time.
+3. **No portion variants.** "Full" and "Half" are separate items.
+4. **Archive, not delete.** `OrderItem.product_id` is a foreign key, so an item is only hidden
+   (`is_archived`, `is_available = false`). Archived items are excluded from the vendor menu, the feed and
+   checkout.
+5. **Customer view.** The feed returns `price` as the price the customer pays; during an offer it also returns
+   `original_price` and `offer_label`; `stock_left` appears only when 5 or fewer remain.
+6. **Photos.** Replacing a photo leaves the old file in storage (no delete helper yet).
+7. Every create, update, archive and photo change writes an audit line (`menu.*`).
+
+**Invariants:** `unit_price` is always the effective price at the moment of the order; `stock_qty` never goes below 0.
+
+---
+
 # 41. Production Reconciliation
 
 A finance/admin dashboard MUST be able to reconcile:
@@ -2374,6 +2418,8 @@ The `request_id` MUST be generated server-side (UUID v4) and returned in every r
 | `ORDER_NOT_FOUND` | 404 | Order does not exist in this franchise |
 | `ORDER_ALREADY_ACCEPTED` | 409 | Race conflict on acceptance |
 | `ORDER_ALREADY_DELIVERED` | 409 | Idempotent delivery retry |
+| `OUT_OF_STOCK` | 409 | A cart item has no portions left (§40.1) |
+| `DUPLICATE_PRODUCT` | 409 | The shop already has an item with this name |
 | `VALIDATION_ERROR` | 422 | Request body schema error |
 | `CASH_LIMIT_EXCEEDED` | 422 | Rider `cash_in_hand >= max_cash_limit` |
 | `MAX_ORDERS_EXCEEDED` | 422 | Rider at max concurrent orders |
