@@ -136,6 +136,25 @@ describe("new order → shop and rider alerts (§62)", () => {
     assert.match(call.notification.body, /is coming/);
   });
 
+  it("the shop's Got it is saved on the order, once, and only its own shop can set it", async () => {
+    fakeMessaging();
+    const res = await checkout();
+    const order = await prisma.order.findFirst({ where: { order_number: res.body.data.order_number } });
+    const before = await api("GET", "/orders/active", { token: w.vendorToken });
+    assert.equal(before.body.data.orders[0].vendor_seen_at, null);
+
+    const rider = await api("POST", `/orders/${order.id}/vendor-seen`, { token: w.riders[0].token });
+    assert.equal(rider.status, 403);
+
+    const first = await api("POST", `/orders/${order.id}/vendor-seen`, { token: w.vendorToken });
+    assert.equal(first.status, 200, JSON.stringify(first.body));
+    const again = await api("POST", `/orders/${order.id}/vendor-seen`, { token: w.vendorToken });
+    assert.equal(again.body.data.vendor_seen_at, first.body.data.vendor_seen_at, "the first tap's time is kept");
+
+    const after = await api("GET", "/orders/active", { token: w.vendorToken });
+    assert.ok(after.body.data.orders[0].vendor_seen_at);
+  });
+
   it("only the franchise admin can mark a shop as not on the app", async () => {
     const rider = await api("PATCH", `/admin/vendors/${w.vendor.id}`, {
       token: w.riders[0].token,

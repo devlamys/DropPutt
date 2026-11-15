@@ -3435,6 +3435,7 @@ The delivery zone, and so the delivery fee, is decided by the software from the 
 
 1. **Customer orders (storefront / WhatsApp).**
    * Shop with `app_enabled = true`: socket `new_order_for_vendor {order_id, order_number, payment_method, items}` and push `🔔 New Order!` (`order_alerts`, body `#number — 2× Biryani, …`). The dashboard rings a looping vendor alert and shows every item and quantity until the shop taps "Got it".
+   * The shop's "Got it" is saved: `POST /orders/:id/vendor-seen` (VENDOR, own orders only, idempotent) sets `Order.vendor_seen_at` and emits `order_seen {order_id, vendor_seen_at}` to the shop's room, so every phone / browser of the shop stops ringing. `GET /orders/active` shows `vendor_seen_at` to the shop; the alert rings while it is `null` and the order is still `RIDER_REQUESTED` / `RIDER_ASSIGNED`.
    * Shop with `app_enabled = false`: no shop alert.
    * Riders: `new_rider_request` / `addon_order_alert` and push carry only `item_count` (total pieces, e.g. "3 items") — never the list. `open_requests` in `GET /orders/active` has `item_count` too.
 2. **Rider accepts.** The order now shows the rider every item and quantity (`items` in `GET /orders/active`; the pickup card heads it "Collect from the shop", or "Ask the shop for" when `vendor_on_app = false`). The shop sees `🛵 Rider on the way — name · vehicle. Keep the food ready!` (`order_accepted` carries `rider_name`, `vehicle_number`; push `✅ Order Accepted`).

@@ -15,18 +15,10 @@ import api, { getErrorMessage, idempotencyHeaders } from "../utils/api.js";
 import { startAlarm, stopAlarm } from "../utils/alarm.js";
 import { inr, minutesAgo } from "../utils/format.js";
 
-const EVENTS = ["new_order_for_vendor", "order_accepted", "order_picked_up", "order_delivered", "order_status_changed", "order_cancelled", "order_payment_changed"];
-// A new customer order rings until the shop taps "Got it" (remembered on this phone).
-const ACKED_KEY = "dropputt.vendor_acked_orders";
+const EVENTS = ["new_order_for_vendor", "order_seen", "order_accepted", "order_picked_up", "order_delivered", "order_status_changed", "order_cancelled", "order_payment_changed"];
+// A new customer order rings until the shop taps "Got it". The tap is saved on
+// the order (vendor_seen_at), so every phone of the shop stops ringing together.
 const ALERT_STATUSES = ["RIDER_REQUESTED", "RIDER_ASSIGNED"];
-
-function loadAcked() {
-  try {
-    return new Set(JSON.parse(window.localStorage.getItem(ACKED_KEY) || "[]"));
-  } catch {
-    return new Set();
-  }
-}
 
 /** Where the rider stands, in words the shop can act on. */
 function RiderLine({ order }) {
@@ -67,7 +59,7 @@ export default function VendorDashboard() {
   const [billPreview, setBillPreview] = useState(null);
   const [cancelling, setCancelling] = useState(null);
   const [now, setNow] = useState(Date.now());
-  const [acked, setAcked] = useState(loadAcked);
+  const [acked, setAcked] = useState(() => new Set()); // taps not yet confirmed by the server
   const { blocked: soundBlocked, unlock: unlockSound } = useAlarmBlocked();
   const callLock = useRef(false); // state updates are async; this blocks a same-tick double tap
 
@@ -82,20 +74,25 @@ export default function VendorDashboard() {
 
   // Customer orders the shop has not yet looked at: the loud alert stays on until they do.
   const alerts = orders.filter(
-    (o) => o.order_type === "FOOD_MARKETPLACE" && ALERT_STATUSES.includes(o.order_status) && !acked.has(o.id)
+    (o) =>
+      o.order_type === "FOOD_MARKETPLACE" &&
+      ALERT_STATUSES.includes(o.order_status) &&
+      !o.vendor_seen_at &&
+      !acked.has(o.id)
   );
-  function acknowledge(order) {
-    setAcked((current) => {
-      const next = new Set(current).add(order.id);
-      try {
-        // Keep the list short: only ids that can still come back.
-        const keep = [...next].slice(-200);
-        window.localStorage.setItem(ACKED_KEY, JSON.stringify(keep));
-      } catch {
-        /* private window: the alert simply shows again after a reload */
-      }
-      return next;
-    });
+  async function acknowledge(order) {
+    setAcked((current) => new Set(current).add(order.id)); // stop the alert at once
+    try {
+      await api.post(`/orders/${order.id}/vendor-seen`);
+    } catch (error) {
+      // Not saved: bring the alert back rather than silently losing a new order.
+      setAcked((current) => {
+        const next = new Set(current);
+        next.delete(order.id);
+        return next;
+      });
+      toast(getErrorMessage(error, "Could not save. Try again."), "error");
+    }
   }
   useEffect(() => {
     if (alerts.length > 0) startAlarm("vendor");

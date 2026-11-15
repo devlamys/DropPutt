@@ -1154,9 +1154,41 @@ function boardOrderView(order, role) {
     view.rider = order.rider
       ? { name: order.rider.user.name, vehicle_number: order.rider.vehicle_number }
       : null;
+    view.vendor_seen_at = order.vendor_seen_at;
   }
   return view;
 }
+
+// POST /api/v1/orders/:id/vendor-seen — the shop tapped "Got it" on the new-order
+// alert. Stored on the order so every phone / browser of the shop stops ringing
+// (SPEC §62). Idempotent: the first tap's time is kept.
+router.post(
+  "/:id/vendor-seen",
+  requireRole("VENDOR"),
+  asyncHandler(async (req, res) => {
+    const orderId = parseId(req.params.id);
+    const vendor = await prisma.vendor.findFirst({
+      where: { user_id: req.user.id, franchise_id: req.franchise_id },
+      select: { id: true },
+    });
+    if (!vendor) throw forbidden("Vendor profile not found in this franchise");
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, franchise_id: req.franchise_id, vendor_id: vendor.id },
+      select: { id: true, vendor_seen_at: true },
+    });
+    if (!order) throw orderNotFound();
+    let seenAt = order.vendor_seen_at;
+    if (!seenAt) {
+      seenAt = new Date();
+      await prisma.order.updateMany({
+        where: { id: orderId, vendor_seen_at: null },
+        data: { vendor_seen_at: seenAt },
+      });
+      emitTo(rooms.vendor(vendor.id), "order_seen", { order_id: orderId, vendor_seen_at: seenAt });
+    }
+    ok(res, { order_id: orderId, vendor_seen_at: seenAt });
+  })
+);
 
 // GET /api/v1/orders — paginated history (SPEC §48), newest first.
 //   RIDER → own orders, VENDOR → own shop, FRANCHISE_ADMIN → whole franchise.
