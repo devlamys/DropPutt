@@ -5,7 +5,7 @@ import { setMessagingClientForTests } from "../../src/utils/push.js";
 import { client, prisma, startServer } from "../helpers/app.js";
 import { resetDb } from "../helpers/db.js";
 import { makeWorld, nextPhone, pinAt } from "../helpers/fixtures.js";
-import { accept, uuid, waitFor } from "../helpers/flow.js";
+import { accept, pickup, uuid, waitFor } from "../helpers/flow.js";
 
 // SPEC §62: the shop is told about a new order (items + quantities), the rider
 // of a shop that is not on the app is told the items instead.
@@ -73,7 +73,7 @@ describe("new order → shop and rider alerts (§62)", () => {
     assert.equal(call.webpush.notification.requireInteraction, true);
   });
 
-  it("a shop that is not on the app is not pushed; its rider gets the item list", async () => {
+  it("a shop that is not on the app is not pushed; the rider is told only the item count", async () => {
     await prisma.vendor.update({ where: { id: w.vendor.id }, data: { app_enabled: false } });
     const calls = fakeMessaging();
     const shopToken = fcmToken();
@@ -84,23 +84,41 @@ describe("new order → shop and rider alerts (§62)", () => {
     const sent = calls.flatMap((c) => c.tokens);
     assert.ok(!sent.includes(shopToken));
     const riderCall = calls.find((c) => c.tokens.includes(riderToken));
-    assert.match(riderCall.notification.body, /2× /);
+    assert.match(riderCall.notification.body, /3 items/);
+    assert.doesNotMatch(riderCall.notification.body, /×|Biryani/i);
 
     const open = await api("GET", "/orders/active", { token: w.riders[0].token });
     const request = open.body.data.open_requests[0];
-    assert.equal(request.vendor_on_app, false);
-    assert.deepEqual(request.items.map((i) => i.quantity).sort(), [1, 2]);
+    assert.equal(request.item_count, 3);
+    assert.equal(request.items, undefined, "the list is revealed only after accepting");
   });
 
-  it("a shop on the app: the rider's request says so and does not pad the push with items", async () => {
+  it("after accepting, the rider's order lists every item and quantity", async () => {
+    fakeMessaging();
+    const res = await checkout();
+    const order = await prisma.order.findFirst({ where: { order_number: res.body.data.order_number } });
+    await accept(api, w.riders[0], order.id);
+    const mine = await api("GET", "/orders/active", { token: w.riders[0].token });
+    const items = mine.body.data.orders[0].items;
+    assert.equal(items.reduce((n, i) => n + i.quantity, 0), 3);
+    assert.equal(mine.body.data.orders[0].vendor_on_app, true);
+  });
+
+  it("pickup tells the customer, the shop and moves the status to PICKED_UP", async () => {
     const calls = fakeMessaging();
-    const riderToken = fcmToken();
-    await device(w.riders[0].user, riderToken);
-    await checkout();
-    const open = await api("GET", "/orders/active", { token: w.riders[0].token });
-    assert.equal(open.body.data.open_requests[0].vendor_on_app, true);
-    const riderCall = calls.find((c) => c.tokens.includes(riderToken));
-    assert.doesNotMatch(riderCall.notification.body, /×/);
+    const shopToken = fcmToken();
+    await device(w.vendorUser, shopToken);
+    const res = await checkout();
+    const order = await prisma.order.findFirst({ where: { order_number: res.body.data.order_number } });
+    await accept(api, w.riders[0], order.id);
+    const done = await pickup(api, w, w.riders[0], order);
+    assert.equal(done.status, 200, JSON.stringify(done.body));
+    const seen = await api("GET", `/public/drop/${order.location_token}/status`);
+    assert.equal(seen.body.data.order_status, "PICKED_UP");
+    assert.match(seen.body.data.estimated_message, /on the way to you/);
+    await waitFor(() => calls.some((c) => c.tokens.includes(shopToken) && c.data.type === "ORDER_PICKED_UP"));
+    const vendorView = await api("GET", "/orders/active", { token: w.vendorToken });
+    assert.equal(vendorView.body.data.orders[0].order_status, "PICKED_UP");
   });
 
   it("accepting tells the shop which rider is coming", async () => {

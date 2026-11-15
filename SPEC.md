@@ -3431,16 +3431,17 @@ The delivery zone, and so the delivery fee, is decided by the software from the 
 
 # 62. Order Alerts for Shops and Riders, Web Push (PWA)
 
-## 62.1 What each side is told when a customer orders
+## 62.1 What each side is told, step by step
 
-| Who | Socket event | Push | Content |
-|---|---|---|---|
-| Eligible riders | `new_rider_request` / `addon_order_alert` | `🛵 New Order!` / `🔥 Add-on Order!` (`order_alerts`) | `items: [{name, quantity}]` and `vendor_on_app` are in the payload and in `GET /orders/active` → `open_requests` |
-| Shop with `app_enabled = true` | `new_order_for_vendor` `{order_id, order_number, payment_method, items}` | `🔔 New Order!` (`order_alerts`), body `#number — 2× Biryani, …` | Dashboard rings a looping vendor alert and shows items + quantities until the shop taps "Got it" |
-| Shop with `app_enabled = false` | none | none | The rider's alert shows the items large ("Ask the shop for"), and the push body lists them |
+1. **Customer orders (storefront / WhatsApp).**
+   * Shop with `app_enabled = true`: socket `new_order_for_vendor {order_id, order_number, payment_method, items}` and push `🔔 New Order!` (`order_alerts`, body `#number — 2× Biryani, …`). The dashboard rings a looping vendor alert and shows every item and quantity until the shop taps "Got it".
+   * Shop with `app_enabled = false`: no shop alert.
+   * Riders: `new_rider_request` / `addon_order_alert` and push carry only `item_count` (total pieces, e.g. "3 items") — never the list. `open_requests` in `GET /orders/active` has `item_count` too.
+2. **Rider accepts.** The order now shows the rider every item and quantity (`items` in `GET /orders/active`; the pickup card heads it "Collect from the shop", or "Ask the shop for" when `vendor_on_app = false`). The shop sees `🛵 Rider on the way — name · vehicle. Keep the food ready!` (`order_accepted` carries `rider_name`, `vehicle_number`; push `✅ Order Accepted`).
+3. **Rider taps "Picked up — start delivery"** (`PUT /orders/:id/rider-pickup`, after the shop has handed the order over; the bill photo is still required). Status becomes `PICKED_UP`: the customer page and the "My orders" list show "Picked up · on the way", the public status message reads "Picked up from the shop — rider is on the way to you", the shop sees "✅ Picked up by NAME — on the way to the customer" (`order_picked_up` + push), and the rider's screen switches to the delivery card with the route.
+4. No new `OrderStatus` value: "picked up" and "on the way" are the same state (`PICKED_UP`; `LOCATION_SHARED` is the same step once the customer's pin is saved).
 
-* Vendor dashboard order rows show the items and one of: `⏳ Waiting for a rider to accept…` or `🛵 Rider on the way — name · vehicle` (so the food is ready when the rider arrives). `order_accepted` carries `rider_name` and `vehicle_number`.
-* `Vendor.app_enabled` (default `true`) is set by the franchise admin: `PATCH /admin/vendors/:id { app_enabled }`; it is also listed by `GET /admin/vendors`.
+* `Vendor.app_enabled` (default `true`) is set by the franchise admin: `PATCH /admin/vendors/:id { app_enabled }`; listed by `GET /admin/vendors`.
 * Alerts for shop-less orders (custom buy, pick & drop, quick call) are unchanged.
 
 ## 62.2 Web push
@@ -3454,4 +3455,4 @@ The delivery zone, and so the delivery fee, is decided by the software from the 
 
 ## 62.3 Tests
 
-* New order → shop device pushed with items; shop with `app_enabled = false` not pushed and its rider's `open_requests` shows `vendor_on_app: false` with items; accept → shop push names the rider; `PATCH /admin/vendors/:id` guarded; `/device/unregister` touches only the caller's device.
+* New order → shop device pushed with items; shop with `app_enabled = false` not pushed; the rider's push and `open_requests` carry only `item_count`; after accepting the rider's order lists the items; accept → shop push names the rider; pickup → customer status `PICKED_UP` with the "on the way to you" message and the shop is pushed; `PATCH /admin/vendors/:id` guarded; `/device/unregister` touches only the caller's device.

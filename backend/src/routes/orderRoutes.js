@@ -1283,8 +1283,7 @@ router.get(
           pickup_address: order.pickup_address,
           drop_address: order.drop_address,
           zone_id: order.zone_id,
-          vendor_on_app: Boolean(order.vendor?.app_enabled),
-          items: order.items.map((item) => ({ name: item.product.name, quantity: item.quantity })),
+          item_count: order.items.reduce((sum, item) => sum + item.quantity, 0),
         })),
       });
     }

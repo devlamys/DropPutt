@@ -16,8 +16,8 @@ const GPS_LIMIT_M = 50;
 const ACTIVE = ["RIDER_ASSIGNED", "PICKED_UP", "LOCATION_SHARED"];
 const STEPS = [
   { status: "RIDER_REQUESTED", label: "Order placed" },
-  { status: "RIDER_ASSIGNED", label: "Rider at shop" },
-  { status: "PICKED_UP", label: "On the way" },
+  { status: "RIDER_ASSIGNED", label: "Rider going to shop" },
+  { status: "PICKED_UP", label: "Picked up · on the way" },
   { status: "DELIVERED", label: "Delivered" },
 ];
 const VEHICLE = { BIKE: "Bike", SCOOTER: "Scooter", AUTO: "Auto", MINI_TRUCK: "Mini truck" };

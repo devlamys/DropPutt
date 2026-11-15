@@ -15,8 +15,8 @@ export function minutesAgo(iso, now = Date.now()) {
 
 export const ORDER_STATUS_LABELS = {
   RIDER_REQUESTED: "Finding rider",
-  RIDER_ASSIGNED: "Rider assigned",
-  PICKED_UP: "Picked up",
+  RIDER_ASSIGNED: "Rider going to shop",
+  PICKED_UP: "Picked up · on the way",
   LOCATION_SHARED: "On the way",
   DELIVERED: "Delivered",
   CANCELLED: "Cancelled",

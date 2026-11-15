@@ -175,7 +175,7 @@ export default function RiderDashboard() {
     try {
       await api.post(`/orders/${request.order_id}/accept`);
       setQueue((list) => list.filter((r) => r.order_id !== request.order_id));
-      toast("Order accepted — go pick it up!", "success");
+      toast("Order accepted — the items are listed below. Go pick it up!", "success");
       await Promise.all([loadOrders(), loadStatus()]);
     } catch (error) {
       setQueue((list) => list.filter((r) => r.order_id !== request.order_id));

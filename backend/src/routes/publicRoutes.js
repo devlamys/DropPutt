@@ -52,7 +52,7 @@ const TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
 const STATUS_MESSAGES = Object.freeze({
   RIDER_REQUESTED: "Looking for a rider",
   RIDER_ASSIGNED: "Rider is heading to the shop",
-  PICKED_UP: "Rider is on the way",
+  PICKED_UP: "Picked up from the shop — rider is on the way to you",
   LOCATION_SHARED: "Rider is on the way",
   DELIVERED: "Order delivered",
   CANCELLED: "Order cancelled",

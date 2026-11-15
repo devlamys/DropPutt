@@ -1,7 +1,6 @@
 import { BellRing, Loader2 } from "lucide-react";
 import { useState } from "react";
 import Modal from "../Modal.jsx";
-import OrderItemList from "../OrderItemList.jsx";
 
 /** Full-screen order alert. The looping sound runs while this is mounted. */
 export default function AlarmModal({ request, queued, onAccept, onDismiss }) {
@@ -29,14 +28,15 @@ export default function AlarmModal({ request, queued, onAccept, onDismiss }) {
           <div className="min-w-0 text-sm">
             {request.shop_name && <p className="truncate text-base font-bold">{request.shop_name}</p>}
             {request.order_number && <p className="text-slate-600">Order #{request.order_number}</p>}
+            {request.item_count > 0 && (
+              <p className="font-semibold text-slate-800">
+                🍽️ {request.item_count} item{request.item_count === 1 ? "" : "s"}
+              </p>
+            )}
             {request.pickup_address && <p className="truncate text-slate-600">📍 {request.pickup_address}</p>}
             {request.message && <p className="font-semibold text-orange-700">{request.message}</p>}
           </div>
         </div>
-        {/* A shop that is not on the app is told the items by the rider, so show them here. */}
-        {request.vendor_on_app === false && (
-          <OrderItemList items={request.items} big title="Ask the shop for" />
-        )}
         {queued > 0 && <p className="text-center text-xs text-slate-500">+{queued} more waiting</p>}
         <div className="grid grid-cols-3 gap-3">
           <button

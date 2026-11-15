@@ -15,6 +15,10 @@ export function itemSummary(order) {
 
 const itemLine = (item) => `${item.quantity}× ${item.name}`;
 
+/** Total pieces ordered (2 biryani + 1 meals = 3): all a rider is told before accepting. */
+export const itemCount = (order) => (order.items ?? []).reduce((sum, item) => sum + item.quantity, 0);
+const itemsLabel = (count) => `${count} item${count === 1 ? "" : "s"}`;
+
 /**
  * - Online, approved riders with zero active orders get `new_rider_request`.
  * - Riders already on a delivery, still under their max_active_orders, and
@@ -60,13 +64,9 @@ export async function dispatchOrder(order, { franchise_slug, shop_name } = {}) {
       activeByRider.set(active.rider_id, list);
     }
 
-    // A shop that does not use the app cannot be told what to prepare, so the
-    // rider's own alert carries the list they must ask for at the counter.
-    const shop = order.vendor_id
-      ? await prisma.vendor.findUnique({ where: { id: order.vendor_id }, select: { app_enabled: true } })
-      : null;
-    const vendor_on_app = Boolean(shop?.app_enabled);
-    const items = itemSummary(order);
+    // Before accepting, a rider sees only how many items there are; the list
+    // itself appears once the order is theirs (SPEC §62.1).
+    const item_count = itemCount(order);
 
     const request = {
       order_id: order.id,
@@ -76,8 +76,7 @@ export async function dispatchOrder(order, { franchise_slug, shop_name } = {}) {
       pickup_address: order.pickup_address,
       drop_address: order.drop_address,
       zone_id: order.zone_id,
-      vendor_on_app,
-      items,
+      item_count,
     };
     const requestedUsers = [];
     const addonUsers = [];
@@ -101,8 +100,7 @@ export async function dispatchOrder(order, { franchise_slug, shop_name } = {}) {
           order_number: order.order_number,
           shop_name: request.shop_name,
           pickup_address: order.pickup_address,
-          vendor_on_app,
-          items,
+          item_count,
         });
         addonUsers.push(rider.user_id);
       }
@@ -116,7 +114,7 @@ export async function dispatchOrder(order, { franchise_slug, shop_name } = {}) {
     };
     const body =
       `Order #${order.order_number}${request.shop_name ? ` from ${request.shop_name}` : ""}` +
-      (!vendor_on_app && items.length > 0 ? ` — ${items.map(itemLine).join(", ")}` : "");
+      (item_count > 0 ? ` — ${itemsLabel(item_count)}` : "");
     await Promise.all([
       pushToUsers(requestedUsers, {
         title: "🛵 New Order!",

@@ -40,6 +40,13 @@ function RiderLine({ order }) {
       </p>
     );
   }
+  if (["PICKED_UP", "LOCATION_SHARED"].includes(order.order_status)) {
+    return (
+      <p className="text-sm font-semibold text-violet-700">
+        ✅ Picked up{order.rider ? ` by ${order.rider.name}` : ""} — on the way to the customer
+      </p>
+    );
+  }
   return null;
 }
 

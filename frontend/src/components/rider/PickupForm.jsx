@@ -149,8 +149,8 @@ export default function PickupForm({ order, zones, onPickedUp, onError }) {
       <RequestDetails order={order} />
       <OrderItemList
         items={order.items}
-        big={order.vendor_on_app === false}
-        title={order.vendor_on_app === false ? "Ask the shop for" : "Order items"}
+        big
+        title={order.vendor_on_app === false ? "Ask the shop for" : "Collect from the shop"}
       />
 
       {/* 1 — bill photo */}
@@ -284,8 +284,11 @@ export default function PickupForm({ order, zones, onPickedUp, onError }) {
         className="flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-600 py-4 text-lg font-bold text-white shadow active:scale-95 disabled:opacity-60"
       >
         {busy && <Loader2 className="h-5 w-5 animate-spin" />}
-        Confirm pickup
+        Picked up — start delivery
       </button>
+      <p className="-mt-2 text-center text-xs text-slate-500">
+        Tap once the shop has handed you everything. The customer is told it is on its way.
+      </p>
     </form>
   );
 }
