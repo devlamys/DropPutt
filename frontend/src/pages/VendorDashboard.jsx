@@ -11,7 +11,7 @@ import { useSocket } from "../hooks/useSocket.js";
 import api, { getErrorMessage, idempotencyHeaders } from "../utils/api.js";
 import { inr, minutesAgo } from "../utils/format.js";
 
-const EVENTS = ["order_accepted", "order_picked_up", "order_delivered", "order_status_changed", "order_cancelled"];
+const EVENTS = ["order_accepted", "order_picked_up", "order_delivered", "order_status_changed", "order_cancelled", "order_payment_changed"];
 // A shop can withdraw an order until the rider has the food in hand.
 const SHOP_CAN_CANCEL = ["RIDER_REQUESTED", "RIDER_ASSIGNED"];
 

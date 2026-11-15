@@ -80,6 +80,7 @@ export default function CustomerDropPage() {
     socket.on("disconnect", () => setConnected(false));
     socket.on("live_bike_position", ({ lat, lng }) => setBike([lat, lng]));
     socket.on("order_status_changed", () => load());
+    socket.on("order_payment_changed", () => load());
     // The server re-routes when the rider leaves the road or the pin moves.
     socket.on("route_updated", ({ coords, distance_m, duration_s }) =>
       setOrder((current) => current && { ...current, route: { coords, distance_m, duration_s } })

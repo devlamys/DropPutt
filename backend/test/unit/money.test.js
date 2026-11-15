@@ -12,7 +12,9 @@ import {
   calculateSplit,
   calculateVendorAdminPayable,
   calculateVendorCommission,
+  recomputeForPaymentMethod,
   isAllowedTipAmount,
+  isCommissionFree,
   money,
 } from "../../src/utils/orderMath.js";
 
@@ -169,6 +171,87 @@ describe("full order financials", () => {
         });
         const allocated = addMoney(f.vendor_earning, f.rider_earning, f.franchise_profit, f.super_admin_profit);
         assert.equal(s(allocated), s(f.grand_total), `${payment_method} promo=${promo}`);
+      }
+    }
+  });
+
+  it("trial HOTEL_DIRECT: no commission, royalty still charged, rider keeps the fee (§10.1)", () => {
+    for (const payment_method of ["COD", "PREPAID_AT_HOTEL"]) {
+      const f = calculateOrderFinancials({
+        item_total: 700,
+        zone,
+        franchise,
+        payment_method,
+        commission_rate: 10,
+        commission_free: true,
+      });
+      assert.equal(s(f.vendor_commission), "0.00");
+      assert.equal(s(f.vendor_earning), "700.00");
+      assert.equal(s(f.super_admin_profit), "3.00");
+      assert.equal(s(f.rider_earning), "30.00");
+      assert.equal(s(f.franchise_profit), "-3.00"); // royalty only, never clamped
+      assert.equal(s(f.vendor_admin_payable), payment_method === "COD" ? "700.00" : "0.00");
+      const allocated = addMoney(f.vendor_earning, f.rider_earning, f.franchise_profit, f.super_admin_profit);
+      assert.equal(s(allocated), s(f.grand_total));
+    }
+  });
+
+  it("isCommissionFree: only HOTEL_DIRECT inside the hotel's trial (§10.1)", () => {
+    const future = new Date(Date.now() + 86_400_000);
+    const past = new Date(Date.now() - 86_400_000);
+    assert.equal(isCommissionFree({ order_type: "HOTEL_DIRECT", commission_free_until: future }), true);
+    assert.equal(isCommissionFree({ order_type: "HOTEL_DIRECT", commission_free_until: past }), false);
+    assert.equal(isCommissionFree({ order_type: "HOTEL_DIRECT", commission_free_until: null }), false);
+    assert.equal(isCommissionFree({ order_type: "FOOD_MARKETPLACE", commission_free_until: future }), false);
+    assert.equal(isCommissionFree({}), false);
+    // the end moment itself is already past the trial
+    assert.equal(isCommissionFree({ order_type: "HOTEL_DIRECT", commission_free_until: past }, past), false);
+  });
+
+  it("after the trial a Call Rider Now order pays 1% commission and royalty", () => {
+    const f = calculateOrderFinancials({
+      item_total: 700,
+      zone,
+      franchise,
+      payment_method: "PREPAID_AT_HOTEL",
+      commission_rate: 1,
+      commission_free: false,
+    });
+    assert.equal(s(f.vendor_commission), "7.00");
+    assert.equal(s(f.super_admin_profit), "3.00");
+    assert.equal(s(f.vendor_admin_payable), "-7.00"); // the hotel owes the franchise
+    assert.equal(s(f.rider_earning), "30.00");
+  });
+
+  it("storefront orders keep commission and royalty", () => {
+    const f = calculateOrderFinancials({
+      item_total: 700,
+      zone,
+      franchise,
+      payment_method: "COD",
+      commission_rate: 10,
+      commission_free: false,
+    });
+    assert.equal(s(f.vendor_commission), "70.00");
+    assert.equal(s(f.super_admin_profit), "3.00");
+    assert.equal(s(f.franchise_profit), "67.00");
+  });
+
+  it("re-pricing for another payment method never changes the split (§19.1)", () => {
+    const stored = calculateOrderFinancials({ item_total: 700, zone, franchise, payment_method: "COD", commission_rate: 10, rider_tip: 20 });
+    const order = {
+      item_total: stored.item_total,
+      delivery_fee: stored.delivery_fee,
+      rider_tip: stored.rider_tip,
+      discount_amount: 0,
+      shop_markup_profit: 0,
+      commission_rate: 10,
+      vendor_id: 1,
+    };
+    for (const method of ["COD", "PREPAID_AT_HOTEL", "PREPAID_FULL_AT_HOTEL", "UPI_TO_ADMIN"]) {
+      const f = recomputeForPaymentMethod(order, franchise, method);
+      for (const key of ["grand_total", "vendor_commission", "vendor_earning", "rider_earning", "franchise_profit", "super_admin_profit"]) {
+        assert.equal(s(f[key]), s(stored[key]), `${method} ${key}`);
       }
     }
   });

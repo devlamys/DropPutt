@@ -284,6 +284,28 @@ export function calculateOrderFinancials({
   };
 }
 
+/**
+ * Re-prices a picked-up order for another payment method (§19.1), from the
+ * values stored at pickup only: item_total, delivery_fee, rider_tip (it already
+ * holds tips and the rain surge, so nothing is added twice), discount, markup,
+ * and the commission rate decided at pickup (0 during a Call Rider Now trial).
+ * Only amount_to_collect and vendor_admin_payable depend on the method; the
+ * four-way split is identical for every method.
+ */
+export function recomputeForPaymentMethod(order, franchise, payment_method) {
+  return calculateOrderFinancials({
+    item_total: order.item_total,
+    zone: { delivery_fee: order.delivery_fee, rider_commission: 0, franchise_profit: 0 },
+    franchise,
+    payment_method,
+    commission_rate: order.commission_rate ?? 0,
+    rider_tip: order.rider_tip,
+    discount_amount: order.discount_amount,
+    shop_markup_profit: order.shop_markup_profit,
+    has_partner_vendor: Boolean(order.vendor_id),
+  });
+}
+
 // ─── §13 / §20 Rider-side additions (tip, rain surge) ───────────────────────
 
 export function isAllowedTipAmount(value) {

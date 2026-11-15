@@ -1206,6 +1206,14 @@ The response may include:
 
 only for the authorized rider handling that order.
 
+## 19.1 Correcting the payment method before delivery
+
+`PATCH /api/v1/orders/:id/payment-method` `{ payment_method }` — the assigned rider only, while the order is `PICKED_UP` or `LOCATION_SHARED` (409 `NOT_PICKED_UP`, `ORDER_ALREADY_DELIVERED`, `ORDER_CANCELLED` otherwise; 403 for any other role or rider).
+
+In one transaction with `FOR UPDATE` on the order, the order is re-priced from the values stored at pickup (`item_total`, `delivery_fee`, `rider_tip` — which already holds tips and the rain surge — discount, markup and the stored `commission_rate`). Only `payment_method`, `amount_to_collect` and `vendor_admin_payable` change; `grand_total`, commission, earning, profit and royalty must stay identical or the request is refused (`ORDER_NOT_REPRICEABLE`). The same method is a no-op. Prepaid methods still need a partner vendor (422). Nothing is in the ledger before delivery, so no reversal entries are needed. Every change is audited (`order.payment_method_changed`) and emits `order_payment_changed` to the order, vendor and franchise rooms.
+
+A delivered order's payment method is final.
+
 ---
 
 # 20. Rider Tip — Magic Link
@@ -1707,6 +1715,12 @@ For `rider_location_move`, the server derives the franchise from the rider/order
 | Endpoint | Purpose | Transaction |
 |---|---|---|
 | `POST /api/v1/orders/quick-call` | Create rider request | Yes |
+| `GET/POST /api/v1/rider/me/cash-owed`, `cash-handover` | Rider cash handover (§15.1) | Yes + `FOR UPDATE` |
+| `/api/v1/vendor/cash-handovers…` | Vendor confirms/records rider cash (§15.1) | Yes + `FOR UPDATE` |
+| `/api/v1/admin/cash-handovers…` | Admin resolves pending handovers | Yes + `FOR UPDATE` |
+| `/api/v1/admin/vendors…` | Hotel statements and settlements (§16.1) | Yes + `FOR UPDATE` |
+| `PATCH /api/v1/orders/:id/payment-method` | Rider corrects payment method (§19.1) | Yes + `FOR UPDATE` |
+| `POST /api/v1/admin/riders/:id/payouts`, `net-settlement` | Rider earnings payout (§15.2) | Yes + `FOR UPDATE` |
 | `POST /api/v1/orders/:id/accept` | Atomic rider acceptance | Yes + `FOR UPDATE` |
 | `PUT /api/v1/orders/:id/rider-pickup` | Bill/customer/payment/pickup | Yes |
 | `POST /api/v1/public/drop/:token/voice-and-pin` | Rural GPS/voice route | Yes |
@@ -2217,6 +2231,16 @@ The following statements MUST always remain true:
 18. Rider live tracking is authorized by rider/order ownership.
 19. Customer Magic Links cannot access another order or franchise.
 20. All financial calculations use two-decimal safe money arithmetic.
+21. HOTEL_DIRECT ("Call Rider Now") orders carry no vendor commission only while the hotel's free trial runs.
+22. The rider hands a hotel only food money; the delivery fee stays with the rider.
+23. vendor.admin_payable_balance = Σ VENDOR_PAYABLE entries
+    - Σ confirmed rider→hotel handovers
+    + Σ VENDOR_PAID_FRANCHISE - Σ FRANCHISE_PAID_VENDOR settlements.
+24. A rider earning is paid exactly once: kept from cash at delivery or paid out
+    from wallet_earnings (rider wallet = Σ RIDER_EARNING entries incl. PAID_FROM_CASH
+    - Σ RiderPayout).
+25. The payment method can change only while the order is PICKED_UP or
+    LOCATION_SHARED, and never changes grand_total or the four-way split.
 ```
 
 This document is the authoritative production specification for the corrected multi-franchise hyperlocal delivery architecture.
