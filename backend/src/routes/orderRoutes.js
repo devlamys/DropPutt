@@ -317,6 +317,11 @@ router.post(
     const event = { order_id: order.id, order_number: order.order_number };
     emitTo(rooms.franchiseRiders(franchiseId), "order_taken", event);
     emitTo(rooms.franchise(franchiseId), "order_accepted", event);
+    // The customer's tracking page switches to "Rider going to shop" at once.
+    emitTo(rooms.order(order.id), "order_status_changed", {
+      order_id: order.id,
+      order_status: order.order_status,
+    });
     void notifyWhatsappOrder(order.id, "accepted");
     if (order.vendor_id) {
       // The shop sees who is coming, so the food is ready when they arrive.

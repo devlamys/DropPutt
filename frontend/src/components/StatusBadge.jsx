@@ -16,7 +16,7 @@ export default function StatusBadge({ status }) {
         STYLES[status] || STYLES.CANCELLED
       }`}
     >
-      {status.replace("_", " ")} · {ORDER_STATUS_LABELS[status] ?? ""}
+      {ORDER_STATUS_LABELS[status] ?? status.replace("_", " ")}
     </span>
   );
 }
