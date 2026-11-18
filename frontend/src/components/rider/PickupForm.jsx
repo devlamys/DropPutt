@@ -155,7 +155,7 @@ export default function PickupForm({ order, zones, onPickedUp, onError }) {
 
       {/* 1 — bill photo */}
       <div>
-        <label className="mb-1 block text-sm font-semibold">1. Bill photo</label>
+        <label className="mb-1 block text-sm font-semibold">1. Bill photo <span className="font-normal text-slate-500">(optional — some shops give no bill)</span></label>
         <label className="flex min-h-[7rem] cursor-pointer flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 text-slate-500">
           {previewUrl ? (
             <img src={previewUrl} alt="Bill preview" className="max-h-48 w-full object-contain" />
