@@ -450,3 +450,15 @@ describe("checkout: payment method and turning point", () => {
     assert.equal((await place({ turning_point: "x" })).status, 422);
   });
 });
+
+describe("feed with closed shops", () => {
+  it("lists a closed shop only when asked, with nothing orderable", async () => {
+    await prisma.vendor.update({ where: { id: w.vendor.id }, data: { is_open: false } });
+    const hidden = await api("GET", "/marketplace/feed", {});
+    assert.equal(hidden.body.data.items.length, 0);
+    const shown = await api("GET", "/marketplace/feed?include_closed=1", {});
+    assert.equal(shown.body.data.items.length, 1);
+    assert.equal(shown.body.data.items[0].is_open, false);
+    assert.deepEqual(shown.body.data.items[0].products, []);
+  });
+});

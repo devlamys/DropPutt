@@ -35,6 +35,8 @@ const CATEGORIES = Object.freeze([
 ]);
 
 const feedSchema = z.object({
+  // 1 = also list shops that are closed right now (greyed out, nothing orderable).
+  include_closed: z.enum(["0", "1"]).optional(),
   shop_category: z
     .enum(["HOTEL", "BAKERY_COOLBAR", "GROCERY", "FISH_MEAT", "MEDICAL_PHARMACY"])
     .optional(),
@@ -68,7 +70,7 @@ router.get(
   "/feed",
   asyncHandler(async (req, res) => {
     const franchise_id = req.franchise_id;
-    const { shop_category } = parse(feedSchema, req.query);
+    const { shop_category, include_closed } = parse(feedSchema, req.query);
     const { limit, cursorId } = parsePagination(req.query);
 
     const now = new Date();
@@ -78,7 +80,7 @@ router.get(
     const vendors = await prisma.vendor.findMany({
       where: {
         franchise_id,
-        is_open: true,
+        ...(include_closed === "1" ? {} : { is_open: true }),
         ...(shop_category ? { shop_category } : {}),
         ...(cursorId ? { id: { gt: cursorId } } : {}),
       },
@@ -92,12 +94,28 @@ router.get(
         lat: true,
         lng: true,
         min_order_value: true,
+        is_open: true,
         products: { where: { is_archived: false }, orderBy: [{ is_combo: "desc" }, { id: "asc" }] },
       },
     });
     const page = buildPage(vendors, limit);
 
     const items = page.items.map((vendor) => {
+      // A closed shop is listed only so customers see it exists; nothing in it can be ordered.
+      if (!vendor.is_open) {
+        return {
+          id: vendor.id,
+          shop_name: vendor.shop_name,
+          shop_category: vendor.shop_category,
+          address: vendor.address,
+          lat: Number(vendor.lat),
+          lng: Number(vendor.lng),
+          min_order_value: moneyStr(vendor.min_order_value),
+          is_open: false,
+          products: [],
+          unavailable: [],
+        };
+      }
       const products = vendor.products.filter(
         (product) => isSellable(product, minutes)
       );
@@ -126,6 +144,7 @@ router.get(
         lat: Number(vendor.lat),
         lng: Number(vendor.lng),
         min_order_value: moneyStr(vendor.min_order_value),
+        is_open: true,
         products: products.map(productView),
         unavailable,
       };

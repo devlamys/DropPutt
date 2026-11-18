@@ -26,7 +26,10 @@ export default function Storefront() {
   const { toast, node: toastNode } = useToast();
   const { cart, totals, add, setQuantity, clear, replaceWith, sync } = useCart();
   const [feed, setFeed] = useState(null);
-  const [vendors, setVendors] = useState([]);
+  const [allShops, setAllShops] = useState([]); // includes shops that are closed right now
+  // Everything that orders, the cart and the menus use sees only open shops.
+  const vendors = useMemo(() => allShops.filter((v) => v.is_open !== false), [allShops]);
+  const closedVendors = useMemo(() => allShops.filter((v) => v.is_open === false), [allShops]);
   const [zones, setZones] = useState([]);
   const [zoneId, setZoneId] = useState(() => readProfile().zone_id ?? "");
   const [error, setError] = useState("");
@@ -52,7 +55,7 @@ export default function Storefront() {
       for (let page = 0; page < MAX_PAGES; page += 1) {
         const { data } = await api.get("/marketplace/feed", {
           ...publicApi,
-          params: { limit: 10, ...(cursor ? { cursor } : {}) },
+          params: { limit: 10, include_closed: 1, ...(cursor ? { cursor } : {}) },
         });
         first ??= data.data;
         all.push(...data.data.items);
@@ -60,7 +63,7 @@ export default function Storefront() {
         if (!cursor) break;
       }
       setFeed(first);
-      setVendors(all);
+      setAllShops(all);
       setError("");
       loadedAt.current = Date.now();
       return all;
@@ -151,6 +154,7 @@ export default function Storefront() {
   const value = {
     feed,
     vendors,
+    closedVendors,
     shopById,
     zones,
     zone,
