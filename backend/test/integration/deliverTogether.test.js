@@ -1,10 +1,12 @@
 import "../helpers/env.js";
 import assert from "node:assert/strict";
+import { io as connect } from "socket.io-client";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { client, prisma, startServer } from "../helpers/app.js";
 import { resetDb } from "../helpers/db.js";
 import { makeUser, makeWorld, nextPhone, pinAt } from "../helpers/fixtures.js";
 import { accept, pickup, uuid } from "../helpers/flow.js";
+import { cancelOrder } from "../../src/services/orderCancelService.js";
 import { allocateGroupFees } from "../../src/services/checkoutService.js";
 
 let server, api, w, vendor2, product2;
@@ -124,5 +126,51 @@ describe("deliver together (several shops, one trip)", () => {
     const res = await group({ ...pinAt(30) });
     assert.ok([400, 422].includes(res.status), JSON.stringify(res.body));
     assert.equal(await prisma.order.count(), 0);
+  });
+
+  it("the rain surge is charged once per trip, on the first order picked up", async () => {
+    await prisma.franchise.update({ where: { id: w.franchise.id }, data: { rain_surge_fee: 20 } });
+    await group();
+    const [first, second] = await prisma.order.findMany({ orderBy: { id: "asc" } });
+    await accept(api, w.riders[0], first.id);
+    for (const order of [first, second]) {
+      const p = await pickup(api, w, w.riders[0], { id: order.id, phone: order.customer_phone });
+      assert.equal(p.status, 200, JSON.stringify(p.body));
+    }
+    const done = await prisma.order.findMany({ orderBy: { id: "asc" } });
+    assert.deepEqual(done.map((o) => o.rain_surge_applied), [true, false]);
+    assert.deepEqual(done.map((o) => String(o.rider_tip)), ["20", "0"]);
+  });
+
+  it("cancelling an order re-shares the trip fee: the order that is left carries its own zone fee", async () => {
+    await group();
+    const [near, far] = await prisma.order.findMany({ orderBy: { id: "asc" } }); // shares 20 and 40
+    await cancelOrder({ orderId: far.id, franchise_id: w.franchise.id, role: "CUSTOMER", franchise_slug: "tf" });
+    const left = await prisma.order.findUnique({ where: { id: near.id } });
+    assert.equal(String(left.group_delivery_fee), "30"); // Zone 1, no longer an extra stop
+  });
+
+  it("cancelling the lead order before any rider takes it calls riders again for the rest of the trip", async () => {
+    const socket = connect(server.url, { auth: { token: w.riders[0].token }, transports: ["websocket"] });
+    const requests = [];
+    socket.on("new_rider_request", (e) => requests.push(e));
+    await new Promise((resolve, reject) => {
+      socket.on("connect", resolve);
+      socket.on("connect_error", reject);
+    });
+    try {
+      await group();
+      await new Promise((r) => setTimeout(r, 250));
+      assert.equal(requests.length, 1);
+      assert.equal(requests[0].group_size, 2);
+      const [near, far] = await prisma.order.findMany({ orderBy: { id: "asc" } });
+      assert.equal(requests[0].order_id, far.id); // the lead carries the most fee
+      await cancelOrder({ orderId: far.id, franchise_id: w.franchise.id, role: "CUSTOMER", franchise_slug: "tf" });
+      await new Promise((r) => setTimeout(r, 400));
+      assert.equal(requests.length, 2, "the remaining order is offered again");
+      assert.equal(requests[1].order_id, near.id);
+    } finally {
+      socket.close();
+    }
   });
 });

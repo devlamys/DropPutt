@@ -630,11 +630,47 @@ For `User`, `franchise_id` can remain nullable for a global `SUPER_ADMIN`. Postg
 A customer with carts from 2 or 3 shops (`MAX_GROUP_SHOPS`) may choose **Deliver together** on the cart screen instead of separate orders.
 
 - **Data.** One checkout creates one ordinary `Order` per shop (own items, commission, vendor settlement, status) in one transaction, all sharing `Order.group_id`. `Order.group_delivery_fee` is that order's share of the trip fee.
-- **Fee.** The trip costs the farthest shop's zone fee plus `Franchise.extra_stop_fee` (default 20, edited by the franchise admin in `PATCH /admin/franchise/settings`, 0 to 200) for every other shop. The order of the farthest shop (ties: the greater distance) carries its zone fee as its `group_delivery_fee`, every other order carries `extra_stop_fee`, so the shares add up to the trip fee and the rider keeps all of it. At rider pickup, `group_delivery_fee` replaces the zone fee in `calculateOrderFinancials`; commission, royalty and the money split are otherwise unchanged and per order. Cancelling one order drops its share: the trip fee follows the orders that remain.
+- **Fee.** The trip costs the farthest shop's zone fee plus `Franchise.extra_stop_fee` (default 20, edited by the franchise admin in `PATCH /admin/franchise/settings`, 0 to 200) for every other shop. The order of the farthest shop (ties: the greater distance) carries its zone fee as its `group_delivery_fee`, every other order carries `extra_stop_fee`, so the shares add up to the trip fee and the rider keeps all of it. At rider pickup, `group_delivery_fee` replaces the zone fee in `calculateOrderFinancials`; commission, royalty and the money split are otherwise unchanged and per order. When an order of the group is cancelled, the shares are worked out again over the orders that remain (`resplitGroupFees`): the one left carries its own zone fee. Orders already picked up keep the fee they were billed. The rain surge is charged once per trip, on the first order of the group picked up.
 - **API.** `POST /marketplace/group-quote { vendor_ids, lat, lng }` returns `together_fee`, `separate_fee` and each shop's share (the cart screen shows the saving). `POST /marketplace/checkout-group { carts: [{ vendor_id, items }], drop_lat, drop_lng, customer_phone, ... }` has the same rules, idempotency and rate limits as `/checkout`; every shop must be open and deliverable, otherwise nothing is created. The response lists each order (`location_token`, items, its fee) plus the trip's `delivery_fee` and `estimated_total`.
-- **Dispatch and accept.** Riders are called once for the trip (the lead order, the one carrying the most fee, with `group_size` and every shop's name). Accepting any order of the group assigns all its still-open orders to that rider in one transaction, ignoring `max_active_orders` for the siblings; the group's rows are locked in id order, so two riders cannot split a trip (the loser gets 409 `ORDER_ALREADY_ACCEPTED`). `/orders/active` lists a group's open orders as one request. The rider then picks up at each shop and delivers each order as usual.
-- **Customer.** After ordering, each order has its own tracking link; `GET /public/drop/:token` returns `together_with` (the other orders' number, shop and status), shown as "Delivered together with ...". The rider app tags the cards "one trip, several shops".
+- **Dispatch and accept.** Riders are called once for the trip (the lead order, the one carrying the most fee, with `group_size` and every shop's name). Accepting any order of the group assigns all its still-open orders to that rider in one transaction, ignoring `max_active_orders` for the siblings; the group's rows are locked in id order, so two riders cannot split a trip (the loser gets 409 `ORDER_ALREADY_ACCEPTED`). `/orders/active` lists a group's open orders as one request, naming every shop (`shop_name` "A + B"), with the total `item_count` and `group_size`. If the lead order is cancelled while the trip is still `RIDER_REQUESTED`, riders are called again for the rest of the trip (`redispatchGroup`). The rider then picks up at each shop and delivers each order as usual.
+- **Customer.** After ordering, each order has its own tracking link; `GET /public/drop/:token` returns `together_with` (the other orders' number, shop and status), shown as "Delivered together with ...". The rider app tags the pickup and delivery cards "one trip, several shops" (the pickup card also names the other shops), shows "Delivery fee for this order" instead of the zone choice, and the delivery cards say how much the customer pays for the whole trip.
 - **Not built.** Route ordering across the shops, WhatsApp group orders, merging a group into one tracking page, and combining Buy Anything with shop orders.
+
+### Double batching and Deliver together: verification and follow-up plan (2026-11-19)
+
+**Checked in the browser** (customer app, rider app as two seeded riders, local database) and by 386 backend tests (`deliverTogether.test.js`, `sameCustomer.test.js`):
+
+| Check | Result |
+|---|---|
+| Add-on offer to a rider who already has an order, for the same customer (same phone, drops about 100 m apart) | Works. The rider got "Same customer: add-on ... deliver both in one trip"; accepting set `is_batched_addon = true`. |
+| Customer cart with 2 shops: "Deliver together" / "Separate orders", one fee for the trip, saving shown | Works (fee 50 = 30 + 20, saved 10). |
+| Group checkout | Works: two orders with one `group_id`, `group_delivery_fee` 30 and 20. |
+| One rider alert for the trip; accepting one order took both | Works (both `RIDER_ASSIGNED` to the same rider). |
+| Pickup at each shop with the group fee | Works: `delivery_fee` 30 and 20, vendor commission per order. |
+| Rider delivery cards: "one trip, several shops" tag and each order's fee | Works. |
+| Customer tracking: "Delivered together with ..." | Works (needs the backend restarted after deploy). |
+| Mark as Delivered | Not run in the browser (no GPS in the test browser). Delivery is covered by the existing integration tests; the group adds no change to it. |
+
+**Findings from the check, all fixed the same day** (tests added in `deliverTogether.test.js`; 389 backend tests pass):
+
+1. *Rain surge was charged per order.* Now once per trip, on the first order of the group picked up.
+2. *Cancelling an order did not re-share the fee.* Now `resplitGroupFees` runs in the cancel transaction.
+3. *Cancelling the lead lost the alarm.* Now `redispatchGroup` calls riders again for the rest of the trip.
+4. *Pickup card showed the zone fee.* For a group order it shows "Delivery fee for this order" and no zone choice.
+5. *Pickup card had no tag.* It now shows "one trip, several shops" (and the other shops) or "Add-on order".
+6. *Reconnect list showed one shop.* Open requests now name every shop and count all items.
+7. *Cash for the trip.* Delivery cards show "Whole trip from this customer: X for N orders".
+
+Rechecked in the browser: the alert "Burger Barn + Malabar Dum Biryani House, 4 items"; pickup cards with tag, other shop and fee box; surge ₹20 on one order only; "Whole trip from this customer: ₹821.30 for 2 orders".
+
+**Remaining work**
+
+- Route order across the shops (the nearest shop first, then the drop) and one ETA for the trip.
+- One tracking page for the whole trip instead of one link per order.
+- WhatsApp group orders (WhatsApp still orders from one shop).
+- "Same customer" add-on across franchises is not possible by design (a franchise only sees its own orders).
+- A fee discount for same-customer add-ons placed separately (rule to be decided by the franchise).
+- The location sheet's franchise list still depends on a shared OSRM demo server; self-host OSRM before launch (§61).
 
 A marketplace cart is not represented by one product field on `Order`.
 

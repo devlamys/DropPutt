@@ -12,6 +12,7 @@ import { audit } from "../utils/audit.js";
 import { AppError, orderNotFound } from "../utils/response.js";
 import { pushToUsers } from "../utils/push.js";
 import { notifyWhatsappOrder } from "./whatsapp/notify.js";
+import { redispatchGroup, resplitGroupFees } from "./groupService.js";
 
 const BEFORE_PICKUP = ["RIDER_REQUESTED", "RIDER_ASSIGNED"];
 
@@ -56,7 +57,7 @@ export async function cancelOrder({ orderId, franchise_id, role, vendor_id, reas
   if (!allowed) throw new Error(`cancelOrder: unknown role ${role}`);
   const cleanReason = (reason ?? "").trim().slice(0, 200) || DEFAULT_REASON[role];
 
-  const { order, already, rider_user_id, vendor_user_id, was_status } = await prisma.$transaction(
+  const { order, already, rider_user_id, vendor_user_id, was_status, group_was_lead } = await prisma.$transaction(
     async (tx) => {
       // Same lock the accept endpoint takes: a rider accepting at this instant
       // and this cancel are serialised, so exactly one of them wins.
@@ -107,6 +108,8 @@ export async function cancelOrder({ orderId, franchise_id, role, vendor_id, reas
           data: { stock_qty: { increment: line.quantity } },
         });
       }
+      // "Deliver together": the trip fee is shared again among the orders that remain.
+      const group = order.group_id ? await resplitGroupFees(tx, { franchise_id, group_id: order.group_id, cancelled_order_id: orderId }) : null;
       audit("order.cancel", {
         franchise_id,
         order_id: orderId,
@@ -118,6 +121,7 @@ export async function cancelOrder({ orderId, franchise_id, role, vendor_id, reas
         order,
         already: false,
         was_status: current.order_status,
+        group_was_lead: Boolean(group?.wasLead),
         rider_user_id: current.rider?.user_id ?? null,
         vendor_user_id: current.vendor?.user_id ?? null,
       };
@@ -142,6 +146,8 @@ export async function cancelOrder({ orderId, franchise_id, role, vendor_id, reas
     // Riders who were still being offered the order must lose the alarm.
     if (was_status === "RIDER_REQUESTED") {
       emitTo(rooms.franchiseRiders(franchise_id), "order_cancelled", event);
+      // The trip's request was sent for this order: offer the rest of the trip again.
+      if (order.group_id && group_was_lead) void redispatchGroup(prisma, { franchise_id, group_id: order.group_id, franchise_slug });
     }
 
     const data = {

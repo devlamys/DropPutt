@@ -235,6 +235,7 @@ export default function RiderDashboard() {
                 key={order.id}
                 order={order}
                 zones={zones}
+                trip={order.group_id ? orders.filter((o) => o.group_id === order.group_id) : []}
                 onError={(message) => toast(message, "error")}
                 onPickedUp={() => {
                   toast("Pickup saved. Send the Magic Link to the customer.", "success");
@@ -247,6 +248,7 @@ export default function RiderDashboard() {
               <ActiveDeliveryCard
                 key={order.id}
                 order={order}
+                trip={orders.filter((o) => o.group_id && o.group_id === order.group_id && ["PICKED_UP", "LOCATION_SHARED"].includes(o.order_status))}
                 riderPosition={position}
                 tracking={tracking}
                 onDeliver={setDelivering}

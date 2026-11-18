@@ -17,7 +17,10 @@ function whatsappUrl(order) {
   return `https://wa.me/91${digits}?text=${encodeURIComponent(text)}`;
 }
 
-export default function ActiveDeliveryCard({ order, riderPosition, tracking, onDeliver, onPaymentChanged }) {
+export default function ActiveDeliveryCard({ order, riderPosition, tracking, trip = [], onDeliver, onPaymentChanged }) {
+  // "Deliver together": the customer pays the whole trip at once, so say how much that is.
+  const tripOrders = order.group_id ? trip.filter((o) => o.group_id === order.group_id) : [];
+  const tripCash = tripOrders.reduce((sum, o) => sum + Math.round(Number(o.amount_to_collect) * 100), 0) / 100;
   const nav = order.navigation;
   const [changing, setChanging] = useState(false);
   return (
@@ -50,6 +53,9 @@ export default function ActiveDeliveryCard({ order, riderPosition, tracking, onD
         </p>
         <p className="text-3xl font-extrabold text-orange-700">{inr(order.amount_to_collect)}</p>
         <p className="text-xs text-slate-600">{PAYMENT_LABELS[order.payment_method]}</p>
+        {tripOrders.length > 1 && tripCash > 0 && (
+          <p className="mt-1 text-xs font-bold text-orange-800">Whole trip from this customer: {inr(tripCash)} for {tripOrders.length} orders</p>
+        )}
         <button type="button" onClick={() => setChanging(true)} className="mt-1 text-xs font-semibold text-orange-700 underline">
           Wrong payment method? Change
         </button>

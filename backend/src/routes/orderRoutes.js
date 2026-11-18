@@ -554,7 +554,11 @@ router.put(
 
       // ── Rain surge: at most once per order ────────────────────────────────
       const surge = money(franchise.rain_surge_fee);
-      const applySurge = surge.gt(0) && !order.rain_surge_applied;
+      // "Deliver together": the surge is for the trip, charged once, on the first order of the group picked up.
+      const surgeInGroup = order.group_id
+        ? (await tx.order.count({ where: { franchise_id, group_id: order.group_id, id: { not: orderId }, rain_surge_applied: true } })) > 0
+        : false;
+      const applySurge = surge.gt(0) && !order.rain_surge_applied && !surgeInGroup;
       // The surge is rider money carried in rider_tip. Folding it in before
       // the split raises rider_tip, rider_earning and grand_total together,
       // and amount_to_collect follows the payment method (so UPI stays 0).
@@ -1398,16 +1402,30 @@ router.get(
             ? navigationView(order, byPhone.get(order.customer_phone))
             : null,
         })),
-        open_requests: open_requests.map((order) => ({
-          order_id: order.id,
-          order_number: order.order_number,
-          order_type: order.order_type,
-          shop_name: order.vendor?.shop_name ?? order.custom_shop_name ?? null,
-          pickup_address: order.pickup_address,
-          drop_address: order.drop_address,
-          zone_id: order.zone_id,
-          item_count: order.items.reduce((sum, item) => sum + item.quantity, 0),
-        })),
+        open_requests: await Promise.all(
+          open_requests.map(async (order) => {
+            const own = order.items.reduce((sum, item) => sum + item.quantity, 0);
+            // A "deliver together" trip is one request: every shop's name and all the items.
+            const trip = order.group_id
+              ? await prisma.order.findMany({
+                  where: { franchise_id, group_id: order.group_id, order_status: "RIDER_REQUESTED" },
+                  select: { vendor: { select: { shop_name: true } }, items: { select: { quantity: true } } },
+                  orderBy: { id: "asc" },
+                })
+              : [];
+            return {
+              order_id: order.id,
+              order_number: order.order_number,
+              order_type: order.order_type,
+              shop_name: trip.length > 1 ? trip.map((t) => t.vendor?.shop_name ?? "Shop").join(" + ") : (order.vendor?.shop_name ?? order.custom_shop_name ?? null),
+              pickup_address: order.pickup_address,
+              drop_address: order.drop_address,
+              zone_id: order.zone_id,
+              item_count: trip.length > 1 ? trip.reduce((n, t) => n + t.items.reduce((m, i) => m + i.quantity, 0), 0) : own,
+              ...(trip.length > 1 ? { group_size: trip.length } : {}),
+            };
+          })
+        ),
       });
     }
 

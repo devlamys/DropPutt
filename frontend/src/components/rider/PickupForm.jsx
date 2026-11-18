@@ -44,7 +44,9 @@ function LookupBadge({ lookup, loading }) {
   );
 }
 
-export default function PickupForm({ order, zones, onPickedUp, onError }) {
+export default function PickupForm({ order, zones, trip = [], onPickedUp, onError }) {
+  const inGroup = Boolean(order.group_id);
+  const others = trip.filter((o) => o.id !== order.id);
   const itemized = order.items.length > 0; // amount comes from the server
   const [photo, setPhoto] = useState(null);
   const [phone, setPhone] = useState(order.customer_phone ?? "");
@@ -144,6 +146,12 @@ export default function PickupForm({ order, zones, onPickedUp, onError }) {
           {order.shop_name ?? "Order"} <span className="text-slate-400">#{order.order_number}</span>
         </h2>
         {order.pickup_address && <p className="text-sm text-slate-500">📍 {order.pickup_address}</p>}
+        {inGroup && (
+          <p className="mt-2 rounded-lg bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-800">
+            🔗 One trip, several shops{others.length > 0 ? `: also collect from ${others.map((o) => o.shop_name ?? "a shop").join(", ")}` : ""}.
+          </p>
+        )}
+        {order.is_batched_addon && !inGroup && <p className="mt-2 rounded-lg bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-800">🔥 Add-on order: deliver it on your current trip.</p>}
         {order.prep_ready_at && (
           <p className="mt-2 inline-block rounded-full bg-amber-100 px-3 py-1 text-sm font-bold text-amber-900">
             🍳 Shop says ready {new Date(order.prep_ready_at).getTime() <= Date.now() ? "now" : `by ${clockTime(order.prep_ready_at)}`}
@@ -238,6 +246,12 @@ export default function PickupForm({ order, zones, onPickedUp, onError }) {
         </div>
       </div>
 
+      {inGroup && order.group_delivery_fee != null ? (
+        <div className="rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-200">
+          <p className="text-sm font-semibold">Delivery fee for this order: <span className="tabular-nums">{inr(order.group_delivery_fee)}</span></p>
+          <p className="mt-0.5 text-xs text-slate-600">One trip for several shops: the farthest shop carries its zone charge, every other shop a small extra-stop fee. It is all yours.</p>
+        </div>
+      ) : (
       <div>
         <p className="mb-1 text-sm font-semibold">Delivery zone</p>
         <div className="flex flex-wrap gap-2">
@@ -269,6 +283,7 @@ export default function PickupForm({ order, zones, onPickedUp, onError }) {
           <p className="mt-1.5 text-xs text-slate-500">The customer&apos;s location is not known yet, so choose the zone yourself.</p>
         )}
       </div>
+      )}
 
       {order.order_type === "CUSTOM_BUY" && (
         <label className="flex items-center gap-2 text-sm">

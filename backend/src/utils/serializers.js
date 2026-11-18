@@ -74,6 +74,8 @@ export function orderView(order) {
     rain_surge_applied: order.rain_surge_applied,
     is_batched_addon: order.is_batched_addon,
     group_id: order.group_id ?? null,
+    // "Deliver together": this order's share of the trip fee (replaces the zone fee at pickup).
+    group_delivery_fee: order.group_delivery_fee == null ? null : moneyStr(order.group_delivery_fee),
     location_token: order.location_token,
     magic_link_sent_at: order.magic_link_sent_at ?? null,
     created_at: order.created_at,

@@ -14,6 +14,7 @@ import { istDayRange } from "../utils/time.js";
 import { buildCart } from "./cartService.js";
 import { requireDelivery, resolveDelivery } from "./deliveryZoneService.js";
 import { dispatchOrder, itemCount, notifyVendorNewOrder } from "./dispatchService.js";
+import { MAX_GROUP_SHOPS, allocateGroupFees } from "./groupService.js";
 
 export const CATEGORY_BY_SHOP = Object.freeze({
   HOTEL: "FOOD",
@@ -195,23 +196,7 @@ export async function placeMarketplaceOrder({ franchise, body, customer_phone, c
 // group_id, and the delivery fee of the trip is split between them by allocateGroupFees.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const MAX_GROUP_SHOPS = 3;
-
-/**
- * The trip costs the farthest shop's zone fee plus `extra_stop_fee` for every other shop.
- * Returns each entry's share: the farthest shop's order carries its zone fee, the others carry
- * the extra stop fee, so the shares add up to the trip fee and the rider keeps all of it.
- * `entries`: [{ zone_fee, km }] in any order; the result is aligned with it.
- */
-export function allocateGroupFees(entries, extra_stop_fee) {
-  let primary = 0;
-  entries.forEach((entry, i) => {
-    const best = entries[primary];
-    const fee = money(entry.zone_fee);
-    if (fee.gt(money(best.zone_fee)) || (fee.eq(money(best.zone_fee)) && Number(entry.km) > Number(best.km))) primary = i;
-  });
-  return entries.map((entry, i) => (i === primary ? money(entry.zone_fee) : money(extra_stop_fee)));
-}
+export { MAX_GROUP_SHOPS, allocateGroupFees };
 
 async function resolveGroupDeliveries(franchise_id, vendors, drop) {
   return Promise.all(
