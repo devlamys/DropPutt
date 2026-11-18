@@ -1,8 +1,9 @@
-import { Camera, Image as ImageIcon, Loader2, MapPin, Mic, Minus, Plus, RotateCcw, ShoppingBasket, Square, Trash2, X } from "lucide-react";
+import { Camera, Image as ImageIcon, Loader2, Mic, Minus, Plus, RotateCcw, ShoppingBasket, Square, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import api, { getErrorMessage, idempotencyHeaders } from "../utils/api.js";
 import { inr } from "../utils/format.js";
 import { compressImage } from "../utils/image.js";
+import LocationPicker from "./shop/LocationPicker.jsx";
 import { readProfile, saveProfile, useStorefront } from "./shop/StorefrontContext.jsx";
 
 const SHOP_CHIPS = [
@@ -28,12 +29,12 @@ const clock = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 const press = "transition-transform active:scale-[0.98]";
 const card = "rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm";
 const field =
-  "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100";
+  "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-flame-500 focus:ring-4 focus:ring-flame-100";
 
 function CardTitle({ n, title, ml, optional }) {
   return (
     <h3 className="mb-3 flex items-center gap-2 text-sm font-extrabold text-slate-900">
-      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white">{n}</span>
+      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-flame-600 text-xs font-bold text-white">{n}</span>
       <span>
         {title} {ml && <span className="font-semibold text-slate-500">• {ml}</span>}
       </span>
@@ -106,7 +107,7 @@ function useVoiceNote(onChange) {
  * list or prescription, voice note), where to deliver, and a rider call.
  * Submits to POST /api/v1/marketplace/orders with order_type CUSTOM_BUY.
  */
-export default function CustomBuyModal({ zones, zoneId, onZone, onClose, onPlaced }) {
+export default function CustomBuyModal({ onClose, onPlaced }) {
   const { toast } = useStorefront();
   const profile = readProfile();
   const nextId = useRef(2);
@@ -119,10 +120,11 @@ export default function CustomBuyModal({ zones, zoneId, onZone, onClose, onPlace
   const [phone, setPhone] = useState(profile.phone || "");
   const [name, setName] = useState(profile.name || "");
   const [address, setAddress] = useState(profile.address || "");
+  const [pin, setPin] = useState(profile.lat != null && profile.lng != null ? { lat: profile.lat, lng: profile.lng } : null);
+  const [quote, setQuote] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [touched, setTouched] = useState(false);
-  const [zonesTimedOut, setZonesTimedOut] = useState(false);
   // One key per attempt: a retry after a flaky network replays the same order.
   const attempt = useRef(null);
   const cameraInput = useRef(null);
@@ -156,11 +158,6 @@ export default function CustomBuyModal({ zones, zoneId, onZone, onClose, onPlace
     };
   }, [busy, onClose]);
 
-  useEffect(() => {
-    if (zones.length) return undefined;
-    const t = setTimeout(() => setZonesTimedOut(true), 6000);
-    return () => clearTimeout(t);
-  }, [zones.length]);
 
   const setRow = (id, patch) => setItems((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   // Functional, so two quick taps on + or - both count.
@@ -180,11 +177,12 @@ export default function CustomBuyModal({ zones, zoneId, onZone, onClose, onPlace
   };
 
   const named = items.filter((r) => r.name.trim());
-  const zone = zones.find((z) => String(z.id) === String(zoneId));
 
   const problems = [];
   if (!named.length && !photo && !voice) problems.push("Add an item, a photo of your list, or a voice note");
-  if (!zone) problems.push("Choose your delivery area");
+  if (!pin) problems.push("Share your location or place the pin on the map");
+  else if (quote && !quote.deliverable) problems.push(quote.message || "We cannot deliver to this location");
+  else if (!quote) problems.push("Wait for the delivery charge to appear");
   if (address.trim().length < 3) problems.push("Add your address or a landmark");
   if (!validPhone(phone)) problems.push("Enter your 10-digit mobile number");
   const blocked = problems.length > 0;
@@ -200,7 +198,8 @@ export default function CustomBuyModal({ zones, zoneId, onZone, onClose, onPlace
 
     const form = new FormData();
     form.set("order_type", "CUSTOM_BUY");
-    form.set("zone_id", String(zoneId));
+    form.set("drop_lat", String(pin.lat));
+    form.set("drop_lng", String(pin.lng));
     form.set("customer_phone", phone);
     if (name.trim()) form.set("customer_name", name.trim());
     form.set("drop_address", address.trim());
@@ -218,7 +217,7 @@ export default function CustomBuyModal({ zones, zoneId, onZone, onClose, onPlace
         timeout: 60_000,
         headers: { "Content-Type": "multipart/form-data", ...attempt.current },
       });
-      saveProfile({ phone, name: name.trim(), address: address.trim(), zone_id: zoneId });
+      saveProfile({ phone, name: name.trim(), address: address.trim(), lat: pin.lat, lng: pin.lng });
       onPlaced({ ...data.data, kind: "CUSTOM_BUY" });
     } catch (err) {
       const message = getErrorMessage(err);
@@ -264,7 +263,7 @@ export default function CustomBuyModal({ zones, zoneId, onZone, onClose, onPlace
                     type="button"
                     aria-pressed={on}
                     onClick={() => setShop(on ? "" : chip.label)}
-                    className={`flex h-12 items-center gap-1.5 rounded-full border-2 px-4 text-sm font-bold ${press} ${on ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}
+                    className={`flex h-12 items-center gap-1.5 rounded-full border-2 px-4 text-sm font-bold ${press} ${on ? "border-flame-600 bg-flame-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}
                   >
                     <span aria-hidden="true">{chip.emoji}</span>
                     {chip.label}
@@ -314,7 +313,7 @@ export default function CustomBuyModal({ zones, zoneId, onZone, onClose, onPlace
               type="button"
               onClick={addRow}
               disabled={items.length >= MAX_ITEMS}
-              className={`mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-emerald-600 text-sm font-bold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 ${press}`}
+              className={`mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-flame-600 text-sm font-bold text-flame-700 hover:bg-flame-50 disabled:opacity-50 ${press}`}
             >
               <Plus className="h-4 w-4" strokeWidth={3} /> Add Item
             </button>
@@ -340,7 +339,7 @@ export default function CustomBuyModal({ zones, zoneId, onZone, onClose, onPlace
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2">
-                <button type="button" onClick={() => cameraInput.current?.click()} className={`flex h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-sm font-bold text-white hover:bg-emerald-700 ${press}`}>
+                <button type="button" onClick={() => cameraInput.current?.click()} className={`flex h-14 items-center justify-center gap-2 rounded-2xl bg-flame-600 text-sm font-bold text-white hover:bg-flame-700 ${press}`}>
                   <Camera className="h-5 w-5" /> Take photo
                 </button>
                 <button type="button" onClick={() => galleryInput.current?.click()} className={`flex h-14 items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 bg-white text-sm font-bold text-slate-700 ${press}`}>
@@ -394,30 +393,15 @@ export default function CustomBuyModal({ zones, zoneId, onZone, onClose, onPlace
           {/* 5 — delivery details */}
           <section className={card}>
             <CardTitle n="5" title="Deliver to" ml="എത്തിക്കേണ്ട സ്ഥലം" />
-            <div className="mb-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Delivery area">
-              {zones.length === 0 &&
-                !zonesTimedOut &&
-                Array.from({ length: 3 }, (_, i) => <span key={i} className="h-12 w-40 animate-pulse rounded-full bg-slate-200" aria-hidden="true" />)}
-              {zones.length === 0 && zonesTimedOut && <p className="text-sm text-slate-500">No delivery areas are set up yet. Please try again later.</p>}
-              {zones.map((z) => {
-                const active = String(z.id) === String(zoneId);
-                return (
-                  <button
-                    key={z.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    aria-label={`${z.zone_name}, delivery ${inr(z.delivery_fee)}`}
-                    onClick={() => onZone(z.id)}
-                    className={`flex h-12 items-center gap-1.5 rounded-full border-2 px-4 text-sm font-bold ${press} ${active ? "border-emerald-600 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-white text-slate-700"}`}
-                  >
-                    <MapPin className="h-4 w-4 shrink-0" />
-                    {z.zone_name.split("—").pop().trim()}
-                    <span className="tabular-nums text-slate-500">· {inr(z.delivery_fee)}</span>
-                  </button>
-                );
-              })}
-            </div>
+            <LocationPicker
+              shop={null}
+              pin={pin}
+              onChange={(next, nextQuote) => {
+                setPin(next);
+                setQuote(nextQuote);
+              }}
+            />
+            <div className="mt-3" />
             <textarea className={field} rows={2} placeholder="House name, nearest landmark" aria-label="Delivery address" value={address} onChange={(e) => setAddress(e.target.value)} maxLength={300} />
             <div className="mt-2.5 grid grid-cols-5 gap-2.5">
               <input className={`${field} col-span-3`} inputMode="numeric" autoComplete="tel" aria-label="Mobile number" placeholder="10-digit mobile" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={14} />
@@ -434,20 +418,20 @@ export default function CustomBuyModal({ zones, zoneId, onZone, onClose, onPlace
             <p className="mb-2 text-center text-sm font-semibold text-amber-800">{problems[0]}</p>
           ) : (
             <p className="mb-2 text-center text-xs text-slate-500">
-              Delivery <b className="tabular-nums text-slate-800">{zone ? inr(zone.delivery_fee) : "from ₹30"}</b> + the shop bill. The rider confirms the amount before buying.
+              Delivery <b className="tabular-nums text-slate-800">{quote?.deliverable ? inr(quote.delivery_fee) : "from ₹30"}</b> + the shop bill. The rider confirms the amount before buying.
             </p>
           )}
           <button
             type="submit"
             disabled={busy}
             aria-disabled={blocked}
-            className={`flex h-14 w-full flex-col items-center justify-center rounded-2xl text-white ${press} ${blocked ? "bg-slate-400" : "bg-emerald-600 shadow-lg shadow-emerald-900/25 hover:bg-emerald-700"}`}
+            className={`flex h-14 w-full flex-col items-center justify-center rounded-2xl text-white ${press} ${blocked ? "bg-slate-400" : "bg-flame-600 shadow-lg shadow-flame-900/25 hover:bg-flame-700"}`}
           >
             <span className="flex items-center gap-2 text-base font-extrabold leading-tight">
               {busy && <Loader2 className="h-5 w-5 animate-spin" />}
               {busy ? "Booking your rider…" : "Book Rider Now (COD)"}
             </span>
-            {!busy && <span className="text-[11px] font-semibold leading-tight text-emerald-100">റൈഡറെ ഇപ്പോൾ വിളിക്കാം</span>}
+            {!busy && <span className="text-[11px] font-semibold leading-tight text-flame-100">റൈഡറെ ഇപ്പോൾ വിളിക്കാം</span>}
           </button>
         </footer>
       </form>

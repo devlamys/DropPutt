@@ -217,8 +217,8 @@ export default function StorefrontHome() {
           <div className="min-w-0 flex-1">
             <p className="truncate text-[11px] font-semibold text-slate-500">Delivering in • നമ്മുടെ നാട്</p>
             <h1 className="truncate text-lg font-extrabold leading-tight text-slate-900">{town}</h1>
-            <button type="button" onClick={openZones} aria-label="Delivery charges" className="flex items-center gap-1 text-xs font-semibold text-flame-700">
-              Delivery charges <ChevronDown className="h-3.5 w-3.5" strokeWidth={3} />
+            <button type="button" onClick={openZones} aria-label="Set delivery location and see charges" className="flex items-center gap-1 text-xs font-semibold text-flame-700">
+              Set delivery location <ChevronDown className="h-3.5 w-3.5" strokeWidth={3} />
             </button>
           </div>
         </div>

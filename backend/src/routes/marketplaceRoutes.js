@@ -8,7 +8,7 @@ import { idempotency } from "../middleware/idempotency.js";
 import { customRequestUpload } from "../middleware/upload.js";
 import { checkoutIpLimiter, checkoutPhoneLimiter } from "../middleware/rateLimit.js";
 import { placeMarketplaceOrder } from "../services/checkoutService.js";
-import { deliveryMessage, resolveDelivery } from "../services/deliveryZoneService.js";
+import { deliveryMessage, franchiseCentre, requireDelivery, resolveDelivery } from "../services/deliveryZoneService.js";
 import { dispatchOrder } from "../services/dispatchService.js";
 import { emitTo, rooms } from "../socket/socketHandler.js";
 import { CHAYAKADI_LABEL, SNACK_MIN_ORDER_VALUE } from "../utils/constants.js";
@@ -240,7 +240,8 @@ const checkoutSchema = z.object({
     .max(50),
 });
 
-const quoteSchema = z.object({ vendor_id: zId, lat: zLat, lng: zLng });
+// vendor_id is optional: shop-less requests are measured from the town centre.
+const quoteSchema = z.object({ vendor_id: zId.optional(), lat: zLat, lng: zLng });
 
 // POST /api/v1/marketplace/delivery-quote — "if I deliver here, what is the fee?" Public.
 // The storefront map calls this while the customer moves the pin.
@@ -249,11 +250,18 @@ router.post(
   checkoutIpLimiter,
   asyncHandler(async (req, res) => {
     const body = parse(quoteSchema, req.body);
-    const vendor = await prisma.vendor.findFirst({ where: { id: body.vendor_id, franchise_id: req.franchise_id } });
-    if (!vendor) throw fieldError("vendor_id", "shop not found");
+    let from;
+    if (body.vendor_id) {
+      const vendor = await prisma.vendor.findFirst({ where: { id: body.vendor_id, franchise_id: req.franchise_id } });
+      if (!vendor) throw fieldError("vendor_id", "shop not found");
+      from = { lat: vendor.lat, lng: vendor.lng };
+    } else {
+      from = await franchiseCentre(req.franchise_id);
+      if (!from) throw fieldError("vendor_id", "no shops are set up here yet");
+    }
     const result = await resolveDelivery({
       franchise_id: req.franchise_id,
-      from: { lat: vendor.lat, lng: vendor.lng },
+      from,
       to: { lat: body.lat, lng: body.lng },
     });
     ok(res, {
@@ -319,7 +327,11 @@ const itemsField = z.preprocess((value) => {
 const customOrderSchema = z
   .object({
     order_type: z.enum(["CUSTOM_BUY", "PICK_DROP", "MINI_TRUCK"]),
-    zone_id: zId,
+    // The customer's pin (current GPS, a searched place or a dragged pin) decides the zone and fee.
+    // zone_id is only the fallback for an old client that sends no pin.
+    zone_id: zId.optional(),
+    drop_lat: zLat.optional(),
+    drop_lng: zLng.optional(),
     customer_phone: z.union([z.string(), z.number()]),
     customer_name: z.string().trim().min(1).max(100).optional(),
     drop_address: z.string().trim().min(3).max(300),
@@ -331,6 +343,10 @@ const customOrderSchema = z
     details: z.string().trim().max(1500).optional(),
   })
   .superRefine((body, ctx) => {
+    const hasPin = body.drop_lat !== undefined && body.drop_lng !== undefined;
+    if (!hasPin && body.zone_id === undefined) {
+      ctx.addIssue({ code: "custom", path: ["drop_lat"], message: "required: choose your delivery location" });
+    }
     if (body.order_type !== "CUSTOM_BUY") {
       if (!body.pickup_address) {
         ctx.addIssue({ code: "custom", path: ["pickup_address"], message: "required: where should the rider collect it?" });
@@ -385,13 +401,23 @@ router.post(
         if (!franchise.wallet_balance.gt(franchise.min_balance_limit)) {
           throw new AppError(403, "FRANCHISE_WALLET_LOW", "Delivery is temporarily unavailable in this area.");
         }
-        const zone = await tx.zone.findFirst({ where: { id: body.zone_id, franchise_id } });
-        if (!zone) throw fieldError("zone_id", "area not found");
+        const hasPin = body.drop_lat !== undefined && body.drop_lng !== undefined;
+        let zone;
+        if (hasPin) {
+          const from = await franchiseCentre(franchise_id, tx);
+          if (!from) throw fieldError("drop_lat", "no shops are set up here yet");
+          zone = requireDelivery(
+            await resolveDelivery({ franchise_id, from, to: { lat: body.drop_lat, lng: body.drop_lng }, db: tx })
+          ).zone;
+        } else {
+          zone = await tx.zone.findFirst({ where: { id: body.zone_id, franchise_id } });
+          if (!zone) throw fieldError("zone_id", "area not found");
+        }
 
         await tx.customer.upsert({
           where: { franchise_id_phone: { franchise_id, phone: customer_phone } },
-          create: { franchise_id, phone: customer_phone, name: body.customer_name ?? null },
-          update: body.customer_name ? { name: body.customer_name } : {},
+          create: { franchise_id, phone: customer_phone, name: body.customer_name ?? null, ...(hasPin ? { lat: body.drop_lat, lng: body.drop_lng } : {}) },
+          update: { ...(body.customer_name ? { name: body.customer_name } : {}), ...(hasPin ? { lat: body.drop_lat, lng: body.drop_lng } : {}) },
         });
 
         const datePart = istDayRange().date.replaceAll("-", "").slice(2);
@@ -404,6 +430,7 @@ router.post(
             order_category: kind.category,
             order_status: "RIDER_REQUESTED",
             zone_id: zone.id,
+            ...(hasPin ? { zone_source: "AUTO", drop_lat: body.drop_lat, drop_lng: body.drop_lng } : {}),
             customer_phone,
             customer_name: body.customer_name ?? null,
             custom_shop_name: body.order_type === "CUSTOM_BUY" ? (body.shop_name ?? null) : null,

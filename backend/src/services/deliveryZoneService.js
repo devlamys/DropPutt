@@ -44,6 +44,18 @@ export async function resolveDelivery({ franchise_id, from, to, db = prisma }) {
   return { km, method, zone, deliverable: true, reason: null };
 }
 
+/**
+ * Where shop-less requests (Buy Anything, Pick & Drop, Mini Truck) measure the delivery fee from:
+ * the middle of the franchise's shops, i.e. the town centre. The rider can still change the zone at pickup.
+ * Returns { lat, lng }, or null when the franchise has no shop yet.
+ */
+export async function franchiseCentre(franchise_id, db = prisma) {
+  const shops = await db.vendor.findMany({ where: { franchise_id }, select: { lat: true, lng: true } });
+  if (shops.length === 0) return null;
+  const mean = (key) => shops.reduce((sum, shop) => sum + Number(shop[key]), 0) / shops.length;
+  return { lat: mean("lat"), lng: mean("lng") };
+}
+
 const MESSAGES = {
   INVALID_LOCATION: "Please choose a valid delivery location",
   NO_ZONES: "Delivery areas are not set up yet",

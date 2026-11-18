@@ -1,7 +1,8 @@
-import { Bike, Loader2, MapPin, Truck, X } from "lucide-react";
+import { Bike, Loader2, Truck, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import api, { getErrorMessage, idempotencyHeaders } from "../../utils/api.js";
 import { inr } from "../../utils/format.js";
+import LocationPicker from "./LocationPicker.jsx";
 import { readProfile, saveProfile } from "./StorefrontContext.jsx";
 
 const digits = (value) => value.replace(/\D/g, "");
@@ -34,7 +35,7 @@ const KINDS = {
 };
 
 /** Pick & Drop / Mini Truck request sheet. ("Buy Anything" has its own modal.) */
-export default function CustomOrderSheet({ kind: initialKind, zones, zoneId, onZone, onClose, onPlaced }) {
+export default function CustomOrderSheet({ kind: initialKind, onClose, onPlaced }) {
   const profile = readProfile();
   const [kind, setKind] = useState(initialKind);
   const [details, setDetails] = useState("");
@@ -42,6 +43,8 @@ export default function CustomOrderSheet({ kind: initialKind, zones, zoneId, onZ
   const [address, setAddress] = useState(profile.address || "");
   const [phone, setPhone] = useState(profile.phone || "");
   const [name, setName] = useState(profile.name || "");
+  const [pin, setPin] = useState(profile.lat != null && profile.lng != null ? { lat: profile.lat, lng: profile.lng } : null);
+  const [quote, setQuote] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [touched, setTouched] = useState(false);
@@ -61,11 +64,12 @@ export default function CustomOrderSheet({ kind: initialKind, zones, zoneId, onZ
     };
   }, [busy, onClose]);
 
-  const zone = zones.find((z) => String(z.id) === String(zoneId));
   const problems = [];
   if (details.trim().length < 3) problems.push("Tell us what needs to be moved");
   if (cfg.needsPickup && pickup.trim().length < 3) problems.push("Where should the rider collect it?");
-  if (!zone) problems.push("Choose your delivery area");
+  if (!pin) problems.push("Share your location or place the pin on the map");
+  else if (quote && !quote.deliverable) problems.push(quote.message || "We cannot deliver to this location");
+  else if (!quote) problems.push("Wait for the delivery charge to appear");
   if (address.trim().length < 3) problems.push("Add your address or a landmark");
   if (!validPhone(phone)) problems.push("Enter your 10-digit mobile number");
   const blocked = problems.length > 0;
@@ -82,7 +86,8 @@ export default function CustomOrderSheet({ kind: initialKind, zones, zoneId, onZ
         "/marketplace/orders",
         {
           order_type: kind,
-          zone_id: Number(zoneId),
+          drop_lat: pin.lat,
+          drop_lng: pin.lng,
           customer_phone: phone,
           customer_name: name.trim() || undefined,
           drop_address: address.trim(),
@@ -91,7 +96,7 @@ export default function CustomOrderSheet({ kind: initialKind, zones, zoneId, onZ
         },
         { skipAuth: true, headers: attempt.current }
       );
-      saveProfile({ phone, name: name.trim(), address: address.trim(), zone_id: zoneId });
+      saveProfile({ phone, name: name.trim(), address: address.trim(), lat: pin.lat, lng: pin.lng });
       onPlaced({ ...data.data, kind });
     } catch (err) {
       setError(getErrorMessage(err));
@@ -101,7 +106,7 @@ export default function CustomOrderSheet({ kind: initialKind, zones, zoneId, onZ
   };
 
   const field =
-    "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100";
+    "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-flame-500 focus:ring-4 focus:ring-flame-100";
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 motion-safe:animate-fade-in" role="dialog" aria-modal="true" aria-label={cfg.title}>
@@ -132,7 +137,7 @@ export default function CustomOrderSheet({ kind: initialKind, zones, zoneId, onZ
                 role="radio"
                 aria-checked={kind === k}
                 onClick={() => setKind(k)}
-                className={`h-12 rounded-xl text-sm font-bold transition-transform active:scale-[0.98] ${kind === k ? "bg-emerald-600 text-white shadow" : "text-slate-600"}`}
+                className={`h-12 rounded-xl text-sm font-bold transition-transform active:scale-[0.98] ${kind === k ? "bg-flame-600 text-white shadow" : "text-slate-600"}`}
               >
                 {KINDS[k].title}
               </button>
@@ -152,28 +157,15 @@ export default function CustomOrderSheet({ kind: initialKind, zones, zoneId, onZ
 
           <div>
             <span className="mb-1.5 block text-sm font-semibold text-slate-700">Deliver to • എത്തിക്കേണ്ട സ്ഥലം</span>
-            <div className="mb-2.5 flex flex-wrap gap-2" role="radiogroup" aria-label="Delivery area">
-              {zones.map((z) => {
-                const active = String(z.id) === String(zoneId);
-                return (
-                  <button
-                    key={z.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    aria-label={`${z.zone_name}, delivery ${inr(z.delivery_fee)}`}
-                    onClick={() => onZone(z.id)}
-                    className={`flex h-12 items-center gap-1.5 rounded-full border-2 px-4 text-sm font-semibold transition-transform active:scale-[0.98] ${
-                      active ? "border-emerald-600 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-white text-slate-700"
-                    }`}
-                  >
-                    <MapPin className="h-4 w-4 shrink-0" />
-                    {z.zone_name.split("—").pop().trim()}
-                    <span className="tabular-nums text-slate-500">· {inr(z.delivery_fee)}</span>
-                  </button>
-                );
-              })}
-            </div>
+            <LocationPicker
+              shop={null}
+              pin={pin}
+              onChange={(next, nextQuote) => {
+                setPin(next);
+                setQuote(nextQuote);
+              }}
+            />
+            <div className="mt-2.5" />
             <textarea className={field} rows={2} placeholder="House name, nearest landmark" value={address} onChange={(e) => setAddress(e.target.value)} maxLength={300} />
           </div>
 
@@ -183,8 +175,7 @@ export default function CustomOrderSheet({ kind: initialKind, zones, zoneId, onZ
           </div>
 
           <p className="rounded-2xl bg-amber-50 px-4 py-3 text-xs font-medium text-amber-900 ring-1 ring-amber-200">
-            Delivery from <b className="tabular-nums">{zone ? inr(zone.delivery_fee) : "₹30"}</b>
-. The rider confirms the final amount with you before pickup. Pay cash on delivery.
+            Delivery <b className="tabular-nums">{quote?.deliverable ? inr(quote.delivery_fee) : "from ₹30"}</b>. The rider confirms the final amount with you before pickup. Pay cash on delivery.
           </p>
           {error && (
             <p role="alert" className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700 ring-1 ring-red-200">{error}</p>
@@ -197,7 +188,7 @@ export default function CustomOrderSheet({ kind: initialKind, zones, zoneId, onZ
             type="submit"
             disabled={busy}
             aria-disabled={blocked}
-            className={`flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-base font-bold text-white transition-transform active:scale-[0.98] ${blocked ? "bg-slate-400" : "bg-emerald-600 shadow-lg shadow-emerald-900/20 hover:bg-emerald-700"}`}
+            className={`flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-base font-bold text-white transition-transform active:scale-[0.98] ${blocked ? "bg-slate-400" : "bg-flame-600 shadow-lg shadow-flame-900/20 hover:bg-flame-700"}`}
           >
             {busy && <Loader2 className="h-5 w-5 animate-spin" />}
             {busy ? "Sending request…" : "Request a rider • റൈഡറെ വിളിക്കാം"}

@@ -220,12 +220,6 @@ export default function Storefront() {
 
         {customKind === "CUSTOM_BUY" && (
           <CustomBuyModal
-            zones={zones}
-            zoneId={zoneId}
-            onZone={(id) => {
-              setZoneId(id);
-              saveProfile({ zone_id: id });
-            }}
             onClose={() => setCustomKind(null)}
             onPlaced={onPlaced}
           />
@@ -233,12 +227,6 @@ export default function Storefront() {
         {customKind && customKind !== "CUSTOM_BUY" && (
           <CustomOrderSheet
             kind={customKind}
-            zones={zones}
-            zoneId={zoneId}
-            onZone={(id) => {
-              setZoneId(id);
-              saveProfile({ zone_id: id });
-            }}
             onClose={() => setCustomKind(null)}
             onPlaced={onPlaced}
           />

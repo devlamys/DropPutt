@@ -242,6 +242,35 @@ describe("custom orders: Buy Anything, Pick & Drop, Mini Truck", () => {
     assert.equal(order.item_total.toFixed(2), "0.00");
   });
 
+  it("the customer's pin decides the zone and fee, measured from the town centre", async () => {
+    const res = await customOrder({ order_type: "CUSTOM_BUY", details: "Medicine", zone_id: undefined, ...pinAt(3) });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    assert.equal(res.body.data.delivery_fee, "40.00");
+    const order = await prisma.order.findFirst();
+    assert.equal(order.zone_id, w.zones[1].id);
+    assert.equal(order.zone_source, "AUTO");
+    assert.equal(Number(order.drop_lat), pinAt(3).drop_lat);
+    const customer = await prisma.customer.findFirst({ where: { phone: order.customer_phone } });
+    assert.equal(Number(customer.lat), pinAt(3).drop_lat);
+  });
+
+  it("a pin outside the delivery area is refused, and a request with no location is rejected", async () => {
+    const far = await customOrder({ order_type: "CUSTOM_BUY", details: "Medicine", zone_id: undefined, ...pinAt(9) });
+    assert.equal(far.status, 422);
+    assert.equal(far.body.error.code, "OUTSIDE_DELIVERY_AREA");
+    const none = await customOrder({ order_type: "CUSTOM_BUY", details: "Medicine", zone_id: undefined });
+    assert.equal(none.status, 422);
+    assert.match(JSON.stringify(none.body.error.details), /drop_lat/);
+  });
+
+  it("delivery-quote works without a shop (town centre)", async () => {
+    const pin = pinAt(7);
+    const res = await api("POST", "/marketplace/delivery-quote", { body: { lat: pin.drop_lat, lng: pin.drop_lng } });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.data.deliverable, true);
+    assert.equal(res.body.data.delivery_fee, "50.00");
+  });
+
   it("Pick & Drop needs a collection address", async () => {
     const missing = await customOrder({ order_type: "PICK_DROP", details: "Parcel for my brother" });
     assert.equal(missing.status, 422);

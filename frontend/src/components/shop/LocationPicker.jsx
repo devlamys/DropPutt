@@ -64,12 +64,12 @@ export default function LocationPicker({ shop, pin, onChange }) {
 
   // Ask the server what delivery here costs, shortly after the pin stops moving.
   useEffect(() => {
-    if (!pin || !shop) return undefined;
+    if (!pin) return undefined;
     const ticket = ++latest.current;
     setQuoting(true);
     const timer = setTimeout(async () => {
       try {
-        const { data } = await api.post("/marketplace/delivery-quote", { vendor_id: shop.id, lat: pin.lat, lng: pin.lng }, publicApi);
+        const { data } = await api.post("/marketplace/delivery-quote", { ...(shop ? { vendor_id: shop.id } : {}), lat: pin.lat, lng: pin.lng }, publicApi);
         if (ticket !== latest.current) return;
         setQuote(data.data);
         onChange(pin, data.data);
@@ -128,9 +128,9 @@ export default function LocationPicker({ shop, pin, onChange }) {
   return (
     <div className="space-y-2">
       <div className="flex gap-2">
-        <button type="button" onClick={useMyLocation} disabled={locating} className="flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-emerald-600 px-4 text-sm font-bold text-white disabled:opacity-60">
+        <button type="button" onClick={useMyLocation} disabled={locating} className="flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-flame-600 px-4 text-sm font-bold text-white disabled:opacity-60">
           {locating ? <Loader2 className="h-4 w-4 animate-spin" /> : <LocateFixed className="h-4 w-4" />}
-          Use my current location
+          Share my current location
         </button>
       </div>
 
@@ -181,13 +181,13 @@ export default function LocationPicker({ shop, pin, onChange }) {
       </p>
 
       {pin && (
-        <p aria-live="polite" className={`rounded-xl px-3 py-2 text-sm font-semibold ${out ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-900"}`}>
+        <p aria-live="polite" className={`rounded-xl px-3 py-2 text-sm font-semibold ${out ? "bg-red-50 text-red-700" : "bg-flame-50 text-flame-900"}`}>
           {quoting && !quote
             ? "Checking the delivery charge…"
             : out
               ? quote.message
               : quote
-                ? `${quote.km} km from ${shop?.shop_name ?? "the shop"} · Delivery ${inr(quote.delivery_fee)}`
+                ? `${quote.km} km${shop ? ` from ${shop.shop_name}` : ""} · Delivery ${inr(quote.delivery_fee)}`
                 : ""}
         </p>
       )}

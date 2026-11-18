@@ -1,16 +1,53 @@
 import { MapPin } from "lucide-react";
+import { useState } from "react";
 import { inr } from "../../utils/format.js";
 import Modal from "../Modal.jsx";
+import LocationPicker from "./LocationPicker.jsx";
+import { readProfile, saveProfile } from "./StorefrontContext.jsx";
 
 /**
- * Delivery charges by distance from the shop. Information only: at checkout the
- * customer shares a location and the charge is worked out from it.
+ * "Where should we deliver?" Use the current location, search a place or type an
+ * address, and drag the pin to the exact house. The place is remembered on this
+ * phone and pre-fills every order form; the charge is worked out from it. The
+ * distance bands are listed underneath for anyone who only wants the prices.
  */
 export default function ZoneSheet({ zones, onClose }) {
+  const profile = readProfile();
+  const [pin, setPin] = useState(profile.lat != null && profile.lng != null ? { lat: profile.lat, lng: profile.lng } : null);
+  const [address, setAddress] = useState(profile.address || "");
   let from = 0;
+
+  const done = () => {
+    saveProfile({ address: address.trim(), ...(pin ? { lat: pin.lat, lng: pin.lng } : {}) });
+    onClose();
+  };
+
   return (
-    <Modal title="Delivery charges" onClose={onClose}>
-      <p className="-mt-2 mb-3 text-sm text-slate-500">The charge depends on how far your home is from the shop. You will see it as soon as you choose your location.</p>
+    <Modal title="Delivery location & charges" onClose={done}>
+      <p className="-mt-2 mb-3 text-sm text-slate-500">Share where you are, or search and drag the pin to your house. We remember it for your next order.</p>
+      <LocationPicker
+        shop={null}
+        pin={pin}
+        onChange={(next) => {
+          setPin(next);
+          saveProfile({ lat: next.lat, lng: next.lng });
+        }}
+      />
+      <label className="mt-3 block text-sm font-semibold text-slate-700" htmlFor="home-address">Address • വിലാസം</label>
+      <textarea
+        id="home-address"
+        rows={2}
+        maxLength={300}
+        value={address}
+        onChange={(e) => setAddress(e.target.value)}
+        placeholder="House name, nearest landmark"
+        className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base outline-none placeholder:text-slate-400 focus:border-flame-500 focus:ring-4 focus:ring-flame-100"
+      />
+      <button type="button" onClick={done} className="mt-3 h-12 w-full rounded-2xl bg-flame-600 text-base font-bold text-white active:scale-[0.98]">
+        Done
+      </button>
+
+      <h3 className="mb-2 mt-5 text-sm font-bold text-slate-700">Charges by distance</h3>
       <ul className="space-y-2">
         {zones.map((zone) => {
           const upTo = Number(zone.max_km);
