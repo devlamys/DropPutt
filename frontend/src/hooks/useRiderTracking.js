@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { startBackgroundGps } from "../native/backgroundGps.js";
+import { isNative } from "../native/platform.js";
 import api from "../utils/api.js";
 
 const TRACKED = ["PICKED_UP", "LOCATION_SHARED"];
@@ -42,7 +44,8 @@ export function useRiderTracking({ socket, orders }) {
       setPosition(null);
       return undefined;
     }
-    if (!("geolocation" in navigator)) {
+    const native = isNative();
+    if (!native && !("geolocation" in navigator)) {
       setError("This device has no GPS.");
       return undefined;
     }
@@ -58,25 +61,37 @@ export function useRiderTracking({ socket, orders }) {
         /* not supported or denied: tracking still works while the app is open */
       }
     };
-    requestWakeLock();
+    if (!native) requestWakeLock(); // the app keeps itself running with a foreground service
     const onVisible = () => {
       if (document.visibilityState === "visible") requestWakeLock();
     };
     document.addEventListener("visibilitychange", onVisible);
 
-    const watchId = navigator.geolocation.watchPosition(
-      ({ coords }) => {
-        const fix = { lat: coords.latitude, lng: coords.longitude, accuracy: coords.accuracy };
-        latest.current = fix;
-        setPosition(fix);
-        setError("");
-      },
-      (err) =>
-        setError(
-          err.code === 1 ? "Location permission denied. Enable GPS for live tracking." : "Waiting for GPS…"
-        ),
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
-    );
+    const gotFix = (fix) => {
+      latest.current = fix;
+      setPosition(fix);
+      setError("");
+      // In the app the screen may be off and timers slow down: send from the fix itself too.
+      if (native && Date.now() - lastTick >= EMIT_EVERY_MS - 500) void tickNow();
+    };
+    let lastTick = 0;
+    let tickNow = () => {};
+    let stopNative = null;
+    let watchId = null;
+    if (native) {
+      startBackgroundGps(gotFix, setError)
+        .then((stop) => (cancelled ? stop() : (stopNative = stop)))
+        .catch(() => setError("Could not start location. Allow location 'all the time' for the app."));
+    } else {
+      watchId = navigator.geolocation.watchPosition(
+        ({ coords }) => gotFix({ lat: coords.latitude, lng: coords.longitude, accuracy: coords.accuracy }),
+        (err) =>
+          setError(
+            err.code === 1 ? "Location permission denied. Enable GPS for live tracking." : "Waiting for GPS…"
+          ),
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+      );
+    }
 
     const enqueue = (point) => {
       queue.current.push(point);
@@ -118,6 +133,7 @@ export function useRiderTracking({ socket, orders }) {
     };
 
     const tick = async () => {
+      lastTick = Date.now();
       const fix = latest.current;
       const io = socketRef.current;
       if (fix) {
@@ -149,12 +165,14 @@ export function useRiderTracking({ socket, orders }) {
       }
       setQueued(queue.current.length);
     };
+    tickNow = tick;
     const timer = setInterval(tick, EMIT_EVERY_MS);
 
     return () => {
       cancelled = true;
       clearInterval(timer);
-      navigator.geolocation.clearWatch(watchId);
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      stopNative?.();
       document.removeEventListener("visibilitychange", onVisible);
       wakeLock?.release?.().catch(() => {});
     };

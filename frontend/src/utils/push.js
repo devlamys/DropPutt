@@ -5,6 +5,8 @@
 // `enablePush()` asks for permission, so call it from a tap. After permission
 // is granted, `refreshPush()` can run silently on every launch.
 
+import { isNative } from "../native/platform.js";
+import { nativeEnable, nativePushState, nativeRefresh } from "../native/nativePush.js";
 import api from "./api.js";
 
 const env = import.meta.env;
@@ -19,20 +21,23 @@ const firebaseConfig = {
 const VAPID_KEY = env.VITE_FIREBASE_VAPID_KEY;
 const TOKEN_KEY = "dropputt.fcm_token";
 
-export const pushConfigured = Boolean(
+// The Android apps get Firebase from google-services.json, not from the web keys below.
+export const pushConfigured = isNative() || Boolean(
   firebaseConfig.apiKey && firebaseConfig.messagingSenderId && firebaseConfig.appId && VAPID_KEY
 );
 
 export const pushSupported = () =>
-  typeof window !== "undefined" &&
+  isNative() ||
+  (typeof window !== "undefined" &&
   "Notification" in window &&
   "serviceWorker" in navigator &&
-  "PushManager" in window;
+  "PushManager" in window);
 
 /** "unsupported" | "unconfigured" | "denied" | "default" | "granted" */
 export function pushState() {
   if (!pushSupported()) return "unsupported";
   if (!pushConfigured) return "unconfigured";
+  if (isNative()) return nativePushState(); // updated by refreshPush / enablePush
   return Notification.permission;
 }
 
@@ -79,6 +84,14 @@ async function fetchAndRegisterToken() {
 
 /** Asks permission (needs a tap) and registers this device. Returns pushState(). */
 export async function enablePush() {
+  if (isNative()) {
+    try {
+      await nativeEnable();
+    } catch (error) {
+      console.warn("[push] could not enable push:", error?.message || error);
+    }
+    return pushState();
+  }
   const state = pushState();
   if (state === "unsupported" || state === "unconfigured" || state === "denied") return state;
   try {
@@ -95,6 +108,14 @@ export async function enablePush() {
 
 /** Silent re-registration on app launch (the token can change). No prompt. */
 export async function refreshPush() {
+  if (isNative()) {
+    try {
+      await nativeRefresh();
+    } catch (error) {
+      console.warn("[push] refresh failed:", error?.message || error);
+    }
+    return;
+  }
   if (pushState() !== "granted") return;
   try {
     await fetchAndRegisterToken();

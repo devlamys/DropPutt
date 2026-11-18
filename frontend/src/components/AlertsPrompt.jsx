@@ -18,7 +18,9 @@ export default function AlertsPrompt() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    void refreshPush(); // keeps this phone's push token current once allowed
+    // Keeps this phone's push token current once allowed, then shows the real permission
+    // (the Android app can only read it asynchronously).
+    refreshPush().finally(() => setState(pushState()));
   }, []);
 
   const denied = state === "denied";

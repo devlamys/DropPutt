@@ -1,0 +1,9 @@
+{
+  "appId": "in.techkerala.dropputt.vendor",
+  "appName": "DropPutt Vendor",
+  "webDir": "../../frontend/dist-vendor",
+  "server": { "androidScheme": "https" },
+  "plugins": {
+    "PushNotifications": { "presentationOptions": ["badge", "sound", "alert"] }
+  }
+}

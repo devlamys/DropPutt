@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DropPutt Vendor</string>
+    <string name="title_activity_main">DropPutt Vendor</string>
+    <string name="package_name">in.techkerala.dropputt.vendor</string>
+    <string name="custom_url_scheme">in.techkerala.dropputt.vendor</string>
+</resources>

@@ -3535,3 +3535,12 @@ The frontend is one code base built as four apps (`frontend/src/appMode.js`, `vi
 * **Login gate (server side):** `POST /auth/login` accepts `app` = `vendor | rider | admin`. After the PIN is verified, a role that does not belong to that app gets `403 WRONG_APP` ("This is the Rider app. Your account is for the Vendor app."); a wrong PIN is still `401`, so nothing about an account type leaks. Without `app` (plain web login) every role signs in as before; any other value is `422`. The apps always send it.
 * **Staying signed in:** refresh tokens issued to the vendor and rider apps last 180 days (`APP_REFRESH_TOKEN_EXPIRES_DAYS`), admin and the plain web login 30; each use rotates the token and keeps the app and its lifetime (`refresh_tokens.app`). Only the user's own sign-out ends the session.
 * Next (not built yet): wrap each build in a native shell (Capacitor) with native push, background location for the rider, secure token storage; only the customer app goes to the Play Store.
+
+## 65.1 Android apps (`mobile/`)
+
+The customer, vendor and rider builds are wrapped as Android apps with Capacitor (`mobile/<app>/android`, see `mobile/README.md`). Package ids `in.techkerala.dropputt`, `.vendor`, `.rider`; only the customer app is for the Play Store.
+
+* **Push:** native FCM (`@capacitor/push-notifications`); the device registers at `POST /device/register` with `platform: "android"`; channels `order_alerts` and `order_updates` match the server. Web push (service worker) is used only in the browser.
+* **Rider location:** while a delivery is in progress the rider app uses a foreground-service location plugin so GPS keeps flowing with the screen off; the browser version keeps its wake lock.
+* The apps call the server at `VITE_API_ORIGIN`; the server must allow the origin `https://localhost` (`CORS_ORIGINS`).
+* Not built yet: secure token storage, per-app icons, iOS. No signed APK was produced in this repository's CI or on the development machine (no JDK/Android SDK there).

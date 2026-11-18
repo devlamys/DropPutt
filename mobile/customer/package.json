@@ -1,0 +1,10 @@
+{
+  "name": "dropputt-customer-android",
+  "private": true,
+  "version": "0.1.0",
+  "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/push-notifications": "^8.1.3"
+  }
+}

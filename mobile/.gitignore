@@ -1,0 +1,14 @@
+node_modules/
+# Firebase config and signing keys stay out of git (see README.md)
+*/android/app/google-services.json
+*.jks
+*.keystore
+keystore.properties
+# Capacitor copies the web build into the app on every sync
+*/android/app/src/main/assets/public/
+*/android/app/src/main/assets/capacitor.config.json
+*/android/app/src/main/assets/capacitor.plugins.json
+*/android/app/build/
+*/android/build/
+*/android/.gradle/
+*/android/local.properties

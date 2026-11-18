@@ -1,0 +1,9 @@
+{
+  "appId": "in.techkerala.dropputt.rider",
+  "appName": "DropPutt Rider",
+  "webDir": "../../frontend/dist-rider",
+  "server": { "androidScheme": "https" },
+  "plugins": {
+    "PushNotifications": { "presentationOptions": ["badge", "sound", "alert"] }
+  }
+}

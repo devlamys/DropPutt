@@ -1,0 +1,20 @@
+{
+  "name": "dropputt-mobile",
+  "private": true,
+  "description": "Android shells (Capacitor) for the customer, vendor and rider apps. The web code lives in ../frontend.",
+  "workspaces": ["customer", "vendor", "rider"],
+  "scripts": {
+    "web:customer": "npm --prefix ../frontend run build:customer",
+    "web:vendor": "npm --prefix ../frontend run build:vendor",
+    "web:rider": "npm --prefix ../frontend run build:rider",
+    "sync:customer": "npm run web:customer && cd customer && npx cap sync android",
+    "sync:vendor": "npm run web:vendor && cd vendor && npx cap sync android",
+    "sync:rider": "npm run web:rider && cd rider && npx cap sync android",
+    "open:customer": "cd customer && npx cap open android",
+    "open:vendor": "cd vendor && npx cap open android",
+    "open:rider": "cd rider && npx cap open android"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.2"
+  }
+}
