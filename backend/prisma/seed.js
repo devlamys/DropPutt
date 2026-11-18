@@ -81,7 +81,7 @@ async function main() {
 
   const franchiseAdmin = await upsertFranchiseUser(
     franchise_id,
-    { name: "Kizhissery Franchise Admin", phone: "9000000002", role: "FRANCHISE_ADMIN" },
+    { name: "Franchise Admin", phone: "9000000002", role: "FRANCHISE_ADMIN" },
     pin_hash
   );
 

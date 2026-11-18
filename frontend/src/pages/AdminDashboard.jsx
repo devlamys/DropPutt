@@ -4,7 +4,7 @@ import ControlsPanel from "../components/admin/ControlsPanel.jsx";
 import ZonesPanel from "../components/admin/ZonesPanel.jsx";
 import FleetRadar from "../components/admin/FleetRadar.jsx";
 import FranchisesPanel from "../components/admin/FranchisesPanel.jsx";
-import DropPuttLogo, { RoleBadge } from "../components/DropPuttLogo.jsx";
+import HeaderIdentity from "../components/HeaderIdentity.jsx";
 import SiteImagesPanel from "../components/admin/SiteImagesPanel.jsx";
 import ReconciliationPanel from "../components/admin/ReconciliationPanel.jsx";
 import SettlementLedger from "../components/admin/SettlementLedger.jsx";
@@ -34,6 +34,7 @@ export default function AdminDashboard() {
   const [franchises, setFranchises] = useState([]);
   const [slug, setSlug] = useState(isSuper ? null : "own");
   const [tab, setTab] = useState("radar");
+  const [ownName, setOwnName] = useState(""); // the Franchise Admin's franchise, shown as the title
 
   // The Super Admin works inside one franchise at a time (x-franchise-slug).
   const loadFranchises = useCallback(async () => {
@@ -65,19 +66,16 @@ export default function AdminDashboard() {
       {toastNode}
       <header className="sticky top-0 z-[500] bg-white/95 px-4 pt-3 shadow-sm backdrop-blur">
         <div className="flex items-center justify-between gap-3 pb-3">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <DropPuttLogo role="admin" iconOnly size="md" />
-            <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-orange-600">
-                <RoleBadge role="admin" />
-                {isSuper ? "Super Admin" : "Franchise Admin"}
-              </p>
-              {isSuper ? (
+          <HeaderIdentity
+            role="admin"
+            badge={isSuper ? "SUPER ADMIN" : "FRANCHISE ADMIN"}
+            title={
+              isSuper ? (
                 <select
                   aria-label="Franchise"
                   value={slug ?? ""}
                   onChange={(e) => selectFranchise(e.target.value)}
-                  className="max-w-full truncate rounded-lg border border-slate-300 bg-white py-1 pl-2 pr-8 text-lg font-bold"
+                  className="max-w-full truncate rounded-lg border border-slate-300 bg-white py-0.5 pl-2 pr-8 text-lg font-bold leading-tight"
                 >
                   {franchises.map((f) => (
                     <option key={f.slug} value={f.slug}>
@@ -87,10 +85,10 @@ export default function AdminDashboard() {
                   ))}
                 </select>
               ) : (
-                <h1 className="truncate text-lg font-bold">{user.name}</h1>
-              )}
-            </div>
-          </div>
+                ownName
+              )
+            }
+          />
           <button type="button" onClick={signOut} aria-label="Sign out" className="rounded-full p-2 text-slate-500 hover:bg-slate-100">
             <LogOut className="h-5 w-5" />
           </button>
@@ -121,6 +119,7 @@ export default function AdminDashboard() {
           franchises={franchises}
           onSelectFranchise={selectFranchise}
           onFranchisesChanged={loadFranchises}
+          onName={setOwnName}
           toast={toast}
         />
       ) : (
@@ -149,7 +148,7 @@ export default function AdminDashboard() {
 }
 
 /** Everything for one franchise; remounted (fresh socket) when it changes. */
-function FranchiseWorkspace({ slug, tab, isSuper, franchises, onSelectFranchise, onFranchisesChanged, toast }) {
+function FranchiseWorkspace({ slug, tab, isSuper, franchises, onSelectFranchise, onFranchisesChanged, onName, toast }) {
   const [overview, setOverview] = useState(null);
   const [error, setError] = useState("");
 
@@ -166,6 +165,11 @@ function FranchiseWorkspace({ slug, tab, isSuper, franchises, onSelectFranchise,
   useEffect(() => {
     load();
   }, [load]);
+
+  const franchiseName = overview?.franchise?.name;
+  useEffect(() => {
+    if (franchiseName) onName?.(franchiseName);
+  }, [franchiseName, onName]);
 
   // Coalesce bursts of order events into one reload.
   const reloadTimer = useRef(null);

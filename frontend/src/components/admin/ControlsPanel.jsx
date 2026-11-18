@@ -22,6 +22,7 @@ function Switch({ checked, onChange, disabled, label }) {
 export default function ControlsPanel({ franchise, onUpdated, toast }) {
   const [busy, setBusy] = useState(null);
   const surgeOn = Number(franchise.rain_surge_fee) > 0;
+  const [name, setName] = useState(franchise.name ?? "");
   const [surgeAmount, setSurgeAmount] = useState(surgeOn ? franchise.rain_surge_fee : "20");
 
   async function save(field, patch, message) {
@@ -39,6 +40,22 @@ export default function ControlsPanel({ franchise, onUpdated, toast }) {
 
   return (
     <div className="space-y-4">
+      <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+        <h3 className="font-bold">Franchise name</h3>
+        <p className="mt-1 text-sm text-slate-600">Shown to you in the app header and to customers. The web address does not change.</p>
+        <div className="mt-2 flex gap-2">
+          <input aria-label="Franchise name" type="text" minLength={2} maxLength={60} value={name} onChange={(e) => setName(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+          <button
+            type="button"
+            disabled={busy === "name" || name.trim().length < 2 || name.trim() === franchise.name}
+            onClick={() => save("name", { name: name.trim() }, (f) => `Renamed to ${f.name}`)}
+            className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {busy === "name" ? "…" : "Save"}
+          </button>
+        </div>
+      </section>
+
       <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
         <h3 className="flex items-center gap-2 font-bold">
           <Rocket className="h-5 w-5 text-orange-600" /> How orders are split

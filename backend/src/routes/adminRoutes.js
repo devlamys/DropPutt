@@ -938,6 +938,8 @@ const settingsSchema = z
     rain_surge_fee: zMoney.optional(),
     // Orders further than this from the hotel are refused (SPEC "Delivery zones by distance").
     max_delivery_km: z.coerce.number().min(0.5).max(50).optional(),
+    // The name customers and staff see. The slug (the web address) never changes with it.
+    name: z.string().trim().min(2).max(60).optional(),
     // Where the franchise is: customers are shown the nearest franchises first.
     address: z.string().trim().max(200).optional(),
     lat: zLat.optional(),
@@ -966,6 +968,7 @@ router.patch(
           ? { rain_surge_fee: moneyStr(body.rain_surge_fee) }
           : {}),
         ...(body.max_delivery_km !== undefined ? { max_delivery_km: km2(body.max_delivery_km) } : {}),
+        ...(body.name !== undefined ? { name: body.name } : {}),
         ...(body.address !== undefined ? { address: body.address || null } : {}),
         ...(body.lat !== undefined ? { lat: Number(body.lat).toFixed(6), lng: Number(body.lng).toFixed(6) } : {}),
       },
@@ -976,6 +979,7 @@ router.patch(
       before: {
         rain_surge_fee: moneyStr(before.rain_surge_fee),
         max_delivery_km: moneyStr(before.max_delivery_km),
+        name: before.name,
         address: before.address,
         lat: coordStr(before.lat),
         lng: coordStr(before.lng),
@@ -983,6 +987,7 @@ router.patch(
       after: {
         rain_surge_fee: moneyStr(franchise.rain_surge_fee),
         max_delivery_km: moneyStr(franchise.max_delivery_km),
+        name: franchise.name,
         address: franchise.address,
         lat: coordStr(franchise.lat),
         lng: coordStr(franchise.lng),

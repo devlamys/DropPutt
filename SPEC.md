@@ -3407,6 +3407,7 @@ The delivery zone, and so the delivery fee, is decided by the software from the 
 |---|---|
 | `Zone.max_km` | Upper edge of a distance band; a band starts where the previous (smaller) one ends. `delivery_fee` is the charge for the band. `rider_commission` and `franchise_profit` default to 0 and take no part in the split (§15). |
 | `Franchise.max_delivery_km` (default 8) | Orders further than this are refused. Edited by the franchise admin. |
+| `Franchise.name` | Editable by the franchise admin (`name` in `PATCH /admin/franchise/settings`, 2 to 60 characters, audited). Display only: the `slug` (subdomain, `x-franchise-slug`) is the tenant key and never changes with the name. Shown as the title of the franchise admin header. |
 | `Franchise.address`, `lat`, `lng` | Where the franchise is, set by its admin in `PATCH /admin/franchise/settings` (`lat` and `lng` go together). A franchise without a location is not listed to customers. |
 
 **Nearest franchises.** `GET /public/franchises/nearby?lat&lng` (public, no tenant header) lists active franchises that have a location, nearest first, each with `km` (road distance when routing is on, else straight line x1.3), its own `max_delivery_km` and `within_limit`. The customer's "Set delivery location" sheet shows them under the map: distance green when `within_limit`, red otherwise (not selectable). Picking another franchise opens that franchise's address (subdomain hosts) or stores `dropputt.shop_slug` (localhost, tunnels, native app) and reloads; a non-empty cart is cleared after confirmation.

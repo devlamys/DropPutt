@@ -1,18 +1,19 @@
+import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import api, { getErrorMessage, getRequestSlug, switchShopFranchise } from "../../utils/api.js";
 import { fetchPlaceName } from "../../utils/place.js";
-import AppBar from "./AppBar.jsx";
+
 import LocationPicker from "./LocationPicker.jsx";
 import { readProfile, saveProfile } from "./StorefrontContext.jsx";
 
 const publicApi = { skipAuth: true };
 
 /**
- * Full-screen "Where should we deliver?": share the current location, search a place and drag
+ * Bottom-sheet "Where should we deliver?": share the current location, search a place and drag
  * the pin to the exact house. The pin is remembered on this phone. Under the map the franchises
  * are listed nearest first (green: the pin is inside its delivery limit, red: it is not); the
  * nearest one that delivers there is selected automatically whenever the pin moves, and the
- * customer may tap another. The switch happens on Done / back. No charge is shown: it depends on
+ * customer may tap another. The switch happens on Done / close. No charge is shown: it depends on
  * the shop, so only the out-of-delivery-area warning appears.
  */
 export default function ZoneSheet({ onClose, onPlace, cartCount = 0, onClearCart }) {
@@ -78,10 +79,18 @@ export default function ZoneSheet({ onClose, onPlace, cartCount = 0, onClearCart
   };
   const chosenName = list?.find((f) => f.slug === chosen)?.name;
 
+  const close = () => (asking ? setAsking(false) : done());
+
   return (
-    <div className="fixed inset-0 z-50 mx-auto flex max-w-md flex-col bg-slate-50 sm:border-x sm:border-slate-200" role="dialog" aria-modal="true" aria-label="Delivery location">
-      <AppBar title="Delivery location" onBack={() => (asking ? setAsking(false) : done())} />
-      <div className="flex-1 overflow-y-auto p-4">
+    <div className="fixed inset-0 z-[600] flex items-end justify-center bg-black/60 motion-safe:animate-fade-in sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label="Delivery location" onClick={close}>
+      <div className="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-xl bg-white motion-safe:animate-sheet-up sm:max-w-md sm:rounded-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex shrink-0 items-center justify-between gap-3 px-5 pb-2 pt-4">
+          <h2 className="text-lg font-bold">Delivery location</h2>
+          <button type="button" onClick={close} aria-label="Close" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+      <div className="flex-1 overflow-y-auto px-5 pb-3">
         <LocationPicker
           shop={null}
           hideCharge
@@ -121,14 +130,15 @@ export default function ZoneSheet({ onClose, onPlace, cartCount = 0, onClearCart
         )}
         {asking && (
           <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
-            Your cart is from another franchise. Switching to {chosenName ?? "it"} clears it. Press Done again to switch, or the back arrow to cancel.
+            Your cart is from another franchise. Switching to {chosenName ?? "it"} clears it. Press Done again to switch, or close this to cancel.
           </div>
         )}
       </div>
-      <div className="border-t border-slate-200 bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+      <div className="border-t border-slate-200 bg-white px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
         <button type="button" onClick={done} className="h-12 w-full rounded-lg bg-[#E8431A] text-base font-bold text-white active:scale-[0.98]">
           {asking ? "Switch & clear cart" : "Done"}
         </button>
+      </div>
       </div>
     </div>
   );

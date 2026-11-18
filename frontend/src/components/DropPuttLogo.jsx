@@ -17,7 +17,7 @@ const ROLES = {
   customer: { badge: null, subtitle: "FOOD • GROCERY • MINI-TRUCK", badgeClass: "" },
   vendor: { badge: "PARTNER", subtitle: "Hotel & Store Panel", badgeClass: "bg-emerald-600 text-white" },
   rider: { badge: "RIDER", subtitle: "Delivery Fleet App", badgeClass: "bg-slate-900 text-amber-300" },
-  admin: { badge: "ADMIN", subtitle: "Franchise Control", badgeClass: "bg-red-600 text-white" },
+  admin: { badge: "ADMIN", subtitle: "Franchise Control", badgeClass: "bg-indigo-600 text-white" },
 };
 
 const SIZES = {
@@ -42,12 +42,12 @@ export function DropPuttMark({ size = 32, className = "" }) {
 }
 
 /** Just the role badge ("PARTNER", "RIDER", "ADMIN"), for headers that already carry their own title. */
-export function RoleBadge({ role = "customer", size = "sm", className = "" }) {
+export function RoleBadge({ role = "customer", size = "sm", className = "", label }) {
   const info = ROLES[role] ?? ROLES.customer;
   if (!info.badge) return null;
   return (
     <span className={`inline-block rounded-full font-extrabold leading-none tracking-wider ${SIZES[size].badge} ${info.badgeClass} ${className}`}>
-      {info.badge}
+      {label ?? info.badge}
     </span>
   );
 }
