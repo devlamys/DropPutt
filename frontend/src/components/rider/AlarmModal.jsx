@@ -24,7 +24,7 @@ export default function AlarmModal({ request, queued, onAccept, onDismiss }) {
 
   return (
     <Modal
-      title={addon ? "🔥 Add-on Order on your route!" : "🛵 New delivery request"}
+      title={addon ? (request.same_customer ? "🔥 Same customer: add-on" : "🔥 Add-on Order on your route!") : "🛵 New delivery request"}
       tone="alert"
       dismissible={false}
     >

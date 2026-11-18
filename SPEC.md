@@ -1151,7 +1151,7 @@ For riders with one active order:
 active_orders_count < max_active_orders
 ```
 
-and matching vendor or destination zone, emit:
+and a matching vendor, a matching destination zone, **or the same customer**, emit:
 
 ```text
 addon_order_alert
@@ -1162,9 +1162,12 @@ Payload:
 ```json
 {
   "order_id": 123,
-  "message": "🔥 Add-on Order on your route!"
+  "message": "🔥 Add-on Order on your route!",
+  "same_customer": false
 }
 ```
+
+**Same customer.** Orders are for the same customer when `customer_phone` is equal, or both have a drop point and the two are within 150 m (`SAME_DROP_METRES`). This lets one rider drop two orders the customer placed from different shops (the storefront keeps one cart, and so one order, per shop). If the rider's active order is for the same customer, `same_customer` is `true`, the message names it ("Same customer as your order #N: deliver both in one trip") and the push title is "Same customer!". It is only an offer: orders, fees, commission and cash stay separate per order, and `is_batched_addon` is set as usual when the rider accepts.
 
 ---
 
