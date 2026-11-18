@@ -27,7 +27,7 @@ const STALE_MS = 2 * 60 * 1000;
 export default function Storefront() {
   const navigate = useNavigate();
   const { toast, node: toastNode } = useToast();
-  const { cart, totals, add, setQuantity, clear, replaceWith, sync } = useCart();
+  const { cart, carts, totals, allTotals, add, setQuantity, clear, clearAll, setActive, sync } = useCart();
   const [feed, setFeed] = useState(null);
   const [allShops, setAllShops] = useState([]); // includes shops that are closed right now
   // Everything that orders, the cart and the menus use sees only open shops.
@@ -39,7 +39,6 @@ export default function Storefront() {
   const [loading, setLoading] = useState(true);
   const [cartOpen, setCartOpen] = useState(false);
   const [zoneOpen, setZoneOpen] = useState(false);
-  const [switching, setSwitching] = useState(null); // { product, shopName }
   const [placed, setPlaced] = useState(null);
   const [customKind, setCustomKind] = useState(null); // "CUSTOM_BUY" | "PICK_DROP" | "MINI_TRUCK"
   const [ordersOpen, setOrdersOpen] = useState(false);
@@ -108,17 +107,16 @@ export default function Storefront() {
   }, [load]);
 
   // A cart saved earlier may hold things that can't be ordered any more.
-  const cartRef = useRef(cart);
-  cartRef.current = cart;
+  const cartsRef = useRef(carts);
+  cartsRef.current = carts;
   useEffect(() => {
     if (!feed) return;
-    const current = cartRef.current;
-    if (current.vendor_id) {
+    for (const current of cartsRef.current) {
       const shop = vendors.find((v) => v.id === current.vendor_id);
       const available = new Set((shop?.products ?? []).map((p) => p.id));
       const gone = current.lines.filter((l) => !available.has(l.product_id));
-      if (!shop) toast(`${current.shop_name} is closed right now — your cart was cleared.`, "warn");
-      else if (gone.length) toast(`${gone.map((l) => l.name).join(", ")} ${gone.length === 1 ? "is" : "are"} not available now and left your cart.`, "warn");
+      if (!shop) toast(`${current.shop_name} is closed right now — its cart was cleared.`, "warn");
+      else if (gone.length) toast(`${gone.map((l) => l.name).join(", ")} ${gone.length === 1 ? "is" : "are"} not available now and left your ${current.shop_name} cart.`, "warn");
     }
     sync(vendors);
   }, [feed, vendors, sync, toast]);
@@ -130,30 +128,35 @@ export default function Storefront() {
   }, []);
 
   const shopById = useMemo(() => new Map(vendors.map((v) => [v.id, v])), [vendors]);
-  const quantities = useMemo(() => new Map(cart.lines.map((l) => [l.product_id, l.quantity])), [cart]);
+  const quantities = useMemo(() => new Map(carts.flatMap((c) => c.lines.map((l) => [l.product_id, l.quantity]))), [carts]);
   const quantityOf = useCallback((id) => quantities.get(id) || 0, [quantities]);
 
-  const addProduct = useCallback(
-    (product, shopName) => {
-      if (!add(product, shopName)) setSwitching({ product, shopName });
-    },
-    [add]
-  );
+  const addProduct = useCallback((product, shopName) => add(product, shopName), [add]);
   const removeOne = useCallback((id) => setQuantity(id, (quantities.get(id) || 0) - 1), [quantities, setQuantity]);
 
   const cartShop = shopById.get(cart.vendor_id);
-  const baseMin = Number(cartShop?.min_order_value || 0);
-  // 15:00–18:00 IST an all-snacks cart only needs the snack minimum.
-  const snackOnly =
-    feed?.is_chayakadi_window &&
-    feed.pinned &&
-    cart.lines.length > 0 &&
-    cart.lines.every((l) => feed.pinned.products.some((p) => p.id === l.product_id));
-  const minOrder = snackOnly ? Math.min(baseMin, Number(feed.pinned.min_order_value)) : baseMin;
+  // The shop's minimum for one cart; 15:00-18:00 IST an all-snacks cart only needs the snack minimum.
+  const minOrderOf = useCallback(
+    (c) => {
+      const base = Number(shopById.get(c.vendor_id)?.min_order_value || 0);
+      const snackOnly = feed?.is_chayakadi_window && feed.pinned && c.lines.length > 0 && c.lines.every((l) => feed.pinned.products.some((p) => p.id === l.product_id));
+      return snackOnly ? Math.min(base, Number(feed.pinned.min_order_value)) : base;
+    },
+    [shopById, feed]
+  );
+  const minOrder = minOrderOf(cart);
+  // Carts still short of their shop's minimum, for the bar above the tabs.
+  const shorts = carts
+    .map((c) => {
+      const subtotal = c.lines.reduce((sum, l) => sum + Math.round(Number(l.price) * 100) * l.quantity, 0) / 100;
+      const min = minOrderOf(c);
+      return { shop_name: c.shop_name, short: min - subtotal, progress: min > 0 ? Math.min(100, Math.round((subtotal / min) * 100)) : 100 };
+    })
+    .filter((x) => x.short > 0);
 
   useEffect(() => {
-    if (totals.count === 0) setCartOpen(false);
-  }, [totals.count]);
+    if (allTotals.count === 0) setCartOpen(false);
+  }, [allTotals.count]);
 
   const onPlaced = (order) => {
     rememberOrder({ token: order.location_token, number: order.order_number, shop: order.shop_name, kind: order.kind });
@@ -192,6 +195,8 @@ export default function Storefront() {
     orderCount,
     minOrder,
     cartShop,
+    carts,
+    allTotals,
     toast,
   };
 
@@ -202,7 +207,7 @@ export default function Storefront() {
         <Outlet />
 
         {!cartOpen && !placed && !ordersOpen && !accountOpen && (
-          <CartBar cart={cart} totals={totals} minOrder={minOrder} onOpen={() => setCartOpen(true)} />
+          <CartBar totals={allTotals} shorts={shorts} onOpen={() => setCartOpen(true)} />
         )}
         <BottomNav
           active={activeTab}
@@ -218,11 +223,14 @@ export default function Storefront() {
           onAccount={() => { setOrdersOpen(false); setAccountOpen(true); }}
         />
 
-        {cartOpen && totals.count > 0 && (
+        {cartOpen && allTotals.count > 0 && (
           <CartCheckoutModal
             cart={cart}
             totals={totals}
             shop={cartShop}
+            carts={carts}
+            activeId={cart.vendor_id}
+            onSelect={setActive}
             minOrder={minOrder}
             onQuantity={setQuantity}
             onAddMore={() => {
@@ -239,6 +247,7 @@ export default function Storefront() {
             shopId={vendorId}
             onClose={() => setVendorId(null)}
             onViewCart={() => {
+              setActive(vendorId);
               setVendorId(null);
               setCartOpen(true);
             }}
@@ -271,33 +280,7 @@ export default function Storefront() {
           />
         )}
 
-        {zoneOpen && <ZoneSheet onClose={() => setZoneOpen(false)} onPlace={setPlace} cartCount={totals.count} onClearCart={() => { clear(); try { localStorage.removeItem("dropputt.cart"); } catch { /* ignore */ } }} />}
-
-        {switching && (
-          <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/50 p-4 motion-safe:animate-fade-in sm:items-center" role="alertdialog" aria-modal="true" aria-label="Start a new cart?">
-            <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-5 motion-safe:animate-sheet-up">
-              <p className="text-lg font-semibold text-pine-950">Start a new cart?</p>
-              <p className="mt-1 text-sm text-slate-600">
-                One order comes from one shop. Adding this will clear your items from <b>{cart.shop_name}</b>.
-              </p>
-              <div className="mt-4 flex gap-2">
-                <button type="button" onClick={() => setSwitching(null)} className="flex-1 rounded-lg bg-slate-100 py-3 text-sm font-semibold text-slate-700">
-                  Keep cart
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    replaceWith(switching.product, switching.shopName);
-                    setSwitching(null);
-                  }}
-                  className="flex-1 rounded-lg bg-[#E8431A] py-3 text-sm font-semibold text-white"
-                >
-                  New cart
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {zoneOpen && <ZoneSheet onClose={() => setZoneOpen(false)} onPlace={setPlace} cartCount={allTotals.count} onClearCart={() => { clearAll(); try { localStorage.removeItem("dropputt.carts"); localStorage.removeItem("dropputt.cart"); } catch { /* ignore */ } }} />}
 
         {placed && <OrderPlaced order={placed} />}
       </div>

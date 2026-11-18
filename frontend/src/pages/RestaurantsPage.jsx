@@ -13,7 +13,7 @@ export default function RestaurantsPage() {
   const [params] = useSearchParams();
   const mart = params.get("group") === "mart";
   useTheme(mart ? "mart" : null);
-  const { vendors, closedVendors, loading, feed, cart } = useStorefront();
+  const { vendors, closedVendors, loading, feed, carts } = useStorefront();
   const [query, setQuery] = useState("");
   const inGroup = (v) => (FOOD_SHOPS.includes(v.shop_category) ? !mart : mart);
   const q = query.trim().toLowerCase();
@@ -37,7 +37,7 @@ export default function RestaurantsPage() {
             <section aria-label="Open shops">
               <h2 className="mb-3 text-lg font-extrabold">Open now · <span className="tabular-nums">{open.length}</span></h2>
               {open.length === 0 ? <p className="text-sm text-slate-500">No shop is open right now.</p> : (
-                <div className="space-y-3">{open.map((s) => <ShopCard key={s.id} shop={s} inCart={cart.vendor_id === s.id} onOpen={go} />)}</div>
+                <div className="space-y-3">{open.map((s) => <ShopCard key={s.id} shop={s} inCart={carts.some((c) => c.vendor_id === s.id)} onOpen={go} />)}</div>
               )}
             </section>
             {closed.length > 0 && (

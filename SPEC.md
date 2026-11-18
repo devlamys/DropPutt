@@ -623,6 +623,8 @@ For `User`, `franchise_id` can remain nullable for a global `SUPER_ADMIN`. Postg
 
 # 7. OrderItem / Marketplace Checkout
 
+**One cart per shop (customer storefront).** The storefront keeps a separate cart for each shop (`dropputt.carts` on the device: `{ carts: [{ vendor_id, shop_name, lines }], active }`); adding from another shop starts that shop's cart instead of clearing the first. An order is still one shop: checkout places one order for the active cart, with its own delivery fee, minimum order and rider, and the customer switches carts with the tabs at the top of the cart screen. A placed order removes only its own cart. No API change. Combining several shops into one order with one delivery is not built (see the multi-shop proposal).
+
 A marketplace cart is not represented by one product field on `Order`.
 
 Each cart line MUST create an `OrderItem`:

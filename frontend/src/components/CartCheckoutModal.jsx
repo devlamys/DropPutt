@@ -56,7 +56,7 @@ function Section({ title, ml, children, action }) {
  * on success the storefront redirects to the live tracking page /drop/:token.
  * Prices shown are for display; the server prices every line itself.
  */
-export default function CartCheckoutModal({ cart, totals, shop, minOrder, onQuantity, onAddMore, onClose, onPlaced }) {
+export default function CartCheckoutModal({ cart, totals, shop, minOrder, onQuantity, onAddMore, onClose, onPlaced, carts = [], activeId, onSelect }) {
   const { toast } = useStorefront();
   const profile = readProfile();
   const [phone, setPhone] = useState(profile.phone || "");
@@ -72,6 +72,10 @@ export default function CartCheckoutModal({ cart, totals, shop, minOrder, onQuan
   const [quote, setQuote] = useState(null);
   // One key per attempt: a retry after a flaky network replays the same order.
   const attempt = useRef(null);
+  // Another shop's cart is a different order: it must not replay this key.
+  useEffect(() => {
+    attempt.current = null;
+  }, [cart.vendor_id]);
 
   useEffect(() => {
     const previous = document.body.style.overflow;
@@ -146,6 +150,23 @@ export default function CartCheckoutModal({ cart, totals, shop, minOrder, onQuan
             <p className="truncate text-xs text-slate-500">{cart.shop_name}</p>
           </div>
         </header>
+
+        {carts.length > 1 && (
+          <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-2">
+            <p className="mb-1.5 text-xs text-slate-500">Each shop is a separate order with its own delivery charge.</p>
+            <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Your carts">
+              {carts.map((c) => {
+                const on = c.vendor_id === activeId;
+                const n = c.lines.reduce((sum, l) => sum + l.quantity, 0);
+                return (
+                  <button key={c.vendor_id} type="button" role="tab" aria-selected={on} disabled={busy} onClick={() => onSelect?.(c.vendor_id)} className={`h-9 shrink-0 rounded-lg border px-3 text-sm font-bold ${on ? "border-[#E8431A] bg-[#E8431A] text-white" : "border-slate-200 bg-white text-slate-700"}`}>
+                    {c.shop_name} <span className="tabular-nums opacity-80">({n})</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
           <Section

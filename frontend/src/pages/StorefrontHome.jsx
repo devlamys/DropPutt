@@ -73,7 +73,7 @@ function HomeSkeleton() {
 
 export default function StorefrontHome() {
   const {
-    feed, vendors, closedVendors, zone, loading, error, reload, cart, openZones,
+    feed, vendors, closedVendors, zone, loading, error, reload, carts, openZones,
     totals, minOrder, cartShop, openCart, openCustom, openOrders, orderCount, franchiseName, place, toast,
   } = useStorefront();
   const [query, setQuery] = useState("");
@@ -186,7 +186,7 @@ export default function StorefrontHome() {
           {shopHits.length > 0 && (
             <section aria-label="Shops">
               <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">Shops</h2>
-              <div className="space-y-3">{shopHits.map((s) => <ShopCard key={s.id} shop={s} inCart={cart.vendor_id === s.id} onOpen={(id) => navigate(`/shop/restaurant/${id}`)} closed={s.is_open === false} />)}</div>
+              <div className="space-y-3">{shopHits.map((s) => <ShopCard key={s.id} shop={s} inCart={carts.some((c) => c.vendor_id === s.id)} onOpen={(id) => navigate(`/shop/restaurant/${id}`)} closed={s.is_open === false} />)}</div>
             </section>
           )}
           <button type="button" onClick={() => navigate(`/shop/mart?q=${encodeURIComponent(text)}`)} className={`flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-[#E8431A] bg-white text-sm font-bold text-[#E8431A] ${press}`}>

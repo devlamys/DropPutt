@@ -43,7 +43,7 @@ function MenuRow({ product, shop, quantity, onAdd, onRemove, unavailable }) {
  * bakery card. Filter: all items, or only the 4 PM snack combos.
  */
 export default function VendorMenuDrawer({ shopId, onClose, onViewCart }) {
-  const { shopById, feed, quantityOf, addProduct, removeOne, cart, totals, loading } = useStorefront();
+  const { shopById, feed, quantityOf, addProduct, removeOne, carts, loading } = useStorefront();
   const shop = shopById.get(shopId);
   const [filter, setFilter] = useState("all"); // "all" | "snacks"
   const [query, setQuery] = useState("");
@@ -73,8 +73,11 @@ export default function VendorMenuDrawer({ shopId, onClose, onViewCart }) {
   }, [shop, filter, q]);
 
   const cat = shop ? categoryOf(shop.shop_category) : null;
-  const inThisCart = shop && cart.vendor_id === shop.id && totals.count > 0;
-  const short = shop ? Number(shop.min_order_value) - totals.subtotal : 0;
+  const thisCart = shop ? carts.find((c) => c.vendor_id === shop.id) : null;
+  const inThisCart = Boolean(thisCart);
+  const thisSubtotal = thisCart ? thisCart.lines.reduce((sum, l) => sum + Math.round(Number(l.price) * 100) * l.quantity, 0) / 100 : 0;
+  const thisCount = thisCart ? thisCart.lines.reduce((n, l) => n + l.quantity, 0) : 0;
+  const short = shop ? Number(shop.min_order_value) - thisSubtotal : 0;
   const snackWindow = Boolean(feed?.is_chayakadi_window);
 
   return (
@@ -179,7 +182,7 @@ export default function VendorMenuDrawer({ shopId, onClose, onViewCart }) {
             )}
             <button type="button" onClick={onViewCart} className={`flex h-14 w-full items-center gap-3 rounded-lg bg-emerald-600 px-4 text-left text-white hover:bg-emerald-700 ${press}`}>
               <ShoppingBag className="h-5 w-5 shrink-0" />
-              <span className="flex-1 text-sm font-extrabold tabular-nums">{totals.count} item{totals.count === 1 ? "" : "s"} · {inr(totals.subtotal)}</span>
+              <span className="flex-1 text-sm font-extrabold tabular-nums">{thisCount} item{thisCount === 1 ? "" : "s"} · {inr(thisSubtotal)}</span>
               <span className="text-sm font-extrabold">View cart ›</span>
             </button>
           </div>
