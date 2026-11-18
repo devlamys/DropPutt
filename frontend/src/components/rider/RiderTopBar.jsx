@@ -1,5 +1,6 @@
 import { IndianRupee, Loader2, LogOut, Power, Wifi, WifiOff } from "lucide-react";
 import { Link } from "react-router-dom";
+import DropPuttLogo, { RoleBadge } from "../DropPuttLogo.jsx";
 import { inr } from "../../utils/format.js";
 
 function ProgressBar({ label, value, max, right, tone }) {
@@ -43,9 +44,12 @@ export default function RiderTopBar({
   return (
     <header className="sticky top-0 z-20 space-y-3 bg-white/95 px-4 pb-3 pt-3 shadow-sm backdrop-blur">
       <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+        <DropPuttLogo role="rider" iconOnly size="sm" />
         <div className="min-w-0">
           <h1 className="truncate text-lg font-bold">{name}</h1>
-          <p className="flex items-center gap-1 text-xs text-slate-500">
+          <p className="flex items-center gap-1.5 text-xs text-slate-500">
+            <RoleBadge role="rider" />
             {connected ? (
               <Wifi className="h-3.5 w-3.5 text-green-600" />
             ) : (
@@ -53,6 +57,7 @@ export default function RiderTopBar({
             )}
             {connected ? "Live" : "Reconnecting…"}
           </p>
+        </div>
         </div>
         <div className="flex items-center gap-2">
           <button

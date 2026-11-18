@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import CancelOrderModal from "../components/CancelOrderModal.jsx";
 import Modal from "../components/Modal.jsx";
 import CashHandoverCard from "../components/vendor/CashHandoverCard.jsx";
+import DropPuttLogo, { RoleBadge } from "../components/DropPuttLogo.jsx";
 import AlertsPrompt from "../components/AlertsPrompt.jsx";
 import OrderItemList from "../components/OrderItemList.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
@@ -235,9 +236,12 @@ export default function VendorDashboard() {
 
       <AlertsPrompt />
       <header className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
+        <div className="flex min-w-0 items-center gap-2.5">
+        <DropPuttLogo role="vendor" iconOnly size="sm" />
         <div className="min-w-0">
           <h1 className="truncate text-lg font-bold">{shop?.shop_name ?? user.name}</h1>
-          <p className="flex items-center gap-1 text-xs text-slate-500">
+          <p className="flex items-center gap-1.5 text-xs text-slate-500">
+            <RoleBadge role="vendor" />
             {connected ? (
               <Wifi className="h-3.5 w-3.5 text-green-600" />
             ) : (
@@ -245,6 +249,7 @@ export default function VendorDashboard() {
             )}
             {connected ? "Live" : "Reconnecting…"}
           </p>
+        </div>
         </div>
         <div className="flex items-center gap-2">
           {shop && (

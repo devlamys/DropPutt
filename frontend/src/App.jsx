@@ -2,7 +2,7 @@ import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
 import { APP } from "./appMode.js";
-import LogoMark from "./components/LogoMark.jsx";
+import { DropPuttMark } from "./components/DropPuttLogo.jsx";
 import Home from "./pages/Home.jsx";
 import Login from "./pages/Login.jsx";
 
@@ -33,7 +33,7 @@ const VendorDashboard = HAS_VENDOR ? lazy(() => import("./pages/VendorDashboard.
 function PageLoader() {
   return (
     <div className="flex min-h-screen items-center justify-center">
-      <LogoMark size={64} className="motion-safe:animate-pulse" />
+      <DropPuttMark size={64} className="motion-safe:animate-pulse" />
     </div>
   );
 }

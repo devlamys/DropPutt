@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Bike, Loader2, ShieldCheck, Store, UserCog } from "lucide-react";
-import LogoMark from "../components/LogoMark.jsx";
+import DropPuttLogo from "../components/DropPuttLogo.jsx";
 import { APP, APP_INFO } from "../appMode.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { getErrorMessage, getHostSlug } from "../utils/api.js";
 
+// Which role badge the logo carries on this app's sign-in screen (the combined web build shows none).
+const APP_ROLE = ["vendor", "rider", "admin"].includes(APP) ? APP : "customer";
 const DEMO_PIN = import.meta.env.VITE_DEMO_PIN || "1234";
 const SHOW_DEMO = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_LOGIN === "true";
 
@@ -67,9 +69,9 @@ export default function Login() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-6 px-4 py-10">
       <header className="text-center">
-        <LogoMark size={56} className="mx-auto drop-shadow" />
-        <h1 className="mt-4 text-2xl font-bold tracking-tight">{APP_INFO.name}</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="sr-only">{APP_INFO.name}</h1>
+        <DropPuttLogo role={APP_ROLE} size="xl" layout="stacked" />
+        <p className="mt-3 text-sm text-slate-500">
           Sign in to <span className="font-medium capitalize">{getHostSlug()}</span>
         </p>
       </header>

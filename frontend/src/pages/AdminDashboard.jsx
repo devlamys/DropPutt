@@ -4,6 +4,7 @@ import ControlsPanel from "../components/admin/ControlsPanel.jsx";
 import ZonesPanel from "../components/admin/ZonesPanel.jsx";
 import FleetRadar from "../components/admin/FleetRadar.jsx";
 import FranchisesPanel from "../components/admin/FranchisesPanel.jsx";
+import DropPuttLogo, { RoleBadge } from "../components/DropPuttLogo.jsx";
 import SiteImagesPanel from "../components/admin/SiteImagesPanel.jsx";
 import ReconciliationPanel from "../components/admin/ReconciliationPanel.jsx";
 import SettlementLedger from "../components/admin/SettlementLedger.jsx";
@@ -64,8 +65,11 @@ export default function AdminDashboard() {
       {toastNode}
       <header className="sticky top-0 z-[500] bg-white/95 px-4 pt-3 shadow-sm backdrop-blur">
         <div className="flex items-center justify-between gap-3 pb-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+          <DropPuttLogo role="admin" iconOnly size="md" />
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wide text-orange-600">
+            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-orange-600">
+              <RoleBadge role="admin" />
               {isSuper ? "Super Admin" : "Franchise Admin"}
             </p>
             {isSuper ? (
@@ -85,6 +89,7 @@ export default function AdminDashboard() {
             ) : (
               <h1 className="truncate text-lg font-bold">{user.name}</h1>
             )}
+          </div>
           </div>
           <button type="button" onClick={signOut} aria-label="Sign out" className="rounded-full p-2 text-slate-500 hover:bg-slate-100">
             <LogOut className="h-5 w-5" />

@@ -1,4 +1,4 @@
-import LogoMark from "../components/LogoMark.jsx";
+import DropPuttLogo from "../components/DropPuttLogo.jsx";
 import { ClipboardList, Clock, CupSoda, Home, MapPin, Search, ShoppingBag, ShoppingBasket, Truck, Utensils, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -146,7 +146,7 @@ export default function StorefrontHome() {
       {/* ── 1. Sticky header ─────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 px-4 pb-2 pt-2 backdrop-blur">
         <div className="flex items-center gap-2.5">
-          <LogoMark size={28} className="shrink-0" />
+          <DropPuttLogo iconOnly size="sm" />
           <h1 className="min-w-0 flex-1 truncate text-lg font-extrabold leading-none text-slate-900">{town}</h1>
           <button type="button" onClick={openZones} aria-label="Set delivery location and see charges" className="flex h-8 shrink-0 items-center gap-1 rounded-full bg-flame-50 px-3 text-xs font-bold text-flame-700 ring-1 ring-flame-200">
             <MapPin className="h-3.5 w-3.5" /> Set delivery location

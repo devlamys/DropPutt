@@ -3544,3 +3544,16 @@ The customer, vendor and rider builds are wrapped as Android apps with Capacitor
 * **Rider location:** while a delivery is in progress the rider app uses a foreground-service location plugin so GPS keeps flowing with the screen off; the browser version keeps its wake lock.
 * The apps call the server at `VITE_API_ORIGIN`; the server must allow the origin `https://localhost` (`CORS_ORIGINS`).
 * Not built yet: secure token storage, per-app icons, iOS. No signed APK was produced in this repository's CI or on the development machine (no JDK/Android SDK there).
+
+## 65.2 Brand
+
+One mark for every app: an isometric logistics cube (a food box, a grocery bag, mini-truck cargo) with a precision drop pin on top, brand red `#E8431A` (fixed, it does not follow the Mart's green theme). It is the React component `frontend/src/components/DropPuttLogo.jsx` (`role` = customer | vendor | rider | admin, `size`, `iconOnly`, `layout`, `onDark`; `RoleBadge` and `DropPuttMark` are exported too) and the file `frontend/public/favicon.svg`; the PNG app icons and the Android launcher icons are generated from it (`frontend/scripts/brand-icons.sh`, `mobile/brand-android.sh`).
+
+| Role | Badge | Line under the name |
+|---|---|---|
+| customer | none | FOOD • GROCERY • MINI-TRUCK |
+| vendor | PARTNER (emerald) | Hotel & Store Panel |
+| rider | RIDER (dark, amber text) | Delivery Fleet App |
+| admin | ADMIN (red) | Franchise Control |
+
+The logo is on every sign-in screen (with the badge), the storefront header, the page loader, and the vendor, rider and admin headers (mark plus badge).
