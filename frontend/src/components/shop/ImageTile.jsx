@@ -5,7 +5,8 @@ import { defaultTileImage, useSiteImages } from "../../hooks/useSiteImages.js";
  * A home tile with a photo behind it. The photo is the Super Admin's upload, else the built-in
  * /tiles/<slot>.jpg. Until a photo has loaded (or when there is none) the tile keeps its plain
  * colours (`plain`); with a photo the text turns white (`withImage`) over a dark gradient so it
- * stays readable on any picture.
+ * stays readable on any picture. With a photo the tile drops its icons and puts a smaller text
+ * block at the bottom left, so the picture does the talking.
  *
  * `children` is a function: children(hasPhoto) so a tile can drop decorations when a photo is shown.
  */
@@ -25,7 +26,7 @@ export default function ImageTile({ slot, as: Tag = "button", className = "", pl
         onError={() => setLoadedSrc("")}
         className={`absolute inset-0 -z-10 h-full w-full object-cover transition-opacity duration-300 ${hasPhoto ? "opacity-100" : "opacity-0"}`}
       />
-      {hasPhoto && <span aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-black/70 via-black/35 to-black/15" />}
+      {hasPhoto && <span aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />}
       {children(hasPhoto)}
     </Tag>
   );

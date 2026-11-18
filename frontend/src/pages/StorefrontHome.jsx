@@ -35,6 +35,9 @@ function snackWindow(now) {
   return { open: false, left: m < SNACK_START ? SNACK_START - m : 24 * 60 - m + SNACK_START };
 }
 
+// Keeps white text readable on any photo.
+const TEXT_SHADOW = "[text-shadow:0_1px_6px_rgba(0,0,0,0.6)]";
+
 const press = "transition-transform active:scale-[0.98]";
 
 const shimmer = "bg-[linear-gradient(90deg,#E7E7E2_25%,#D9D9D2_37%,#E7E7E2_63%)] bg-[length:400%_100%] motion-safe:animate-shimmer";
@@ -215,19 +218,22 @@ export default function StorefrontHome() {
             <ImageTile
               slot="chayakadi"
               onClick={() => goDishes("EVENING_SNACKS")}
-              className={`flex w-full items-center gap-3 rounded-2xl p-4 text-left shadow-sm ${press}`}
-              plain={windowState.open ? "bg-gradient-to-br from-amber-400 to-amber-500 text-slate-900" : "border border-amber-200 bg-amber-50 text-slate-800"}
+              className={`flex w-full rounded-2xl text-left shadow-sm ${press}`}
+              plain={`items-center gap-3 p-4 ${windowState.open ? "bg-gradient-to-br from-amber-400 to-amber-500 text-slate-900" : "border border-amber-200 bg-amber-50 text-slate-800"}`}
+              withImage="min-h-[7rem] items-end p-3 text-white"
             >
-              {() => (
+              {(photo) => (
                 <>
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/85 text-amber-700 shadow-sm" aria-hidden="true">
-                    <CupSoda className="h-6 w-6" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[15px] font-extrabold leading-snug">4 PM ചായക്കടി &amp; കൂൾബാർ സമയം</span>
-                    <span className="mt-0.5 block text-sm font-semibold">4 PM Chayakadi &amp; Coolbar Combos (Min {inr(snackMin)})</span>
-                    <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/80 px-2.5 py-1 text-xs font-bold tabular-nums text-slate-900">
-                      <Clock className="h-3.5 w-3.5" />
+                  {!photo && (
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/85 text-amber-700 shadow-sm" aria-hidden="true">
+                      <CupSoda className="h-6 w-6" />
+                    </span>
+                  )}
+                  <span className={`min-w-0 flex-1 ${photo ? TEXT_SHADOW : ""}`}>
+                    <span className={`block font-extrabold leading-snug ${photo ? "text-[13px]" : "text-[15px]"}`}>4 PM ചായക്കടി &amp; കൂൾബാർ സമയം</span>
+                    <span className={`block font-semibold ${photo ? "text-[11px] opacity-95" : "mt-0.5 text-sm"}`}>4 PM Chayakadi &amp; Coolbar Combos (Min {inr(snackMin)})</span>
+                    <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-white/85 px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-slate-900 [text-shadow:none]">
+                      <Clock className="h-3 w-3" />
                       {windowState.open ? `Live now · ends in ${hm(windowState.left)}` : `Opens 3:00 PM · in ${hm(windowState.left)}`}
                     </span>
                   </span>
@@ -238,51 +244,51 @@ export default function StorefrontHome() {
 
           {/* 3. Action bento grid */}
           <section className="grid grid-cols-2 gap-3 px-4" aria-label="What would you like to do?">
-            <ImageTile slot="restaurants" onClick={() => navigate("/shop/restaurants")} className={`row-span-2 flex min-h-[11rem] flex-col justify-between rounded-2xl p-4 text-left shadow-sm ${press}`} plain="bg-flame-600 text-white hover:bg-flame-700">
+            <ImageTile slot="restaurants" onClick={() => navigate("/shop/restaurants")} className={`row-span-2 flex min-h-[11rem] flex-col rounded-2xl text-left shadow-sm ${press}`} plain="justify-between bg-flame-600 p-4 text-white hover:bg-flame-700" withImage="justify-end p-3 text-white">
               {(photo) => (
                 <>
-                  <Utensils className="h-8 w-8 text-flame-100" />
-                  <span>
-                    <span className="block text-lg font-extrabold leading-tight">Open Restaurants</span>
-                    <span className="mt-1 block text-xs font-medium text-flame-100">തുറന്ന ഹോട്ടലുകൾ</span>
+                  {!photo && <Utensils className="h-8 w-8 text-flame-100" />}
+                  <span className={photo ? TEXT_SHADOW : ""}>
+                    <span className={`block font-extrabold leading-tight ${photo ? "text-[15px]" : "text-lg"}`}>Open Restaurants</span>
+                    <span className={`block font-medium ${photo ? "text-[11px] opacity-95" : "mt-1 text-xs text-flame-100"}`}>തുറന്ന ഹോട്ടലുകൾ</span>
                   </span>
                   {!photo && <span className="pointer-events-none absolute -bottom-3 -right-2 text-7xl opacity-25" aria-hidden="true">🍛</span>}
                 </>
               )}
             </ImageTile>
 
-            <ImageTile slot="buy_anything" onClick={() => openCustom("CUSTOM_BUY")} className={`flex min-h-[5.25rem] items-center gap-2 rounded-2xl p-3 text-left shadow-md ring-2 ring-amber-500/60 ${press}`} plain="bg-amber-400 text-slate-900">
-              {() => (
+            <ImageTile slot="buy_anything" onClick={() => openCustom("CUSTOM_BUY")} className={`flex min-h-[5.25rem] rounded-2xl text-left shadow-md ring-2 ring-amber-500/60 ${press}`} plain="items-center gap-2 bg-amber-400 p-3 text-slate-900" withImage="items-end p-3 text-white">
+              {(photo) => (
                 <>
-                  <ShoppingBasket className="h-7 w-7 shrink-0" />
-                  <span className="min-w-0">
-                    <span className="mb-1 inline-block rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">Popular</span>
-                    <span className="block text-[15px] font-extrabold leading-tight">Buy Anything <span className="font-bold">(Custom Book)</span></span>
-                    <span className="block text-[11px] font-semibold opacity-90">എന്തും വാങ്ങാം</span>
+                  {!photo && <ShoppingBasket className="h-7 w-7 shrink-0" />}
+                  <span className={`min-w-0 ${photo ? TEXT_SHADOW : ""}`}>
+                    <span className={photo ? "absolute right-2 top-2 rounded-full bg-amber-400 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-slate-900 [text-shadow:none]" : "mb-1 inline-block rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300"}>Popular</span>
+                    <span className={`block font-extrabold leading-tight ${photo ? "text-[13px]" : "text-[15px]"}`}>Buy Anything <span className="font-bold">(Custom Book)</span></span>
+                    <span className={`block font-semibold ${photo ? "text-[10px] opacity-95" : "text-[11px]"}`}>എന്തും വാങ്ങാം</span>
                   </span>
                 </>
               )}
             </ImageTile>
 
-            <ImageTile slot="pick_drop" onClick={() => openCustom("PICK_DROP")} className={`flex min-h-[5.25rem] items-center gap-2 rounded-2xl p-3 text-left shadow-sm ${press}`} plain="border border-slate-200/80 bg-white text-slate-900">
+            <ImageTile slot="pick_drop" onClick={() => openCustom("PICK_DROP")} className={`flex min-h-[5.25rem] rounded-2xl text-left shadow-sm ${press}`} plain="items-center gap-2 border border-slate-200/80 bg-white p-3 text-slate-900" withImage="items-end p-3 text-white">
               {(photo) => (
                 <>
-                  <Truck className={`h-7 w-7 shrink-0 ${photo ? "" : "text-flame-700"}`} />
-                  <span className="min-w-0">
-                    <span className="block text-[15px] font-extrabold leading-tight">Pick &amp; Drop / Mini Truck</span>
-                    <span className={`block text-[11px] font-semibold ${photo ? "opacity-90" : "text-slate-500"}`}>പിക്ക് &amp; ഡ്രോപ്പ് · മിനി ട്രക്ക്</span>
+                  {!photo && <Truck className="h-7 w-7 shrink-0 text-flame-700" />}
+                  <span className={`min-w-0 ${photo ? TEXT_SHADOW : ""}`}>
+                    <span className={`block font-extrabold leading-tight ${photo ? "text-[13px]" : "text-[15px]"}`}>Pick &amp; Drop / Mini Truck</span>
+                    <span className={`block font-semibold ${photo ? "text-[10px] opacity-95" : "text-[11px] text-slate-500"}`}>പിക്ക് &amp; ഡ്രോപ്പ് · മിനി ട്രക്ക്</span>
                   </span>
                 </>
               )}
             </ImageTile>
 
-            <ImageTile slot="mart" onClick={() => navigate("/shop/mart")} className={`col-span-2 flex items-center gap-3 rounded-2xl p-4 text-left shadow-sm ${press}`} plain="bg-gradient-to-r from-emerald-600 to-emerald-500 text-white">
+            <ImageTile slot="mart" onClick={() => navigate("/shop/mart")} className={`col-span-2 flex rounded-2xl text-left shadow-sm ${press}`} plain="items-center gap-3 bg-gradient-to-r from-emerald-600 to-emerald-500 p-4 text-white" withImage="min-h-[4.5rem] items-end p-3 text-white">
               {(photo) => (
                 <>
-                  <ShoppingBasket className="h-8 w-8 shrink-0" />
-                  <span className="min-w-0">
-                    <span className="block text-lg font-extrabold leading-tight">DropPutt Mart</span>
-                    <span className="block text-xs font-medium text-emerald-50">Grocery · Fish &amp; Meat · Medicines · മാർട്ട്</span>
+                  {!photo && <ShoppingBasket className="h-8 w-8 shrink-0" />}
+                  <span className={`min-w-0 ${photo ? TEXT_SHADOW : ""}`}>
+                    <span className={`block font-extrabold leading-tight ${photo ? "text-[15px]" : "text-lg"}`}>DropPutt Mart</span>
+                    <span className={`block font-medium ${photo ? "text-[11px] opacity-95" : "text-xs text-emerald-50"}`}>Grocery · Fish &amp; Meat · Medicines · മാർട്ട്</span>
                   </span>
                   {!photo && <span className="pointer-events-none absolute -bottom-3 -right-1 text-6xl opacity-25" aria-hidden="true">🛒</span>}
                 </>
