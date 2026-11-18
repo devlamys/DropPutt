@@ -45,17 +45,18 @@ export default {
           900: "#1C3027",
           950: "#0F2018",
         },
+        // Red-orange by default; the Mart switches these variables to green (see index.css).
         flame: {
-          50: "#FFF1EC",
-          100: "#FFDFD3",
-          200: "#FFBFA6",
-          300: "#FF9774",
-          400: "#F56A41",
-          500: "#E8431A",
-          600: "#D93A12",
-          700: "#B02E0E",
-          800: "#8A250E",
-          900: "#6C1F0F",
+          50: "rgb(var(--flame-50) / <alpha-value>)",
+          100: "rgb(var(--flame-100) / <alpha-value>)",
+          200: "rgb(var(--flame-200) / <alpha-value>)",
+          300: "rgb(var(--flame-300) / <alpha-value>)",
+          400: "rgb(var(--flame-400) / <alpha-value>)",
+          500: "rgb(var(--flame-500) / <alpha-value>)",
+          600: "rgb(var(--flame-600) / <alpha-value>)",
+          700: "rgb(var(--flame-700) / <alpha-value>)",
+          800: "rgb(var(--flame-800) / <alpha-value>)",
+          900: "rgb(var(--flame-900) / <alpha-value>)",
         },
         // The whole app (rider, vendor, admin, login) shares the brand red-orange.
         orange: {

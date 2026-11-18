@@ -12,6 +12,7 @@ const CustomerDropPage = lazy(() => import("./pages/CustomerDropPage.jsx"));
 const Storefront = lazy(() => import("./pages/Storefront.jsx"));
 const StorefrontHome = lazy(() => import("./pages/StorefrontHome.jsx"));
 const RestaurantsPage = lazy(() => import("./pages/RestaurantsPage.jsx"));
+const MartPage = lazy(() => import("./pages/MartPage.jsx"));
 const ShopDishes = lazy(() => import("./pages/ShopDishes.jsx"));
 const ShopMenu = lazy(() => import("./pages/ShopMenu.jsx"));
 const RiderDashboard = lazy(() => import("./pages/RiderDashboard.jsx"));
@@ -56,6 +57,7 @@ export default function App() {
       <Route path="/shop" element={<Storefront />}>
         <Route index element={<StorefrontHome />} />
         <Route path="restaurants" element={<RestaurantsPage />} />
+        <Route path="mart" element={<MartPage />} />
         <Route path="restaurant/:vendorId" element={<ShopDishes />} />
         <Route path=":vendorId" element={<ShopMenu />} />
       </Route>

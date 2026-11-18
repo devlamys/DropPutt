@@ -5,6 +5,7 @@ import DishGrid from "../components/shop/DishGrid.jsx";
 import { categoryOf } from "../components/shop/visuals.js";
 import { useDebounced } from "../hooks/useDebounced.js";
 import { useProducts } from "../hooks/useProducts.js";
+import { useTheme } from "../hooks/useTheme.js";
 import { inr } from "../utils/format.js";
 
 /** One shop's dishes: the same list as the home page, filtered to this shop. */
@@ -15,6 +16,7 @@ export default function ShopDishes() {
   const q = useDebounced(query.trim(), 300);
   const list = useProducts({ vendorId: Number(vendorId), q: q.length >= 2 ? q : "" });
   const shop = list.shop;
+  useTheme(shop && !["HOTEL", "BAKERY_COOLBAR"].includes(shop.shop_category) ? "mart" : null);
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [vendorId]);

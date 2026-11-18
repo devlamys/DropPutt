@@ -3,6 +3,32 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Brand colour ramp as variables so a section (the Mart) can re-colour the same UI. */
+:root {
+  --flame-50: 255 241 236;
+  --flame-100: 255 223 211;
+  --flame-200: 255 191 166;
+  --flame-300: 255 151 116;
+  --flame-400: 245 106 65;
+  --flame-500: 232 67 26;
+  --flame-600: 217 58 18;
+  --flame-700: 176 46 14;
+  --flame-800: 138 37 14;
+  --flame-900: 108 31 15;
+}
+[data-theme="mart"] {
+  --flame-50: 236 253 243;
+  --flame-100: 209 250 223;
+  --flame-200: 166 244 197;
+  --flame-300: 108 233 166;
+  --flame-400: 50 213 131;
+  --flame-500: 18 183 106;
+  --flame-600: 3 152 85;
+  --flame-700: 2 122 72;
+  --flame-800: 5 96 58;
+  --flame-900: 5 79 49;
+}
+
 body {
   @apply bg-slate-50 text-slate-900 antialiased;
 }

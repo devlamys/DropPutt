@@ -2,6 +2,7 @@ import { ArrowLeft, Search } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import ShopCard from "../components/shop/ShopCard.jsx";
+import { useTheme } from "../hooks/useTheme.js";
 import { useStorefront } from "../components/shop/StorefrontContext.jsx";
 
 const FOOD_SHOPS = ["HOTEL", "BAKERY_COOLBAR"];
@@ -11,6 +12,7 @@ export default function RestaurantsPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const mart = params.get("group") === "mart";
+  useTheme(mart ? "mart" : null);
   const { vendors, closedVendors, loading, feed, cart } = useStorefront();
   const [query, setQuery] = useState("");
   const inGroup = (v) => (FOOD_SHOPS.includes(v.shop_category) ? !mart : mart);

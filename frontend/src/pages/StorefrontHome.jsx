@@ -272,9 +272,13 @@ export default function StorefrontHome() {
               </span>
             </button>
 
-            <button type="button" onClick={() => navigate("/shop/restaurants?group=mart")} className={`col-span-2 flex items-center gap-2 rounded-2xl border border-slate-200/80 bg-white p-3 text-left shadow-sm ${press}`}>
-              <ShoppingBasket className="h-6 w-6 shrink-0 text-flame-700" />
-              <span className="text-sm font-extrabold">Grocery · Fish &amp; Meat · Medical <span className="font-semibold text-slate-500">ഷോപ്പുകൾ</span></span>
+            <button type="button" onClick={() => navigate("/shop/mart")} className={`relative col-span-2 flex items-center gap-3 overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 p-4 text-left text-white shadow-sm ${press}`}>
+              <ShoppingBasket className="h-8 w-8 shrink-0" />
+              <span className="min-w-0">
+                <span className="block text-lg font-extrabold leading-tight">DropPutt Mart</span>
+                <span className="block text-xs font-medium text-emerald-50">Grocery · Fish &amp; Meat · Medicines · മാർട്ട്</span>
+              </span>
+              <span className="pointer-events-none absolute -bottom-3 -right-1 text-6xl opacity-25" aria-hidden="true">🛒</span>
             </button>
           </section>
 
