@@ -3519,3 +3519,19 @@ The customer home screen has five tiles with a photo behind the text: `restauran
 
 * `GET /marketplace/products?category=OFFERS` (food group only; 422 for the Mart) lists orderable items whose offer is running (`offer_price` set and `offer_ends_at` empty or in the future). It is also a chip, "Offers", in the home tabs.
 * The home screen shows "Special offers" with the first four such dishes as a normal grid above the tabs (no sideways scrolling), with "See all" opening the Offers tab. The block is hidden when there are no offers, or while the Offers tab itself is open.
+
+# 65. One code base, four apps
+
+The frontend is one code base built as four apps (`frontend/src/appMode.js`, `vite.config.js`). `vite --mode <app>` / `npm run build:<app>` (outputs `dist-<app>/`); with no mode it is the combined web build (`all`, used by the Docker deploy and development).
+
+| App | Contains | Login | Start page |
+|---|---|---|---|
+| `customer` | storefront, Magic Link tracking | none (orders without an account) | `/shop` |
+| `vendor` | shop dashboard, menu, history | vendors only | `/vendor` |
+| `rider` | rider dashboard, earnings | riders only | `/rider` |
+| `admin` | franchise / super admin console | admins only | `/admin` |
+
+* A build leaves out the other apps' pages and routes (the vendor build has no rider or admin code). Each build has its own page title, splash text and web manifest (name, start page).
+* **Login gate (server side):** `POST /auth/login` accepts `app` = `vendor | rider | admin`. After the PIN is verified, a role that does not belong to that app gets `403 WRONG_APP` ("This is the Rider app. Your account is for the Vendor app."); a wrong PIN is still `401`, so nothing about an account type leaks. Without `app` (plain web login) every role signs in as before; any other value is `422`. The apps always send it.
+* **Staying signed in:** refresh tokens issued to the vendor and rider apps last 180 days (`APP_REFRESH_TOKEN_EXPIRES_DAYS`), admin and the plain web login 30; each use rotates the token and keeps the app and its lifetime (`refresh_tokens.app`). Only the user's own sign-out ends the session.
+* Next (not built yet): wrap each build in a native shell (Capacitor) with native push, background location for the rider, secure token storage; only the customer app goes to the Play Store.

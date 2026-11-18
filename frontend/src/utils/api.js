@@ -213,9 +213,10 @@ export function getErrorMessage(error, fallback = "Something went wrong. Please 
 // ---- auth calls -----------------------------------------------------------
 
 /** POST /auth/login. `franchiseSlug` overrides the host slug (e.g. "admin"). */
-export async function login({ phone, pin, franchiseSlug }) {
+export async function login({ phone, pin, franchiseSlug, app }) {
   const body = { phone, pin };
   if (franchiseSlug) body.franchise_slug = franchiseSlug;
+  if (app) body.app = app; // the app only signs in its own role; the server refuses the others
   const { data } = await api.post("/auth/login", body, { skipAuth: true });
   return data.data;
 }

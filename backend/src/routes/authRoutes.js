@@ -14,12 +14,23 @@ import {
 } from "../middleware/rateLimit.js";
 import { loadActiveFranchise, normalizeSlug } from "../middleware/resolveTenant.js";
 import { normalizePhone } from "../utils/phone.js";
-import { asyncHandler, ok, unauthenticated, validationError } from "../utils/response.js";
+import { AppError, asyncHandler, ok, unauthenticated, validationError } from "../utils/response.js";
 import { parse } from "../utils/validate.js";
 
 const router = Router();
 
-const REFRESH_TTL_SECONDS = env.refreshTokenTtlDays * 24 * 60 * 60;
+const DAY = 24 * 60 * 60;
+const REFRESH_TTL_SECONDS = env.refreshTokenTtlDays * DAY;
+
+// Each app signs in only the roles it is for. The customer app has no login.
+export const APP_ROLES = Object.freeze({
+  vendor: ["VENDOR"],
+  rider: ["RIDER"],
+  admin: ["FRANCHISE_ADMIN", "SUPER_ADMIN"],
+});
+const APP_LABELS = { vendor: "Vendor", rider: "Rider", admin: "Admin" };
+const ROLE_APP = { VENDOR: "vendor", RIDER: "rider", FRANCHISE_ADMIN: "admin", SUPER_ADMIN: "admin" };
+const ttlFor = (app) => (app === "vendor" || app === "rider" ? env.appRefreshTokenTtlDays * DAY : REFRESH_TTL_SECONDS);
 
 const sha256 = (value) => crypto.createHash("sha256").update(value).digest("hex");
 
@@ -32,20 +43,22 @@ const sha256 = (value) => crypto.createHash("sha256").update(value).digest("hex"
 const dummyHashPromise = argon2.hash(crypto.randomBytes(16).toString("hex"));
 
 /** Creates a refresh-token row and returns the token pair. */
-async function issueTokens(db, user) {
+async function issueTokens(db, user, app = null) {
   const refreshToken = crypto.randomBytes(32).toString("hex");
+  const ttl = ttlFor(app);
   const session = await db.refreshToken.create({
     data: {
       user_id: user.id,
       token_hash: sha256(refreshToken),
-      expires_at: new Date(Date.now() + REFRESH_TTL_SECONDS * 1000),
+      expires_at: new Date(Date.now() + ttl * 1000),
+      app,
     },
   });
   return {
     access_token: signAccessToken(user, session.id),
     refresh_token: refreshToken,
     access_token_expires_in: env.accessTokenTtlSeconds,
-    refresh_token_expires_in: REFRESH_TTL_SECONDS,
+    refresh_token_expires_in: ttl,
     user: {
       id: user.id,
       name: user.name,
@@ -59,6 +72,8 @@ const loginSchema = z.object({
   phone: z.union([z.string(), z.number()]),
   pin: z.string().min(4).max(12),
   franchise_slug: z.string().max(63).optional(),
+  // Which app is signing in; it only accepts its own role. Omitted = the plain web login (any role).
+  app: z.enum(["vendor", "rider", "admin"]).optional(),
 });
 
 // POST /api/v1/auth/login
@@ -109,7 +124,17 @@ router.post(
       throw unauthenticated("Invalid phone or PIN");
     }
 
-    ok(res, await issueTokens(prisma, user));
+    // Checked after the PIN, so a wrong guess never reveals which kind of account a number is.
+    if (body.app && !APP_ROLES[body.app].includes(user.role)) {
+      const own = ROLE_APP[user.role];
+      throw new AppError(
+        403,
+        "WRONG_APP",
+        `This is the ${APP_LABELS[body.app]} app. Your account is for the ${APP_LABELS[own] ?? "other"} app.`
+      );
+    }
+
+    ok(res, await issueTokens(prisma, user, body.app ?? null));
   })
 );
 
@@ -148,7 +173,7 @@ router.post(
         where: { id: stored.id, revoked: false },
         data: { revoked: true },
       });
-      return count === 1 ? issueTokens(tx, stored.user) : null;
+      return count === 1 ? issueTokens(tx, stored.user, stored.app) : null;
     });
     if (!tokens) {
       await revokeFamily();

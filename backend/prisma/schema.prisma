@@ -624,6 +624,8 @@ model RefreshToken {
   token_hash String   @unique   // SHA-256 hex of the opaque token
   expires_at DateTime
   revoked    Boolean  @default(false)
+  // Which app signed in ("vendor", "rider", "admin"); null = the plain web login. Kept when the token rotates.
+  app        String?
   created_at DateTime @default(now())
 
   user User @relation(fields: [user_id], references: [id])

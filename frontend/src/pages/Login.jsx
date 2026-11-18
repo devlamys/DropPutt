@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Bike, Loader2, ShieldCheck, Store, UserCog } from "lucide-react";
 import LogoMark from "../components/LogoMark.jsx";
+import { APP, APP_INFO } from "../appMode.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { getErrorMessage, getHostSlug } from "../utils/api.js";
 
@@ -46,7 +47,7 @@ export default function Login() {
     setBusy(key);
     setError("");
     try {
-      await signIn(credentials);
+      await signIn({ ...credentials, app: APP_INFO.loginApp });
       navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(getErrorMessage(err, "Could not sign in. Please try again."));
@@ -60,12 +61,14 @@ export default function Login() {
   }
 
   const disabled = busy !== null;
+  // An app only offers the demo accounts it can sign in (the vendor app shows the vendor, and so on).
+  const demoAccounts = DEMO_ACCOUNTS.filter((a) => APP === "all" || a.key.endsWith(APP === "admin" ? "admin" : APP));
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-6 px-4 py-10">
       <header className="text-center">
         <LogoMark size={56} className="mx-auto drop-shadow" />
-        <h1 className="mt-4 text-2xl font-bold tracking-tight">DropPutt</h1>
+        <h1 className="mt-4 text-2xl font-bold tracking-tight">{APP_INFO.name}</h1>
         <p className="mt-1 text-sm text-slate-500">
           Sign in to <span className="font-medium capitalize">{getHostSlug()}</span>
         </p>
@@ -127,7 +130,7 @@ export default function Login() {
         </button>
       </form>
 
-      {SHOW_DEMO && (
+      {SHOW_DEMO && demoAccounts.length > 0 && (
         <section aria-labelledby="demo-heading" className="space-y-3">
           <h2
             id="demo-heading"
@@ -136,7 +139,7 @@ export default function Login() {
             Quick demo login
           </h2>
           <div className="grid grid-cols-2 gap-3">
-            {DEMO_ACCOUNTS.map(({ key, label, hint, phone: demoPhone, icon: Icon, franchiseSlug }) => (
+            {demoAccounts.map(({ key, label, hint, phone: demoPhone, icon: Icon, franchiseSlug }) => (
               <button
                 key={key}
                 type="button"

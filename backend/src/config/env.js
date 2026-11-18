@@ -53,6 +53,8 @@ export const env = Object.freeze({
   jwtSecret: resolveJwtSecret(),
   accessTokenTtlSeconds: 15 * 60,
   refreshTokenTtlDays: Number(process.env.REFRESH_TOKEN_EXPIRES_DAYS) || 30,
+  // Vendor and rider apps stay signed in much longer (each use renews it); only sign-out ends it.
+  appRefreshTokenTtlDays: Number(process.env.APP_REFRESH_TOKEN_EXPIRES_DAYS) || 180,
   // Used when x-franchise-slug is absent. Never applied in production.
   defaultFranchiseSlug: isProduction
     ? null

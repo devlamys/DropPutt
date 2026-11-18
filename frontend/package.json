@@ -8,7 +8,16 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:customer": "vite --mode customer --port 5171",
+    "dev:vendor": "vite --mode vendor --port 5172",
+    "dev:rider": "vite --mode rider --port 5174",
+    "dev:admin": "vite --mode admin --port 5175",
     "build": "vite build",
+    "build:customer": "vite build --mode customer --outDir dist-customer",
+    "build:vendor": "vite build --mode vendor --outDir dist-vendor",
+    "build:rider": "vite build --mode rider --outDir dist-rider",
+    "build:admin": "vite build --mode admin --outDir dist-admin",
+    "build:apps": "npm run build:customer && npm run build:vendor && npm run build:rider && npm run build:admin",
     "preview": "vite preview"
   },
   "dependencies": {
