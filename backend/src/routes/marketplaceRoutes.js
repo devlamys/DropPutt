@@ -206,6 +206,7 @@ const MART_CATEGORIES = Object.freeze([
   { key: "MEDICAL_PHARMACY", label: "Medical" },
 ]);
 const SNACKS_NOW = { key: "EVENING_SNACKS", label: "4 PM Snacks" };
+const OFFERS = { key: "OFFERS", label: "Offers" }; // items with a running offer
 
 const productsSchema = z
   .object({
@@ -218,7 +219,7 @@ const productsSchema = z
     if (!value.category || value.vendor_id) return;
     const allowed =
       value.group === "FOOD"
-        ? [...FOOD_CATEGORIES.map((c) => c.key), SNACKS_NOW.key]
+        ? [...FOOD_CATEGORIES.map((c) => c.key), SNACKS_NOW.key, OFFERS.key]
         : MART_CATEGORIES.map((c) => c.key);
     if (!allowed.includes(value.category)) {
       ctx.addIssue({ code: "custom", path: ["category"], message: "unknown category" });
@@ -271,7 +272,10 @@ router.get(
           },
       ...(q ? { name: { contains: q, mode: "insensitive" } } : {}),
       ...(!vendor_id && group === "FOOD" && category === SNACKS_NOW.key ? { slot_type: "EVENING_SNACKS_3_TO_6" } : {}),
-      ...(!vendor_id && group === "FOOD" && category && category !== SNACKS_NOW.key ? { food_category: category } : {}),
+      ...(!vendor_id && group === "FOOD" && category && ![SNACKS_NOW.key, OFFERS.key].includes(category) ? { food_category: category } : {}),
+      ...(!vendor_id && group === "FOOD" && category === OFFERS.key
+        ? { AND: [{ offer_price: { not: null } }, { OR: [{ offer_ends_at: null }, { offer_ends_at: { gt: now } }] }] }
+        : {}),
     };
 
     // The time-slot rules live in code, so scan in chunks until a page is filled.

@@ -3514,3 +3514,8 @@ The customer home screen has five tiles with a photo behind the text: `restauran
 * **Super Admin upload:** `PUT /super/site-images/:slot` (multipart `image`, JPEG/PNG/WebP up to 3 MB; SUPER_ADMIN only; unknown slot or file type → 422) stores it (`site_images`, one row per slot, the same for every franchise); `DELETE /super/site-images/:slot` returns to the built-in photo. The admin dashboard tab "Home photos" (Super Admin only) shows each slot with a preview, Change and Reset; the browser shrinks the picture (about 1200 px) before upload.
 * **Reading:** `GET /public/site-images` → `{ images: { slot: url } }` (cached 60 s). Slots not set are missing.
 * The 4 PM banner uses a small glass icon instead of an emoji.
+
+## 63.5 Offers on the home screen
+
+* `GET /marketplace/products?category=OFFERS` (food group only; 422 for the Mart) lists orderable items whose offer is running (`offer_price` set and `offer_ends_at` empty or in the future). It is also a chip, "Offers", in the home tabs.
+* The home screen shows "Special offers" with the first four such dishes as a normal grid above the tabs (no sideways scrolling), with "See all" opening the Offers tab. The block is hidden when there are no offers, or while the Offers tab itself is open.

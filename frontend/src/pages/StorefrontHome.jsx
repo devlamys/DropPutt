@@ -8,7 +8,6 @@ import ShopCard from "../components/shop/ShopCard.jsx";
 import { useDebounced } from "../hooks/useDebounced.js";
 import { useProducts } from "../hooks/useProducts.js";
 import { placeName } from "../components/shop/chrome.jsx";
-import Stepper from "../components/shop/Stepper.jsx";
 import { useStorefront } from "../components/shop/StorefrontContext.jsx";
 import { categoryOf } from "../components/shop/visuals.js";
 import { inr } from "../utils/format.js";
@@ -37,6 +36,8 @@ function snackWindow(now) {
 
 // Keeps white text readable on any photo.
 const TEXT_SHADOW = "[text-shadow:0_1px_6px_rgba(0,0,0,0.6)]";
+
+const OFFER_PREVIEW = 4; // offers shown above the tabs
 
 const press = "transition-transform active:scale-[0.98]";
 
@@ -86,7 +87,7 @@ function BottomNav({ cartCount, orderCount, onHome, onSearch, onCart, onOrders }
 
 export default function StorefrontHome() {
   const {
-    feed, vendors, closedVendors, zone, loading, error, reload, cart, quantityOf, addProduct, removeOne, openZones,
+    feed, vendors, closedVendors, zone, loading, error, reload, cart, openZones,
     totals, minOrder, cartShop, openCart, openCustom, openOrders, openVendor, orderCount, franchiseName, place, toast,
   } = useStorefront();
   const [query, setQuery] = useState("");
@@ -96,6 +97,9 @@ export default function StorefrontHome() {
   const settled = useDebounced(text, 300);
   const showSearch = text.length >= 2 && settled.length >= 2;
   const list = useProducts({ group: "FOOD", category: showSearch ? "" : category, q: showSearch ? settled : "" });
+  const [allOffers, setAllOffers] = useState(false);
+  const offers = useProducts({ group: "FOOD", category: "OFFERS", limit: OFFER_PREVIEW + 2 });
+  const offerPreview = offers.items.slice(0, OFFER_PREVIEW);
   const goDishes = (key) => {
     setQuery("");
     if (key !== undefined) setCategory(key);
@@ -127,8 +131,6 @@ export default function StorefrontHome() {
   const town = place || franchiseName || placeName() || "your town";
   const snackMin = feed?.pinned?.min_order_value ?? "80";
 
-  const allProducts = useMemo(() => vendors.flatMap((shop) => shop.products.map((product) => ({ product, shop }))), [vendors]);
-  const offers = useMemo(() => allProducts.filter(({ product }) => product.original_price), [allProducts]);
 
   const shopHits = useMemo(() => {
     const needle = text.toLowerCase();
@@ -296,27 +298,18 @@ export default function StorefrontHome() {
             </ImageTile>
           </section>
 
-          {/* 3b. Special offers (the hotels' own discounts) */}
-          {offers.length > 0 && (
-            <section aria-label="Special offers">
-              <h2 className="mb-2 px-4 text-lg font-extrabold">Special offers</h2>
-              <div className="flex gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {offers.slice(0, 12).map(({ product, shop }) => (
-                  <div key={product.id} className="flex w-44 shrink-0 flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm">
-                    <div>
-                      {product.offer_label && <span className="rounded-full bg-flame-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">{product.offer_label}</span>}
-                      <p className="mt-2 line-clamp-2 text-sm font-bold leading-snug">{product.name}</p>
-                      <p className="truncate text-xs text-slate-500">{shop.shop_name}</p>
-                      <p className="mt-1 text-base font-extrabold tabular-nums">
-                        {inr(product.price)} <span className="text-xs font-semibold text-slate-400 line-through">{inr(product.original_price)}</span>
-                      </p>
-                    </div>
-                    <div className="mt-2">
-                      <Stepper compact quantity={quantityOf(product.id)} label={product.name} onAdd={() => addProduct(product, shop.shop_name)} onRemove={() => removeOne(product.id)} />
-                    </div>
-                  </div>
-                ))}
+          {/* 3b. Special offers: a short list above the tabs; "See all" opens the whole list in place */}
+          {offers.items.length > 0 && (
+            <section aria-label="Special offers" className="px-4">
+              <div className="mb-2 flex items-end justify-between">
+                <h2 className="text-lg font-extrabold">Special offers</h2>
+                {(offers.hasMore || offers.items.length > OFFER_PREVIEW) && (
+                  <button type="button" onClick={() => setAllOffers((v) => !v)} className="text-sm font-bold text-flame-700">
+                    {allOffers ? "Show less" : "See all"}
+                  </button>
+                )}
               </div>
+              <DishGrid list={allOffers ? offers : { ...offers, items: offerPreview, hasMore: false, loadingMore: false }} empty={null} />
             </section>
           )}
 

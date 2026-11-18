@@ -553,6 +553,18 @@ describe("products list: dishes, Mart and a shop's page", () => {
     assert.equal((await list("?group=MART&category=BIRYANI")).status, 422);
   });
 
+  it("lists only items with a running offer (category=OFFERS, used by the home offers block)", async () => {
+    await dish({ name: "Offer dish", price: 100, offer_price: 80, offer_label: "20% off" });
+    await dish({ name: "Ended offer", price: 100, offer_price: 80, offer_label: "old", offer_ends_at: new Date(Date.now() - 60_000) });
+    await dish({ name: "No offer", price: 100 });
+    const res = await list("?category=OFFERS");
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.deepEqual(names(res), ["Offer dish"]);
+    assert.equal(res.body.data.items[0].original_price, "100.00");
+    assert.ok(!res.body.data.categories.some((c) => c.key === "OFFERS"), "offers are not a tab");
+    assert.equal((await list("?group=MART&category=OFFERS")).status, 422);
+  });
+
   it("searches by dish name", async () => {
     await dish({ name: "Chicken biryani", price: 150 });
     assert.deepEqual(names(await list("?q=chicken")), ["Chicken biryani"]);

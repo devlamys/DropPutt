@@ -8,7 +8,7 @@ const PAGE = 12;
  * Pages through GET /marketplace/products (dishes, Mart items, or one shop's menu).
  * Changing a filter starts over; `loadMore` appends the next page without repeats.
  */
-export function useProducts({ group = "FOOD", category = "", vendorId = null, q = "" } = {}) {
+export function useProducts({ group = "FOOD", category = "", vendorId = null, q = "", limit = PAGE } = {}) {
   const [items, setItems] = useState([]);
   const [meta, setMeta] = useState({ categories: [], shop: null, isChayakadi: false });
   const [loading, setLoading] = useState(true);
@@ -25,7 +25,7 @@ export function useProducts({ group = "FOOD", category = "", vendorId = null, q 
       busy.current = true;
       first ? setLoading(true) : setLoadingMore(true);
       try {
-        const params = { limit: PAGE, group };
+        const params = { limit, group };
         if (category) params.category = category;
         if (vendorId) params.vendor_id = vendorId;
         if (q) params.q = q;
@@ -59,7 +59,7 @@ export function useProducts({ group = "FOOD", category = "", vendorId = null, q 
         }
       }
     },
-    [group, category, vendorId, q]
+    [group, category, vendorId, q, limit]
   );
 
   // A new filter (or a reload) starts again from the first page.
