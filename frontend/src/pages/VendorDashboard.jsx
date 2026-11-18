@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import CancelOrderModal from "../components/CancelOrderModal.jsx";
 import Modal from "../components/Modal.jsx";
 import CashHandoverCard from "../components/vendor/CashHandoverCard.jsx";
-import EnableAlertsButton from "../components/EnableAlertsButton.jsx";
+import AlertsPrompt from "../components/AlertsPrompt.jsx";
 import OrderItemList from "../components/OrderItemList.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useToast } from "../components/Toast.jsx";
@@ -233,6 +233,7 @@ export default function VendorDashboard() {
     <div className="mx-auto min-h-screen max-w-3xl pb-10">
       {toastNode}
 
+      <AlertsPrompt />
       <header className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
         <div className="min-w-0">
           <h1 className="truncate text-lg font-bold">{shop?.shop_name ?? user.name}</h1>
@@ -246,7 +247,6 @@ export default function VendorDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <EnableAlertsButton />
           {shop && (
             <button
               type="button"
