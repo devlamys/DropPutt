@@ -2,6 +2,7 @@ import { ArrowLeft, Search, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import DishGrid from "../components/shop/DishGrid.jsx";
+import MedicalNotice from "../components/shop/MedicalNotice.jsx";
 import { categoryOf } from "../components/shop/visuals.js";
 import { useDebounced } from "../hooks/useDebounced.js";
 import { useProducts } from "../hooks/useProducts.js";
@@ -49,6 +50,7 @@ export default function ShopDishes() {
         </label>
       </header>
       <main className="px-4 pt-4">
+        {shop?.shop_category === "MEDICAL_PHARMACY" && <MedicalNotice className="mb-3" />}
         <DishGrid
           list={list}
           empty={

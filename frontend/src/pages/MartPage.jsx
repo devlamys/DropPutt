@@ -2,6 +2,7 @@ import { ArrowLeft, Search, Store, Utensils, X } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DishGrid from "../components/shop/DishGrid.jsx";
+import MedicalNotice from "../components/shop/MedicalNotice.jsx";
 import { useDebounced } from "../hooks/useDebounced.js";
 import { useProducts } from "../hooks/useProducts.js";
 import { useTheme } from "../hooks/useTheme.js";
@@ -65,6 +66,8 @@ export default function MartPage() {
           <Store className="h-6 w-6 shrink-0 text-flame-700" />
           <span className="text-sm font-bold text-flame-900">Browse the stores <span className="font-semibold text-flame-700">· കടകൾ കാണൂ</span></span>
         </button>
+
+        {category === "MEDICAL_PHARMACY" && <MedicalNotice className="mx-4" />}
 
         <div className="px-4">
           <DishGrid

@@ -2,6 +2,7 @@ import { ChevronRight, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { inr } from "../../utils/format.js";
+import MedicalNotice from "./MedicalNotice.jsx";
 import { ProductImage } from "./parts.jsx";
 import Stepper from "./Stepper.jsx";
 import { useStorefront } from "./StorefrontContext.jsx";
@@ -87,6 +88,7 @@ function DishSheet({ product, onClose }) {
             {product.offer_label && product.original_price && <p className="mt-1 text-sm font-bold text-flame-700">{product.offer_label}</p>}
           </div>
           {product.description && <p className="text-sm text-slate-600">{product.description}</p>}
+          {product.shop_category === "MEDICAL_PHARMACY" && <MedicalNotice />}
           <button
             type="button"
             onClick={() => { onClose(); navigate(`/shop/restaurant/${product.vendor_id}`); }}
