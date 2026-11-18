@@ -3,9 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#ea580c" />
+    <meta name="theme-color" content="#E8431A" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="icon" type="image/png" href="/icon-192.png" />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -16,8 +17,33 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Malayalam:wght@400;600&family=Poppins:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <style>
+      #splash{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#E8431A;color:#fff;font-family:Inter,system-ui,sans-serif;transition:opacity .3s ease}
+      #splash.hide{opacity:0;pointer-events:none}
+      #splash .mark{animation:sp-drop .7s cubic-bezier(.3,1.5,.5,1) both}
+      #splash .shadow{width:56px;height:8px;border-radius:50%;background:rgba(0,0,0,.22);margin-top:10px;animation:sp-shadow .7s ease-out both}
+      #splash .name{margin-top:18px;font-size:30px;font-weight:700;letter-spacing:-.03em;animation:sp-fade .5s .45s both}
+      #splash .tag{margin-top:6px;font-size:10px;font-weight:700;letter-spacing:.16em;opacity:.85;animation:sp-fade .5s .6s both}
+      @keyframes sp-drop{0%{transform:translateY(-120px);opacity:0}60%{opacity:1}100%{transform:none;opacity:1}}
+      @keyframes sp-shadow{0%{transform:scale(.3);opacity:0}100%{transform:scale(1);opacity:1}}
+      @keyframes sp-fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+      @media (prefers-reduced-motion:reduce){#splash *{animation:none!important}}
+    </style>
   </head>
   <body>
+    <div id="splash" aria-hidden="true">
+      <svg class="mark" viewBox="4 6 56 56" width="96" height="96" fill="none">
+        <rect x="4" y="6" width="56" height="56" rx="15" fill="#fff" />
+        <path d="M32 16L46 24V40L32 48L18 40V24L32 16Z" fill="#E8431A" />
+        <path d="M32 16L46 24L32 32L18 24L32 16Z" fill="#FFB9A4" />
+        <circle cx="32" cy="24" r="3.5" fill="#fff" />
+        <path d="M32 32V48" stroke="#fff" stroke-width="2.5" stroke-linecap="round" />
+        <path d="M18 24L32 32L46 24" stroke="#fff" stroke-width="2.2" stroke-linejoin="round" />
+      </svg>
+      <div class="shadow"></div>
+      <div class="name">DropPutt</div>
+      <div class="tag">FOOD • GROCERY • MINI-TRUCK</div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

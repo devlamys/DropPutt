@@ -59,12 +59,12 @@ export function formatDistance(metres) {
 // Map styling shared by the customer and rider maps.
 export const ROUTE_STYLE = {
   casing: { color: "#ffffff", weight: 9, opacity: 0.95, lineCap: "round", lineJoin: "round" },
-  line: { color: "#ea580c", weight: 5, opacity: 1, lineCap: "round", lineJoin: "round" },
+  line: { color: "#E8431A", weight: 5, opacity: 1, lineCap: "round", lineJoin: "round" },
   // Thin moving dashes on top show the direction of travel (animated in index.css).
   flow: { color: "#fff7ed", weight: 2, opacity: 0.9, dashArray: "2 12", className: "dp-route-flow" },
   // Last stretch from the end of the road to the gate, and the no-route fallback.
   walk: { color: "#64748b", weight: 3, opacity: 0.9, dashArray: "4 8" },
-  straight: { color: "#ea580c", weight: 4, dashArray: "8 8" },
+  straight: { color: "#E8431A", weight: 4, dashArray: "8 8" },
 };
 
 // A road that stops this far or more from the gate gets the dashed "walk" leg.

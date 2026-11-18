@@ -11,9 +11,9 @@ export default {
         "check-draw": { to: { strokeDashoffset: "0" } },
         "scale-in": { from: { transform: "scale(0.6)", opacity: "0" }, to: { transform: "scale(1)", opacity: "1" } },
         "ring-pulse": {
-          "0%": { boxShadow: "0 0 0 0 rgba(249,115,22,0.65)" },
-          "70%": { boxShadow: "0 0 0 14px rgba(249,115,22,0)" },
-          "100%": { boxShadow: "0 0 0 0 rgba(249,115,22,0)" },
+          "0%": { boxShadow: "0 0 0 0 rgba(232,67,26,0.65)" },
+          "70%": { boxShadow: "0 0 0 14px rgba(232,67,26,0)" },
+          "100%": { boxShadow: "0 0 0 0 rgba(232,67,26,0)" },
         },
       },
       animation: {
@@ -31,7 +31,7 @@ export default {
         display: ["Poppins", "Inter", "Noto Sans Malayalam", "system-ui", "sans-serif"],
       },
       colors: {
-        // Storefront palette: deep kitchen green + warm orange.
+        // Brand palette: DropPutt red-orange (flame) + deep kitchen green (pine, storefront chrome).
         pine: {
           50: "#F2F6F3",
           100: "#DFE9E3",
@@ -46,16 +46,29 @@ export default {
           950: "#0F2018",
         },
         flame: {
-          50: "#FFF5EA",
-          100: "#FFE7CF",
-          200: "#FFCF9F",
-          300: "#FFB066",
-          400: "#FA9535",
-          500: "#F27F1B",
-          600: "#D96A08",
-          700: "#B45607",
-          800: "#8C440A",
-          900: "#6E370C",
+          50: "#FFF1EC",
+          100: "#FFDFD3",
+          200: "#FFBFA6",
+          300: "#FF9774",
+          400: "#F56A41",
+          500: "#E8431A",
+          600: "#D93A12",
+          700: "#B02E0E",
+          800: "#8A250E",
+          900: "#6C1F0F",
+        },
+        // The whole app (rider, vendor, admin, login) shares the brand red-orange.
+        orange: {
+          50: "#FFF1EC",
+          100: "#FFDFD3",
+          200: "#FFBFA6",
+          300: "#FF9774",
+          400: "#F56A41",
+          500: "#E8431A",
+          600: "#D93A12",
+          700: "#B02E0E",
+          800: "#8A250E",
+          900: "#6C1F0F",
         },
       },
     },

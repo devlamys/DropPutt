@@ -7,7 +7,7 @@ const STALE_MS = 10 * 60 * 1000;
 
 function riderState(rider) {
   if (!rider.is_online) return { color: "#64748b", label: "Offline" };
-  if (rider.active_orders > 0) return { color: "#ea580c", label: `On delivery (${rider.active_orders})` };
+  if (rider.active_orders > 0) return { color: "#E8431A", label: `On delivery (${rider.active_orders})` };
   return { color: "#16a34a", label: "Online · free" };
 }
 

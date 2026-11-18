@@ -1,6 +1,7 @@
 import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
+import LogoMark from "./components/LogoMark.jsx";
 import Home from "./pages/Home.jsx";
 import Login from "./pages/Login.jsx";
 
@@ -20,7 +21,7 @@ const VendorDashboard = lazy(() => import("./pages/VendorDashboard.jsx"));
 function PageLoader() {
   return (
     <div className="flex min-h-screen items-center justify-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-orange-200 border-t-orange-600" />
+      <LogoMark size={64} className="motion-safe:animate-pulse" />
     </div>
   );
 }

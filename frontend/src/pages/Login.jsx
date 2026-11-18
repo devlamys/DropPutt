@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { Bike, Loader2, MapPin, ShieldCheck, Store, UserCog } from "lucide-react";
+import { Bike, Loader2, ShieldCheck, Store, UserCog } from "lucide-react";
+import LogoMark from "../components/LogoMark.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { getErrorMessage, getHostSlug } from "../utils/api.js";
 
@@ -63,9 +64,7 @@ export default function Login() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-6 px-4 py-10">
       <header className="text-center">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-600 text-white shadow">
-          <MapPin className="h-7 w-7" aria-hidden="true" />
-        </div>
+        <LogoMark size={56} className="mx-auto drop-shadow" />
         <h1 className="mt-4 text-2xl font-bold tracking-tight">DropPutt</h1>
         <p className="mt-1 text-sm text-slate-500">
           Sign in to <span className="font-medium capitalize">{getHostSlug()}</span>

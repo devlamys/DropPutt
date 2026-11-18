@@ -1,4 +1,5 @@
-import { Bike, MapPin, Search, ShoppingBag, X } from "lucide-react";
+import { MapPin, Search, ShoppingBag, X } from "lucide-react";
+import LogoMark from "../LogoMark.jsx";
 import { Link } from "react-router-dom";
 import { getRequestSlug } from "../../utils/api.js";
 import { inr } from "../../utils/format.js";
@@ -15,9 +16,7 @@ export const zoneLabel = (zone) => (zone ? zone.zone_name.split("—").pop().tri
 export function Logo({ className = "" }) {
   return (
     <Link to="/shop" className={`flex shrink-0 items-center gap-2 ${className}`} aria-label="DropPutt home">
-      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-flame-600 text-white">
-        <Bike className="h-4 w-4" strokeWidth={2.5} />
-      </span>
+      <LogoMark size={32} />
       <span className="text-xl font-semibold tracking-tight">
         <span className="text-white">Drop</span>
         <span className="text-flame-400">Putt</span>

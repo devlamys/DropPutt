@@ -1,4 +1,5 @@
-import { ChevronDown, ClipboardList, Clock, MapPin, Search, ShoppingBag, ShoppingBasket, Truck, Utensils, X } from "lucide-react";
+import LogoMark from "../components/LogoMark.jsx";
+import { ChevronDown, ClipboardList, Clock, Search, ShoppingBag, ShoppingBasket, Truck, Utensils, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { placeName } from "../components/shop/chrome.jsx";
 import Stepper from "../components/shop/Stepper.jsx";
@@ -47,8 +48,10 @@ const PILLS = [
 
 const press = "transition-transform active:scale-[0.98]";
 
+const shimmer = "bg-[linear-gradient(90deg,#E7E7E2_25%,#D9D9D2_37%,#E7E7E2_63%)] bg-[length:400%_100%] motion-safe:animate-shimmer";
+
 function Skeleton({ className = "" }) {
-  return <div className={`animate-pulse rounded-2xl bg-slate-200/80 ${className}`} />;
+  return <div className={`rounded-2xl ${shimmer} ${className}`} />;
 }
 
 function HomeSkeleton() {
@@ -61,7 +64,16 @@ function HomeSkeleton() {
         <Skeleton className="h-[5.25rem]" />
       </div>
       <div className="flex gap-2 overflow-hidden">{Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-12 w-28 shrink-0 !rounded-full" />)}</div>
-      {Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="h-32" />)}
+      {Array.from({ length: 4 }, (_, i) => (
+        <div key={i} className="flex gap-3 rounded-2xl bg-white p-3">
+          <Skeleton className="h-20 w-20 shrink-0" />
+          <div className="flex-1 space-y-2 pt-1">
+            <Skeleton className="h-4 w-3/5 !rounded-md" />
+            <Skeleton className="h-3 w-4/5 !rounded-md" />
+            <Skeleton className="h-3 w-2/5 !rounded-md" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -157,9 +169,7 @@ export default function StorefrontHome() {
       {/* ── 1. Sticky header ─────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 px-4 pb-3 pt-3 backdrop-blur">
         <div className="flex items-center gap-3">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white" aria-hidden="true">
-            <MapPin className="h-6 w-6" />
-          </span>
+          <LogoMark size={48} className="shrink-0" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[11px] font-semibold text-slate-500">Delivering in • നമ്മുടെ നാട്</p>
             <h1 className="truncate text-lg font-extrabold leading-tight text-slate-900">{town}</h1>
