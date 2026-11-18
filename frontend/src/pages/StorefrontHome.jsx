@@ -1,6 +1,10 @@
 import LogoMark from "../components/LogoMark.jsx";
 import { ChevronDown, ClipboardList, Clock, Home, Search, ShoppingBag, ShoppingBasket, Truck, Utensils, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import DishGrid from "../components/shop/DishGrid.jsx";
+import ShopCard from "../components/shop/ShopCard.jsx";
+import { useProducts } from "../hooks/useProducts.js";
 import { placeName } from "../components/shop/chrome.jsx";
 import Stepper from "../components/shop/Stepper.jsx";
 import { useStorefront } from "../components/shop/StorefrontContext.jsx";
@@ -28,23 +32,6 @@ function snackWindow(now) {
   if (m >= SNACK_START && m < SNACK_END) return { open: true, left: SNACK_END - m };
   return { open: false, left: m < SNACK_START ? SNACK_START - m : 24 * 60 - m + SNACK_START };
 }
-
-// ── category pills ──────────────────────────────────────────────────────────
-const SNACK_SLOT = "EVENING_SNACKS_3_TO_6";
-const PILLS = [
-  { key: "all", label: "All", emoji: "🍽️", match: () => true },
-  { key: "hotels", label: "Hotels", emoji: "🍛", match: (v) => v.shop_category === "HOTEL" },
-  {
-    key: "snacks",
-    label: "4 PM Snacks",
-    emoji: "☕",
-    amber: true,
-    match: (v) => v.shop_category === "BAKERY_COOLBAR" || v.products.some((p) => p.slot_type === SNACK_SLOT),
-  },
-  { key: "grocery", label: "Grocery", emoji: "🛒", match: (v) => v.shop_category === "GROCERY" },
-  { key: "fish", label: "Fish & Meat", emoji: "🐟", match: (v) => v.shop_category === "FISH_MEAT" },
-  { key: "medical", label: "Medical Rx", emoji: "💊", match: (v) => v.shop_category === "MEDICAL_PHARMACY" },
-];
 
 const press = "transition-transform active:scale-[0.98]";
 
@@ -78,63 +65,6 @@ function HomeSkeleton() {
   );
 }
 
-function ShopCard({ shop, inCart, onOpen, closed = false }) {
-  const cat = categoryOf(shop.shop_category);
-  const menu = [...shop.products, ...(shop.unavailable ?? [])];
-  const preview = shop.products.slice(0, 2).map((p) => p.name);
-  const snacks = shop.shop_category === "BAKERY_COOLBAR";
-  const Root = closed ? "div" : "button";
-  return (
-    <Root
-      {...(closed ? {} : { type: "button", onClick: () => onOpen(shop.id), "aria-label": `Open ${shop.shop_name} menu` })}
-      className={`flex min-h-12 w-full gap-3 rounded-2xl border border-slate-200/80 bg-white p-3 text-left shadow-sm ${closed ? "" : press}`}
-    >
-      <span className={`relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-4xl ${snacks ? "bg-amber-100" : "bg-flame-50"} ${closed ? "grayscale" : ""}`} aria-hidden="true">
-        {productEmoji(menu[0]?.name ?? shop.shop_name, shop.shop_category)}
-        {closed && <span className="absolute inset-0 flex items-center justify-center bg-slate-900/55 text-[11px] font-extrabold tracking-wider text-white">CLOSED</span>}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className={`truncate text-base font-bold ${closed ? "text-slate-500" : "text-slate-900"}`}>{shop.shop_name}</h3>
-          {closed ? (
-            <span className="mt-0.5 shrink-0 text-[11px] font-bold text-slate-500">Closed now</span>
-          ) : (
-            <span className="mt-0.5 flex shrink-0 items-center gap-1 text-[11px] font-bold text-green-700">
-              <span className="h-1.5 w-1.5 rounded-full bg-green-500" /> Open
-            </span>
-          )}
-        </div>
-        <p className="truncate text-xs text-slate-500">
-          {cat.label}
-          {shop.address ? ` · ${shop.address.split(",")[0]}` : ""}
-        </p>
-        {closed ? (
-          <p className="mt-1 text-xs text-slate-500">Not taking orders right now. Check back soon.</p>
-        ) : (
-          <>
-            {preview.length > 0 && <p className="mt-1 truncate text-xs text-slate-600">{preview.join(" · ")}</p>}
-            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
-              <span className="rounded-full bg-slate-100 px-2 py-1 tabular-nums text-slate-700">Min {inr(shop.min_order_value)}</span>
-              <span className="rounded-full bg-slate-100 px-2 py-1 tabular-nums text-slate-700">{shop.products.length} item{shop.products.length === 1 ? "" : "s"} now</span>
-              {inCart && <span className="rounded-full bg-flame-600 px-2 py-1 text-white">In your cart</span>}
-            </div>
-          </>
-        )}
-      </div>
-    </Root>
-  );
-}
-
-// Shop sections on the "All" view, in this order. `pill` is the category pill that "View all" opens.
-const SECTIONS = [
-  { category: "HOTEL", label: "Hotels & restaurants", pill: "hotels" },
-  { category: "BAKERY_COOLBAR", label: "Bakery, cool bar & snacks", pill: "snacks" },
-  { category: "GROCERY", label: "Grocery", pill: "grocery" },
-  { category: "FISH_MEAT", label: "Fish & meat", pill: "fish" },
-  { category: "MEDICAL_PHARMACY", label: "Medical", pill: "medical" },
-];
-const PER_SECTION = 4;
-
 /** Fixed bottom tab bar: the four things a customer does most. */
 function BottomNav({ cartCount, orderCount, onHome, onSearch, onCart, onOrders }) {
   const tab = "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-semibold text-slate-500 transition-colors active:text-flame-600";
@@ -155,7 +85,14 @@ export default function StorefrontHome() {
     totals, minOrder, cartShop, openCart, openCustom, openOrders, openVendor, orderCount, franchiseName, toast,
   } = useStorefront();
   const [query, setQuery] = useState("");
-  const [pill, setPill] = useState("all");
+  const [category, setCategory] = useState("");
+  const navigate = useNavigate();
+  const list = useProducts({ group: "FOOD", category });
+  const goDishes = (key) => {
+    setQuery("");
+    if (key !== undefined) setCategory(key);
+    setTimeout(() => shopsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  };
   const [now, setNow] = useState(() => new Date());
   const shopsRef = useRef(null);
   const searchRef = useRef(null);
@@ -182,11 +119,6 @@ export default function StorefrontHome() {
   const town = franchiseName || placeName() || "your town";
   const snackMin = feed?.pinned?.min_order_value ?? "80";
 
-  const active = PILLS.find((p) => p.key === pill) ?? PILLS[0];
-  const shops = vendors.filter(active.match);
-  const closed = closedVendors.filter(active.match);
-  const sections = SECTIONS.map((sec) => ({ ...sec, shops: shops.filter((v) => v.shop_category === sec.category) })).filter((sec) => sec.shops.length > 0);
-  const grouped = pill === "all" && sections.length > 1;
   const allProducts = useMemo(() => vendors.flatMap((shop) => shop.products.map((product) => ({ product, shop }))), [vendors]);
   const offers = useMemo(() => allProducts.filter(({ product }) => product.original_price), [allProducts]);
 
@@ -198,12 +130,6 @@ export default function StorefrontHome() {
       shops: [...vendors, ...closedVendors].filter((v) => v.shop_name.toLowerCase().includes(q) || categoryOf(v.shop_category).label.toLowerCase().includes(q)),
     };
   }, [q, allProducts, vendors, closedVendors]);
-
-  const goShops = (key) => {
-    setQuery("");
-    if (key) setPill(key);
-    setTimeout(() => shopsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-  };
 
   const short = minOrder - totals.subtotal;
   const progress = minOrder > 0 ? Math.min(100, Math.round((totals.subtotal / minOrder) * 100)) : 100;
@@ -286,7 +212,7 @@ export default function StorefrontHome() {
               {results.shops.length > 0 && (
                 <section>
                   <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">Shops</h2>
-                  <div className="space-y-3">{results.shops.map((s) => <ShopCard key={s.id} shop={s} inCart={cart.vendor_id === s.id} onOpen={openVendor} closed={s.is_open === false} />)}</div>
+                  <div className="space-y-3">{results.shops.map((s) => <ShopCard key={s.id} shop={s} inCart={cart.vendor_id === s.id} onOpen={(id) => navigate(`/shop/restaurant/${id}`)} closed={s.is_open === false} />)}</div>
                 </section>
               )}
             </>
@@ -301,7 +227,7 @@ export default function StorefrontHome() {
           <section className="px-4" aria-label="4 PM Chayakadi">
             <button
               type="button"
-              onClick={() => goShops("snacks")}
+              onClick={() => goDishes("EVENING_SNACKS")}
               className={`relative flex w-full items-center gap-3 overflow-hidden rounded-2xl p-4 text-left shadow-sm ${press} ${
                 windowState.open ? "bg-gradient-to-br from-amber-400 to-amber-500 text-slate-900" : "border border-amber-200 bg-amber-50 text-slate-800"
               }`}
@@ -320,11 +246,11 @@ export default function StorefrontHome() {
 
           {/* 3. Action bento grid */}
           <section className="grid grid-cols-2 gap-3 px-4" aria-label="What would you like to do?">
-            <button type="button" onClick={() => goShops("all")} className={`relative row-span-2 flex min-h-[11rem] flex-col justify-between overflow-hidden rounded-2xl bg-flame-600 p-4 text-left text-white shadow-sm hover:bg-flame-700 ${press}`}>
+            <button type="button" onClick={() => navigate("/shop/restaurants")} className={`relative row-span-2 flex min-h-[11rem] flex-col justify-between overflow-hidden rounded-2xl bg-flame-600 p-4 text-left text-white shadow-sm hover:bg-flame-700 ${press}`}>
               <Utensils className="h-8 w-8 text-flame-100" />
               <span>
-                <span className="block text-lg font-extrabold leading-tight">Order Food &amp; Snacks</span>
-                <span className="mt-1 block text-xs font-medium text-flame-100">ഭക്ഷണം ഓർഡർ ചെയ്യാം</span>
+                <span className="block text-lg font-extrabold leading-tight">Open Restaurants</span>
+                <span className="mt-1 block text-xs font-medium text-flame-100">തുറന്ന ഹോട്ടലുകൾ</span>
               </span>
               <span className="pointer-events-none absolute -bottom-3 -right-2 text-7xl opacity-25" aria-hidden="true">🍛</span>
             </button>
@@ -344,6 +270,11 @@ export default function StorefrontHome() {
                 <span className="block text-[15px] font-extrabold leading-tight">Pick &amp; Drop / Mini Truck</span>
                 <span className="block text-[11px] font-semibold text-slate-500">പിക്ക് &amp; ഡ്രോപ്പ് · മിനി ട്രക്ക്</span>
               </span>
+            </button>
+
+            <button type="button" onClick={() => navigate("/shop/restaurants?group=mart")} className={`col-span-2 flex items-center gap-2 rounded-2xl border border-slate-200/80 bg-white p-3 text-left shadow-sm ${press}`}>
+              <ShoppingBasket className="h-6 w-6 shrink-0 text-flame-700" />
+              <span className="text-sm font-extrabold">Grocery · Fish &amp; Meat · Medical <span className="font-semibold text-slate-500">ഷോപ്പുകൾ</span></span>
             </button>
           </section>
 
@@ -371,74 +302,43 @@ export default function StorefrontHome() {
             </section>
           )}
 
-          {/* 4. Category pills */}
-          <nav aria-label="Categories" className="flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {PILLS.map((p) => {
-              const on = pill === p.key;
+          {/* 4. Food tabs: every tab lists dishes */}
+          <nav aria-label="Food categories" className="flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {[{ key: "", label: "All" }, ...list.categories].map((c) => {
+              const on = category === c.key;
+              const snack = c.key === "EVENING_SNACKS";
               return (
                 <button
-                  key={p.key}
+                  key={c.key || "all"}
                   type="button"
                   aria-pressed={on}
-                  onClick={() => setPill(p.key)}
-                  className={`flex h-12 shrink-0 items-center gap-2 rounded-full border-2 px-4 text-sm font-bold ${press} ${
-                    on
-                      ? p.amber
-                        ? "border-amber-500 bg-amber-400 text-slate-900"
-                        : "border-flame-600 bg-flame-600 text-white"
-                      : "border-slate-200 bg-white text-slate-700"
+                  onClick={() => setCategory(c.key)}
+                  className={`flex h-11 shrink-0 items-center rounded-full border-2 px-4 text-sm font-bold ${press} ${
+                    on ? (snack ? "border-amber-500 bg-amber-400 text-slate-900" : "border-flame-600 bg-flame-600 text-white") : "border-slate-200 bg-white text-slate-700"
                   }`}
                 >
-                  <span aria-hidden="true">{p.emoji}</span>
-                  {p.label}
+                  {c.label}
                 </button>
               );
             })}
           </nav>
 
-          {/* 5. Shops: open first, grouped by kind on "All"; closed ones last */}
-          <div ref={shopsRef} className="scroll-mt-44 space-y-6 px-4">
-            {shops.length === 0 ? (
-              <section aria-label="Shops" className="rounded-2xl border border-slate-200/80 bg-white px-5 py-10 text-center shadow-sm">
-                <p className="text-5xl" aria-hidden="true">{active.emoji}</p>
-                <p className="mt-3 text-base font-bold">No {pill === "all" ? "" : `${active.label.toLowerCase()} `}shops open right now</p>
-                <p className="mt-1 text-sm text-slate-500">Need it anyway? A rider can buy it for you from any shop in town.</p>
-                <div className="mt-4 flex flex-col gap-2">
-                  <button type="button" onClick={() => openCustom("CUSTOM_BUY")} className={`h-12 rounded-2xl bg-amber-400 text-sm font-bold text-slate-900 ${press}`}>Buy Anything • എന്തും വാങ്ങാം</button>
-                  {pill !== "all" && <button type="button" onClick={() => setPill("all")} className={`h-12 rounded-2xl bg-slate-100 text-sm font-bold text-slate-700 ${press}`}>See all shops</button>}
-                </div>
-              </section>
-            ) : grouped ? (
-              sections.map((sec) => (
-                <section key={sec.category} aria-label={sec.label}>
-                  <div className="mb-3 flex items-end justify-between">
-                    <h2 className="text-lg font-extrabold">{sec.label}</h2>
-                    <span className="text-xs font-semibold tabular-nums text-slate-500">{sec.shops.length} open</span>
+          {/* 5. Dishes */}
+          <div ref={shopsRef} className="scroll-mt-44 px-4">
+            <DishGrid
+              list={list}
+              empty={
+                <section aria-label="Dishes" className="rounded-2xl border border-slate-200/80 bg-white px-5 py-10 text-center shadow-sm">
+                  <p className="text-5xl" aria-hidden="true">{category === "EVENING_SNACKS" ? "☕" : "🍽️"}</p>
+                  <p className="mt-3 text-base font-bold">{category === "EVENING_SNACKS" ? "No snacks available right now" : "Nothing to order right now"}</p>
+                  <p className="mt-1 text-sm text-slate-500">{category === "EVENING_SNACKS" ? "4 PM snacks come between 3 and 6 PM." : "Shops may be closed. A rider can buy it for you from any shop in town."}</p>
+                  <div className="mt-4 flex flex-col gap-2">
+                    <button type="button" onClick={() => openCustom("CUSTOM_BUY")} className={`h-12 rounded-2xl bg-amber-400 text-sm font-bold text-slate-900 ${press}`}>Buy Anything • എന്തും വാങ്ങാം</button>
+                    {category && <button type="button" onClick={() => setCategory("")} className={`h-12 rounded-2xl bg-slate-100 text-sm font-bold text-slate-700 ${press}`}>See all dishes</button>}
                   </div>
-                  <div className="space-y-3">{sec.shops.slice(0, PER_SECTION).map((sh) => <ShopCard key={sh.id} shop={sh} inCart={cart.vendor_id === sh.id} onOpen={openVendor} />)}</div>
-                  {sec.shops.length > PER_SECTION && (
-                    <button type="button" onClick={() => goShops(sec.pill)} className={`mt-3 h-12 w-full rounded-2xl bg-flame-600 text-sm font-bold text-white hover:bg-flame-700 ${press}`}>
-                      View all {sec.shops.length} {sec.label.toLowerCase()}
-                    </button>
-                  )}
                 </section>
-              ))
-            ) : (
-              <section aria-label="Shops">
-                <div className="mb-3 flex items-end justify-between">
-                  <h2 className="text-lg font-extrabold">{pill === "all" ? "Shops near you" : active.label}</h2>
-                  <span className="text-xs font-semibold tabular-nums text-slate-500">{shops.length} open</span>
-                </div>
-                <div className="space-y-3">{shops.map((sh) => <ShopCard key={sh.id} shop={sh} inCart={cart.vendor_id === sh.id} onOpen={openVendor} />)}</div>
-              </section>
-            )}
-
-            {closed.length > 0 && (
-              <section aria-label="Closed shops">
-                <h2 className="mb-3 text-base font-extrabold text-slate-500">Closed right now · <span className="tabular-nums">{closed.length}</span></h2>
-                <div className="space-y-3">{closed.map((sh) => <ShopCard key={sh.id} shop={sh} closed />)}</div>
-              </section>
-            )}
+              }
+            />
           </div>
 
           <p className="px-6 pb-2 text-center text-xs text-slate-400">Cash on delivery · Prices are set by each shop and confirmed by the rider at pickup.</p>
@@ -471,7 +371,7 @@ export default function StorefrontHome() {
       <BottomNav
         cartCount={totals.count}
         orderCount={orderCount}
-        onHome={() => { setQuery(""); setPill("all"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+        onHome={() => { setQuery(""); setCategory(""); window.scrollTo({ top: 0, behavior: "smooth" }); }}
         onSearch={() => { window.scrollTo({ top: 0, behavior: "smooth" }); setTimeout(() => searchRef.current?.focus(), 250); }}
         onCart={() => (totals.count > 0 ? openCart() : toast?.("Your cart is empty. Add something tasty first.", "info"))}
         onOrders={openOrders}

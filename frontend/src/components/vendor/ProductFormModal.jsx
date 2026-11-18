@@ -12,6 +12,16 @@ const SLOTS = [
   ["DINNER_ONLY", "Dinner only"],
 ];
 
+const FOOD_CATEGORIES = [
+  ["MEALS", "Meals"],
+  ["BIRYANI", "Biryani"],
+  ["FAST_FOOD", "Fast food"],
+  ["SNACKS", "Chai & snacks"],
+  ["JUICE_SHAKES", "Juice & shakes"],
+  ["BAKERY_SWEETS", "Bakery & sweets"],
+  ["OTHER", "Other"],
+];
+
 const field = "w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-green-600 focus:outline-none focus:ring-1 focus:ring-green-600";
 
 /** Offer price from a percentage, in whole paise (display helper; the server validates). */
@@ -40,6 +50,7 @@ export default function ProductFormModal({ product, onClose, onSaved, toast }) {
   const [offerLabel, setOfferLabel] = useState(product?.offer_label ?? "");
   const [offerEnds, setOfferEnds] = useState(toLocalInput(product?.offer_ends_at));
   const [slot, setSlot] = useState(product?.slot_type ?? "ALL_DAY");
+  const [foodCategory, setFoodCategory] = useState(product?.food_category ?? "");
   const [from, setFrom] = useState(product?.available_from ?? "");
   const [to, setTo] = useState(product?.available_to ?? "");
   const [combo, setCombo] = useState(product?.is_combo ?? false);
@@ -69,6 +80,7 @@ export default function ProductFormModal({ product, onClose, onSaved, toast }) {
         price: String(price),
         description: description.trim() || null,
         slot_type: slot,
+        ...(foodCategory ? { food_category: foodCategory } : {}),
         available_from: from && to ? from : null,
         available_to: from && to ? to : null,
         is_combo: combo,
@@ -114,6 +126,14 @@ export default function ProductFormModal({ product, onClose, onSaved, toast }) {
         <label className="block">
           <span className="mb-1 block font-medium">Item name</span>
           <input className={field} value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={80} placeholder="Chicken Biryani Full" />
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block font-medium">Food type (shown on the home tabs)</span>
+          <select className={field} value={foodCategory} onChange={(e) => setFoodCategory(e.target.value)}>
+            {!product && <option value="">Choose automatically</option>}
+            {FOOD_CATEGORIES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+          </select>
         </label>
 
         <div className="grid grid-cols-2 gap-3">

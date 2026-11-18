@@ -11,6 +11,8 @@ const CustomerDropPage = lazy(() => import("./pages/CustomerDropPage.jsx"));
 // The customer storefront: shell + home + shop menu.
 const Storefront = lazy(() => import("./pages/Storefront.jsx"));
 const StorefrontHome = lazy(() => import("./pages/StorefrontHome.jsx"));
+const RestaurantsPage = lazy(() => import("./pages/RestaurantsPage.jsx"));
+const ShopDishes = lazy(() => import("./pages/ShopDishes.jsx"));
 const ShopMenu = lazy(() => import("./pages/ShopMenu.jsx"));
 const RiderDashboard = lazy(() => import("./pages/RiderDashboard.jsx"));
 const RiderEarnings = lazy(() => import("./pages/RiderEarnings.jsx"));
@@ -53,6 +55,8 @@ export default function App() {
       {/* Public storefront: customers order without an account. */}
       <Route path="/shop" element={<Storefront />}>
         <Route index element={<StorefrontHome />} />
+        <Route path="restaurants" element={<RestaurantsPage />} />
+        <Route path="restaurant/:vendorId" element={<ShopDishes />} />
         <Route path=":vendorId" element={<ShopMenu />} />
       </Route>
       <Route path="/drop/:token" element={<CustomerDropPage />} />
