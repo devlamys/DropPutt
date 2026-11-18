@@ -56,9 +56,9 @@ export default function ZoneSheet({ zones, onClose, onPlace }) {
         value={address}
         onChange={(e) => setAddress(e.target.value)}
         placeholder="House name, nearest landmark"
-        className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base outline-none placeholder:text-slate-400 focus:border-flame-500 focus:ring-4 focus:ring-flame-100"
+        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base outline-none placeholder:text-slate-400 focus:border-flame-500 focus:ring-4 focus:ring-flame-100"
       />
-      <button type="button" onClick={done} className="mt-3 h-12 w-full rounded-2xl bg-flame-600 text-base font-bold text-white active:scale-[0.98]">
+      <button type="button" onClick={done} className="mt-3 h-12 w-full rounded-lg bg-[#E8431A] text-base font-bold text-white active:scale-[0.98]">
         Done
       </button>
 
@@ -69,8 +69,8 @@ export default function ZoneSheet({ zones, onClose, onPlace }) {
           const label = `${from}–${upTo} km`;
           from = upTo;
           return (
-            <li key={zone.id} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+            <li key={zone.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
                 <MapPin className="h-5 w-5" />
               </span>
               <span className="min-w-0 flex-1 font-semibold">{label}</span>

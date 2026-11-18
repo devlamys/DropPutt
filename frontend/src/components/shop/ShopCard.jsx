@@ -14,9 +14,9 @@ export default function ShopCard({ shop, inCart, onOpen, closed = false }) {
   return (
     <Root
       {...(closed ? {} : { type: "button", onClick: () => onOpen(shop.id), "aria-label": `Open ${shop.shop_name}` })}
-      className={`flex min-h-12 w-full gap-3 rounded-2xl border border-slate-200/80 bg-white p-3 text-left shadow-sm ${closed ? "" : press}`}
+      className={`flex min-h-12 w-full gap-3 rounded-xl border border-slate-200/80 bg-white p-3 text-left ${closed ? "" : press}`}
     >
-      <span className={`relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-4xl ${snacks ? "bg-amber-100" : "bg-flame-50"} ${closed ? "grayscale" : ""}`} aria-hidden="true">
+      <span className={`relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl text-4xl ${snacks ? "bg-amber-100" : "bg-flame-50"} ${closed ? "grayscale" : ""}`} aria-hidden="true">
         {productEmoji(menu[0]?.name ?? shop.shop_name, shop.shop_category)}
         {closed && <span className="absolute inset-0 flex items-center justify-center bg-slate-900/55 text-[11px] font-extrabold tracking-wider text-white">CLOSED</span>}
       </span>
@@ -41,9 +41,9 @@ export default function ShopCard({ shop, inCart, onOpen, closed = false }) {
           <>
             {preview.length > 0 && <p className="mt-1 truncate text-xs text-slate-600">{preview.join(" · ")}</p>}
             <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
-              <span className="rounded-full bg-slate-100 px-2 py-1 tabular-nums text-slate-700">Min {inr(shop.min_order_value)}</span>
-              <span className="rounded-full bg-slate-100 px-2 py-1 tabular-nums text-slate-700">{products.length} item{products.length === 1 ? "" : "s"} now</span>
-              {inCart && <span className="rounded-full bg-flame-600 px-2 py-1 text-white">In your cart</span>}
+              <span className="rounded-lg bg-slate-100 px-2 py-1 tabular-nums text-slate-700">Min {inr(shop.min_order_value)}</span>
+              <span className="rounded-lg bg-slate-100 px-2 py-1 tabular-nums text-slate-700">{products.length} item{products.length === 1 ? "" : "s"} now</span>
+              {inCart && <span className="rounded-lg bg-[#E8431A] px-2 py-1 text-white">In your cart</span>}
             </div>
           </>
         )}

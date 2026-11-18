@@ -1,4 +1,4 @@
-import { Camera, Image as ImageIcon, Loader2, Mic, Minus, Plus, RotateCcw, ShoppingBasket, Square, Trash2, X } from "lucide-react";
+import { ArrowLeft, Camera, Image as ImageIcon, Loader2, Mic, Minus, Plus, RotateCcw, ShoppingBasket, Square, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import api, { getErrorMessage, idempotencyHeaders } from "../utils/api.js";
 import { inr } from "../utils/format.js";
@@ -27,14 +27,14 @@ const validPhone = (value) => {
 };
 const clock = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 const press = "transition-transform active:scale-[0.98]";
-const card = "rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm";
+const card = "rounded-xl border border-slate-200/80 bg-white p-4 ";
 const field =
-  "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-flame-500 focus:ring-4 focus:ring-flame-100";
+  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-flame-500 focus:ring-4 focus:ring-flame-100";
 
 function CardTitle({ n, title, ml, optional }) {
   return (
     <h3 className="mb-3 flex items-center gap-2 text-sm font-extrabold text-slate-900">
-      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-flame-600 text-xs font-bold text-white">{n}</span>
+      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#E8431A] text-xs font-bold text-white">{n}</span>
       <span>
         {title} {ml && <span className="font-semibold text-slate-500">• {ml}</span>}
       </span>
@@ -231,22 +231,15 @@ export default function CustomBuyModal({ onClose, onPlaced }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 motion-safe:animate-fade-in" role="dialog" aria-modal="true" aria-label="Buy Anything">
-      <form onSubmit={submit} noValidate className="flex max-h-[95vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-slate-50 shadow-2xl motion-safe:animate-sheet-up">
-        <header className="flex items-start justify-between gap-3 bg-white px-5 py-4 shadow-sm">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-400 text-slate-900">
-              <ShoppingBasket className="h-6 w-6" />
-            </span>
-            <div className="min-w-0">
-              <h2 className="text-lg font-extrabold text-slate-900">
-                Buy Anything <span className="font-bold text-slate-500">• എന്തും വാങ്ങാം</span>
-              </h2>
-              <p className="text-xs text-slate-500">Tell us what you need. A rider buys it and brings it to you.</p>
-            </div>
-          </div>
-          <button type="button" onClick={onClose} disabled={busy} aria-label="Close" className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 ${press}`}>
-            <X className="h-5 w-5" />
+      <form onSubmit={submit} noValidate className="flex h-full w-full max-w-md flex-col overflow-hidden bg-slate-50 motion-safe:animate-sheet-up">
+        <header className="flex h-14 shrink-0 items-center gap-1 border-b border-slate-200 bg-white pl-1 pr-4">
+          <button type="button" onClick={onClose} disabled={busy} aria-label="Back" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-900 active:bg-slate-100">
+            <ArrowLeft className="h-5 w-5" />
           </button>
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-base font-bold text-slate-900">Buy Anything <span className="font-semibold text-slate-500">• എന്തും വാങ്ങാം</span></h2>
+            <p className="truncate text-xs text-slate-500">Tell us what you need. A rider buys it for you.</p>
+          </div>
         </header>
 
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
@@ -263,7 +256,7 @@ export default function CustomBuyModal({ onClose, onPlaced }) {
                     type="button"
                     aria-pressed={on}
                     onClick={() => setShop(on ? "" : chip.label)}
-                    className={`flex h-12 items-center gap-1.5 rounded-full border-2 px-4 text-sm font-bold ${press} ${on ? "border-flame-600 bg-flame-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}
+                    className={`flex h-12 items-center gap-1.5 rounded-lg border-2 px-4 text-sm font-bold ${press} ${on ? "border-[#E8431A] bg-[#E8431A] text-white" : "border-slate-200 bg-white text-slate-700"}`}
                   >
                     <span aria-hidden="true">{chip.emoji}</span>
                     {chip.label}
@@ -294,7 +287,7 @@ export default function CustomBuyModal({ onClose, onPlaced }) {
                       }
                     }}
                   />
-                  <div className="flex h-12 shrink-0 items-center rounded-2xl border border-slate-200 bg-white">
+                  <div className="flex h-12 shrink-0 items-center rounded-xl border border-slate-200 bg-white">
                     <button type="button" aria-label={`Fewer ${row.name || "items"}`} onClick={() => bumpQty(row.id, -1)} className="flex h-12 w-10 items-center justify-center text-slate-700">
                       <Minus className="h-4 w-4" strokeWidth={3} />
                     </button>
@@ -303,7 +296,7 @@ export default function CustomBuyModal({ onClose, onPlaced }) {
                       <Plus className="h-4 w-4" strokeWidth={3} />
                     </button>
                   </div>
-                  <button type="button" aria-label={`Remove item ${index + 1}`} onClick={() => removeRow(row.id)} className="flex h-12 w-10 shrink-0 items-center justify-center rounded-2xl text-slate-400 hover:bg-slate-100">
+                  <button type="button" aria-label={`Remove item ${index + 1}`} onClick={() => removeRow(row.id)} className="flex h-12 w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100">
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </li>
@@ -313,7 +306,7 @@ export default function CustomBuyModal({ onClose, onPlaced }) {
               type="button"
               onClick={addRow}
               disabled={items.length >= MAX_ITEMS}
-              className={`mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-flame-600 text-sm font-bold text-flame-700 hover:bg-flame-50 disabled:opacity-50 ${press}`}
+              className={`mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#E8431A] text-sm font-bold text-flame-700 hover:bg-flame-50 disabled:opacity-50 ${press}`}
             >
               <Plus className="h-4 w-4" strokeWidth={3} /> Add Item
             </button>
@@ -326,23 +319,23 @@ export default function CustomBuyModal({ onClose, onPlaced }) {
             <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={pickPhoto} aria-label="Take a photo" />
             <input ref={galleryInput} type="file" accept="image/*" className="hidden" onChange={pickPhoto} aria-label="Choose a photo from gallery" />
             {photoUrl ? (
-              <div className="relative overflow-hidden rounded-2xl ring-1 ring-slate-200">
+              <div className="relative overflow-hidden rounded-xl ring-1 ring-slate-200">
                 <img src={photoUrl} alt="Your list" className="max-h-56 w-full bg-slate-100 object-contain" />
                 <div className="absolute right-2 top-2 flex gap-2">
-                  <button type="button" onClick={() => cameraInput.current?.click()} aria-label="Retake photo" className={`flex h-12 w-12 items-center justify-center rounded-full bg-white/95 text-slate-700 shadow ${press}`}>
+                  <button type="button" onClick={() => cameraInput.current?.click()} aria-label="Retake photo" className={`flex h-12 w-12 items-center justify-center rounded-lg bg-white/95 text-slate-700 ${press}`}>
                     <RotateCcw className="h-5 w-5" />
                   </button>
-                  <button type="button" onClick={() => setPhoto(null)} aria-label="Remove photo" className={`flex h-12 w-12 items-center justify-center rounded-full bg-white/95 text-red-600 shadow ${press}`}>
+                  <button type="button" onClick={() => setPhoto(null)} aria-label="Remove photo" className={`flex h-12 w-12 items-center justify-center rounded-lg bg-white/95 text-red-600 ${press}`}>
                     <Trash2 className="h-5 w-5" />
                   </button>
                 </div>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2">
-                <button type="button" onClick={() => cameraInput.current?.click()} className={`flex h-14 items-center justify-center gap-2 rounded-2xl bg-flame-600 text-sm font-bold text-white hover:bg-flame-700 ${press}`}>
+                <button type="button" onClick={() => cameraInput.current?.click()} className={`flex h-14 items-center justify-center gap-2 rounded-lg bg-[#E8431A] text-sm font-bold text-white ${press}`}>
                   <Camera className="h-5 w-5" /> Take photo
                 </button>
-                <button type="button" onClick={() => galleryInput.current?.click()} className={`flex h-14 items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 bg-white text-sm font-bold text-slate-700 ${press}`}>
+                <button type="button" onClick={() => galleryInput.current?.click()} className={`flex h-14 items-center justify-center gap-2 rounded-lg border-2 border-slate-200 bg-white text-sm font-bold text-slate-700 ${press}`}>
                   <ImageIcon className="h-5 w-5" /> Gallery
                 </button>
               </div>
@@ -353,7 +346,7 @@ export default function CustomBuyModal({ onClose, onPlaced }) {
           <section className={card}>
             <CardTitle n="4" title="Voice note" ml="ശബ്ദ സന്ദേശം" optional />
             {!recorder.supported ? (
-              <p className="rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-600">Voice notes aren't supported on this browser. Type your list above instead.</p>
+              <p className="rounded-xl bg-slate-100 px-4 py-3 text-sm text-slate-600">Voice notes aren't supported on this browser. Type your list above instead.</p>
             ) : voice ? (
               <div className="space-y-2">
                 <audio controls src={voiceUrl} className="w-full" aria-label="Preview your voice note" />
@@ -363,7 +356,7 @@ export default function CustomBuyModal({ onClose, onPlaced }) {
                     setVoice(null);
                     recorder.start();
                   }}
-                  className={`flex h-12 w-full items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 bg-white text-sm font-bold text-slate-700 ${press}`}
+                  className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl border-2 border-slate-200 bg-white text-sm font-bold text-slate-700 ${press}`}
                 >
                   <RotateCcw className="h-4 w-4" /> Record again
                 </button>
@@ -373,7 +366,7 @@ export default function CustomBuyModal({ onClose, onPlaced }) {
                 type="button"
                 onClick={recorder.recording ? recorder.stop : recorder.start}
                 aria-pressed={recorder.recording}
-                className={`flex h-14 w-full items-center justify-center gap-3 rounded-2xl text-base font-bold ${press} ${recorder.recording ? "bg-red-600 text-white" : "bg-amber-400 text-slate-900 hover:bg-amber-500"}`}
+                className={`flex h-14 w-full items-center justify-center gap-3 rounded-xl text-base font-bold ${press} ${recorder.recording ? "bg-red-600 text-white" : "bg-amber-400 text-slate-900 hover:bg-amber-500"}`}
               >
                 {recorder.recording ? (
                   <>
@@ -409,11 +402,11 @@ export default function CustomBuyModal({ onClose, onPlaced }) {
             </div>
           </section>
 
-          {error && <p role="alert" className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700 ring-1 ring-red-200">{error}</p>}
+          {error && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700 ring-1 ring-red-200">{error}</p>}
         </div>
 
         {/* sticky bottom action */}
-        <footer className="bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]">
+        <footer className="bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 border-t border-slate-200">
           {touched && blocked ? (
             <p className="mb-2 text-center text-sm font-semibold text-amber-800">{problems[0]}</p>
           ) : (
@@ -425,7 +418,7 @@ export default function CustomBuyModal({ onClose, onPlaced }) {
             type="submit"
             disabled={busy}
             aria-disabled={blocked}
-            className={`flex h-14 w-full flex-col items-center justify-center rounded-2xl text-white ${press} ${blocked ? "bg-slate-400" : "bg-flame-600 shadow-lg shadow-flame-900/25 hover:bg-flame-700"}`}
+            className={`flex h-14 w-full flex-col items-center justify-center rounded-xl text-white ${press} ${blocked ? "bg-slate-400" : "bg-[#E8431A] "}`}
           >
             <span className="flex items-center gap-2 text-base font-extrabold leading-tight">
               {busy && <Loader2 className="h-5 w-5 animate-spin" />}

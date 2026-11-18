@@ -1,4 +1,4 @@
-import { Clock, Search, ShoppingBag, X } from "lucide-react";
+import { ArrowLeft, Clock, Search, ShoppingBag } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { inr } from "../utils/format.js";
 import Stepper from "./shop/Stepper.jsx";
@@ -19,12 +19,12 @@ function MenuRow({ product, shop, quantity, onAdd, onRemove, unavailable }) {
         : "Not available right now"
     : null;
   return (
-    <li className={`flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm ${unavailable ? "opacity-70" : ""}`}>
-      <span className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-4xl ${snack ? "bg-amber-100" : "bg-emerald-50"} ${unavailable ? "grayscale" : ""}`} aria-hidden="true">
+    <li className={`flex items-center gap-3 rounded-xl border border-slate-200/80 bg-white p-3 ${unavailable ? "opacity-70" : ""}`}>
+      <span className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-xl text-4xl ${snack ? "bg-amber-100" : "bg-emerald-50"} ${unavailable ? "grayscale" : ""}`} aria-hidden="true">
         {productEmoji(product.name, shop.shop_category)}
       </span>
       <div className="min-w-0 flex-1">
-        {snack && <span className="mb-0.5 inline-block rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-slate-900">{product.is_combo ? "Combo" : "4 PM"}</span>}
+        {snack && <span className="mb-0.5 inline-block rounded-lg bg-amber-400 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-slate-900">{product.is_combo ? "Combo" : "4 PM"}</span>}
         <p className="font-bold leading-snug text-slate-900">{product.name}</p>
         <p className="font-bold tabular-nums text-slate-900">{inr(product.price)}</p>
         {note && (
@@ -79,21 +79,22 @@ export default function VendorMenuDrawer({ shopId, onClose, onViewCart }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 motion-safe:animate-fade-in" role="dialog" aria-modal="true" aria-label={shop ? `${shop.shop_name} menu` : "Shop menu"} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="flex max-h-[94vh] min-h-[60vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-slate-50 shadow-2xl motion-safe:animate-sheet-up">
+      <div onClick={(e) => e.stopPropagation()} className="flex h-full w-full max-w-md flex-col overflow-hidden bg-slate-50 motion-safe:animate-sheet-up">
         {/* header */}
-        <header className="bg-white px-5 pb-3 pt-4 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
+        <header className="border-b border-slate-200 bg-white px-4 pb-3 pt-2 ">
+          <div className="flex items-start gap-1">
+            <button type="button" onClick={onClose} aria-label="Back" className="-ml-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-900 active:bg-slate-100"><ArrowLeft className="h-5 w-5" /></button>
+            <div className="min-w-0 flex-1">
               {shop ? (
                 <>
-                  <h2 className="truncate text-xl font-extrabold text-slate-900">{shop.shop_name}</h2>
+                  <h2 className="truncate text-base font-bold text-slate-900">{shop.shop_name}</h2>
                   <p className="truncate text-xs text-slate-500">
                     {cat.label}
                     {shop.address ? ` · ${shop.address.split(",").slice(0, 2).join(",")}` : ""}
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
                     <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-emerald-700"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Open now</span>
-                    <span className="rounded-full bg-slate-100 px-2 py-1 tabular-nums text-slate-700">Min {inr(shop.min_order_value)}</span>
+                    <span className="rounded-lg bg-slate-100 px-2 py-1 tabular-nums text-slate-700">Min {inr(shop.min_order_value)}</span>
                   </div>
                 </>
               ) : loading ? (
@@ -105,23 +106,20 @@ export default function VendorMenuDrawer({ shopId, onClose, onViewCart }) {
                 <h2 className="text-lg font-extrabold">This shop is closed right now</h2>
               )}
             </div>
-            <button type="button" onClick={onClose} aria-label="Close menu" className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 ${press}`}>
-              <X className="h-5 w-5" />
-            </button>
           </div>
 
           {shop && (
             <>
               <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="group" aria-label="Menu filter">
-                <button type="button" aria-pressed={filter === "all"} onClick={() => setFilter("all")} className={`h-12 shrink-0 rounded-full border-2 px-5 text-sm font-bold ${press} ${filter === "all" ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}>
+                <button type="button" aria-pressed={filter === "all"} onClick={() => setFilter("all")} className={`h-12 shrink-0 rounded-lg border-2 px-5 text-sm font-bold ${press} ${filter === "all" ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}>
                   All items
                 </button>
-                <button type="button" aria-pressed={filter === "snacks"} onClick={() => setFilter("snacks")} className={`flex h-12 shrink-0 items-center gap-2 rounded-full border-2 px-5 text-sm font-bold ${press} ${filter === "snacks" ? "border-amber-500 bg-amber-400 text-slate-900" : "border-slate-200 bg-white text-slate-700"}`}>
+                <button type="button" aria-pressed={filter === "snacks"} onClick={() => setFilter("snacks")} className={`flex h-12 shrink-0 items-center gap-2 rounded-lg border-2 px-5 text-sm font-bold ${press} ${filter === "snacks" ? "border-amber-500 bg-amber-400 text-slate-900" : "border-slate-200 bg-white text-slate-700"}`}>
                   <span aria-hidden="true">☕</span> 4 PM Snack Combos
                   {view.snackCount > 0 && <span className="rounded-full bg-black/10 px-1.5 text-xs tabular-nums">{view.snackCount}</span>}
                 </button>
               </div>
-              <label className="mt-2 flex h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 focus-within:border-emerald-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-emerald-100">
+              <label className="mt-2 flex h-12 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 focus-within:border-emerald-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-emerald-100">
                 <Search className="h-5 w-5 shrink-0 text-slate-400" />
                 <span className="sr-only">Search this menu</span>
                 <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Search in ${shop.shop_name}`} className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-slate-400 [&::-webkit-search-cancel-button]:hidden" />
@@ -136,12 +134,12 @@ export default function VendorMenuDrawer({ shopId, onClose, onViewCart }) {
             <div className="py-12 text-center">
               <p className="text-5xl" aria-hidden="true">🌙</p>
               <p className="mt-3 text-sm text-slate-500">It isn't taking orders at the moment. Other shops are open.</p>
-              <button type="button" onClick={onClose} className={`mt-5 h-12 rounded-2xl bg-emerald-600 px-6 text-sm font-bold text-white ${press}`}>Browse other shops</button>
+              <button type="button" onClick={onClose} className={`mt-5 h-12 rounded-lg bg-emerald-600 px-6 text-sm font-bold text-white ${press}`}>Browse other shops</button>
             </div>
           )}
 
           {shop && filter === "snacks" && (
-            <p className={`rounded-2xl px-4 py-3 text-xs font-semibold ${snackWindow ? "bg-amber-50 text-amber-900 ring-1 ring-amber-200" : "bg-slate-100 text-slate-600"}`}>
+            <p className={`rounded-xl px-4 py-3 text-xs font-semibold ${snackWindow ? "bg-amber-50 text-amber-900 ring-1 ring-amber-200" : "bg-slate-100 text-slate-600"}`}>
               {snackWindow ? "☕ 4 PM ചായക്കടി & കൂൾബാർ സമയം · live until 6 PM." : "☕ Snack combos are served 3 PM – 6 PM. You can see them here, and order when the window opens."}
             </p>
           )}
@@ -168,18 +166,18 @@ export default function VendorMenuDrawer({ shopId, onClose, onViewCart }) {
             <div className="py-12 text-center">
               <p className="text-5xl" aria-hidden="true">{filter === "snacks" ? "☕" : "🍽️"}</p>
               <p className="mt-3 font-bold text-slate-900">{q ? `Nothing matches "${query.trim()}"` : filter === "snacks" ? "No 4 PM snack combos here" : "Nothing on the menu yet"}</p>
-              {filter === "snacks" && <button type="button" onClick={() => setFilter("all")} className={`mt-4 h-12 rounded-2xl bg-slate-100 px-6 text-sm font-bold text-slate-700 ${press}`}>See all items</button>}
+              {filter === "snacks" && <button type="button" onClick={() => setFilter("all")} className={`mt-4 h-12 rounded-lg bg-slate-100 px-6 text-sm font-bold text-slate-700 ${press}`}>See all items</button>}
             </div>
           )}
         </div>
 
         {/* cart summary for this shop */}
         {inThisCart && (
-          <div className="bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]">
+          <div className="bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 border-t border-slate-200">
             {short > 0 && (
               <p className="mb-2 text-center text-xs font-semibold text-amber-800">Add <span className="tabular-nums">{inr(short)}</span> more to reach the minimum order</p>
             )}
-            <button type="button" onClick={onViewCart} className={`flex h-14 w-full items-center gap-3 rounded-2xl bg-emerald-600 px-4 text-left text-white shadow-lg shadow-emerald-900/25 hover:bg-emerald-700 ${press}`}>
+            <button type="button" onClick={onViewCart} className={`flex h-14 w-full items-center gap-3 rounded-lg bg-emerald-600 px-4 text-left text-white hover:bg-emerald-700 ${press}`}>
               <ShoppingBag className="h-5 w-5 shrink-0" />
               <span className="flex-1 text-sm font-extrabold tabular-nums">{totals.count} item{totals.count === 1 ? "" : "s"} · {inr(totals.subtotal)}</span>
               <span className="text-sm font-extrabold">View cart ›</span>

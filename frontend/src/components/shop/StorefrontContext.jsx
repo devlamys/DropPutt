@@ -44,3 +44,7 @@ export function rememberOrder(order) {
 export function forgetOrder(token) {
   write(ORDERS_KEY, readOrders().filter((o) => o.token !== token));
 }
+
+export function forgetAllOrders() {
+  write(ORDERS_KEY, []);
+}

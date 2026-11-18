@@ -1,4 +1,4 @@
-import { ArrowLeft, Search } from "lucide-react";
+import AppBar, { SearchField } from "../components/shop/AppBar.jsx";
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import ShopCard from "../components/shop/ShopCard.jsx";
@@ -23,20 +23,10 @@ export default function RestaurantsPage() {
   const go = (id) => navigate(`/shop/restaurant/${id}`);
 
   return (
-    <div className="mx-auto min-h-screen max-w-md bg-slate-50 pb-32 text-slate-900 shadow-xl">
-      <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 px-4 pb-3 pt-3 backdrop-blur">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/shop"))} aria-label="Back" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100">
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <h1 className="text-lg font-extrabold">{mart ? "Grocery, fish & medical" : "Open restaurants"}</h1>
-        </div>
-        <label className="mt-3 flex h-11 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 focus-within:border-flame-500 focus-within:bg-white">
-          <Search className="h-5 w-5 shrink-0 text-slate-400" />
-          <span className="sr-only">Search shops</span>
-          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search shops" className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-slate-400 [&::-webkit-search-cancel-button]:hidden" />
-        </label>
-      </header>
+    <div className="mx-auto min-h-screen max-w-md bg-slate-50 pb-44 text-slate-900 sm:border-x sm:border-slate-200">
+      <AppBar title={mart ? "Grocery, fish & medical" : "Open restaurants"}>
+        <SearchField value={query} onChange={setQuery} placeholder="Search shops" label="Search shops" />
+      </AppBar>
       <main className="space-y-6 px-4 pt-4">
         {loading && !feed ? (
           <p className="py-16 text-center text-sm text-slate-500">Loading shops…</p>

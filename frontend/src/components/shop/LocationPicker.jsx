@@ -128,7 +128,7 @@ export default function LocationPicker({ shop, pin, onChange }) {
   return (
     <div className="space-y-2">
       <div className="flex gap-2">
-        <button type="button" onClick={useMyLocation} disabled={locating} className="flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-flame-600 px-4 text-sm font-bold text-white disabled:opacity-60">
+        <button type="button" onClick={useMyLocation} disabled={locating} className="flex h-11 shrink-0 items-center gap-1.5 rounded-lg bg-[#E8431A] px-4 text-sm font-bold text-white disabled:opacity-60">
           {locating ? <Loader2 className="h-4 w-4 animate-spin" /> : <LocateFixed className="h-4 w-4" />}
           Share my current location
         </button>
@@ -159,7 +159,7 @@ export default function LocationPicker({ shop, pin, onChange }) {
         </ul>
       )}
 
-      <div className="h-64 overflow-hidden rounded-2xl ring-1 ring-slate-200">
+      <div className="h-64 overflow-hidden rounded-xl ring-1 ring-slate-200">
         <MapContainer center={center} zoom={pin ? 16 : 14} scrollWheelZoom className="h-full w-full">
           <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" />
           {shopPos && <Marker position={shopPos} icon={SHOP} interactive={false} />}

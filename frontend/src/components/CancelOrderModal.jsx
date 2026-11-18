@@ -47,7 +47,7 @@ export default function CancelOrderModal({ order, role, onClose, onCancelled, to
             key={text}
             type="button"
             onClick={() => setReason(text)}
-            className={`rounded-full px-3 py-1.5 text-xs font-semibold ring-1 ${
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ring-1 ${
               reason === text ? "bg-orange-100 text-orange-800 ring-orange-300" : "bg-slate-50 text-slate-600 ring-slate-200"
             }`}
           >
@@ -70,7 +70,7 @@ export default function CancelOrderModal({ order, role, onClose, onCancelled, to
           type="button"
           onClick={onClose}
           disabled={busy}
-          className="rounded-2xl border border-slate-300 py-3 font-bold text-slate-700 disabled:opacity-60"
+          className="rounded-xl border border-slate-300 py-3 font-bold text-slate-700 disabled:opacity-60"
         >
           Keep order
         </button>
@@ -78,7 +78,7 @@ export default function CancelOrderModal({ order, role, onClose, onCancelled, to
           type="button"
           onClick={confirm}
           disabled={busy}
-          className="flex items-center justify-center rounded-2xl bg-red-600 py-3 font-bold text-white disabled:opacity-60"
+          className="flex items-center justify-center rounded-xl bg-red-600 py-3 font-bold text-white disabled:opacity-60"
         >
           {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : "Cancel order"}
         </button>

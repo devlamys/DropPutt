@@ -1,6 +1,7 @@
 import { CheckCircle2, Loader2, MapPin } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
+import AppBar from "../components/shop/AppBar.jsx";
 import { io } from "socket.io-client";
 import LiveTrackingMap from "../components/customer/LiveTrackingMap.jsx";
 import VoiceRecorder from "../components/customer/VoiceRecorder.jsx";
@@ -33,6 +34,7 @@ function stepIndex(status) {
 
 export default function CustomerDropPage() {
   const { token } = useParams();
+  const navigate = useNavigate();
   const { toast, node: toastNode } = useToast();
   const [order, setOrder] = useState(null);
   const [loadError, setLoadError] = useState("");
@@ -274,22 +276,23 @@ export default function CustomerDropPage() {
   ];
 
   return (
-    <div className="mx-auto min-h-screen max-w-md pb-12">
+    <div className="mx-auto min-h-screen max-w-md bg-slate-50 pb-12 sm:border-x sm:border-slate-200">
       {toastNode}
-      <header className="bg-gradient-to-br from-orange-500 to-red-600 px-4 pb-6 pt-5 text-white">
-        <p className="text-sm opacity-90">Order #{order.order_number}</p>
-        <h1 className="text-2xl font-extrabold">{order.shop_name ?? "Your delivery"}</h1>
+      <AppBar title={`Order #${order.order_number}`} subtitle="Live tracking" onBack={() => navigate("/shop")} label="Back to shop" />
+      <header className="border-b border-slate-200 bg-white px-4 pb-5 pt-4 text-slate-900">
+        <p className="text-sm text-slate-500">Order #{order.order_number}</p>
+        <h2 className="text-xl font-bold">{order.shop_name ?? "Your delivery"}</h2>
         <p className="mt-1 font-medium">{order.estimated_message}</p>
         {order.rider && (
-          <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-sm font-semibold">
+          <p className="mt-3 inline-flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-1 text-sm font-semibold">
             🛵 {order.rider.first_name} · {VEHICLE[order.rider.vehicle_type] ?? order.rider.vehicle_type}
           </p>
         )}
       </header>
 
-      <main className="-mt-3 space-y-4 px-4">
+      <main className="space-y-4 px-4 pt-4">
         {/* progress: newest step on top, what is still to come greyed out */}
-        <ol className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200" aria-label="Order progress">
+        <ol className="overflow-hidden rounded-xl bg-white ring-1 ring-slate-200" aria-label="Order progress">
           {[...timeline].reverse().map((step) => (
             <li key={step.key} className={`flex items-center gap-3 border-b border-slate-100 px-4 py-3.5 last:border-b-0 ${step.state === "todo" ? "opacity-45" : ""}`} aria-current={step.state === "current" ? "step" : undefined}>
               <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xl ${step.state === "done" ? "bg-green-600 text-white" : step.state === "current" ? "bg-orange-100 ring-2 ring-orange-400" : "bg-slate-100"}`} aria-hidden="true">
@@ -304,13 +307,13 @@ export default function CustomerDropPage() {
         </ol>
 
         {delivered && (
-          <div className="flex items-center gap-3 rounded-2xl bg-green-50 p-4 text-green-800 ring-1 ring-green-200">
+          <div className="flex items-center gap-3 rounded-xl bg-green-50 p-4 text-green-800 ring-1 ring-green-200">
             <CheckCircle2 className="h-8 w-8 shrink-0" />
             <p className="font-semibold">Delivered. Thank you for ordering! 🙏</p>
           </div>
         )}
         {cancelled && (
-          <div className="rounded-2xl bg-slate-100 p-4 text-center text-slate-600">
+          <div className="rounded-xl bg-slate-100 p-4 text-center text-slate-600">
             <p className="font-semibold">This order was cancelled.</p>
             {order.cancel_reason && <p className="mt-1 text-sm">{order.cancel_reason}</p>}
           </div>
@@ -318,7 +321,7 @@ export default function CustomerDropPage() {
 
         {/* withdraw: only while no rider has accepted */}
         {order.can_cancel && (
-          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+          <section className="rounded-xl bg-white p-4 ring-1 ring-slate-200">
             {confirmingCancel ? (
               <div className="space-y-3">
                 <p className="text-center font-semibold">Cancel this order?</p>
@@ -327,7 +330,7 @@ export default function CustomerDropPage() {
                     type="button"
                     onClick={() => setConfirmingCancel(false)}
                     disabled={cancelling}
-                    className="rounded-2xl border border-slate-300 py-3 font-bold text-slate-700 disabled:opacity-60"
+                    className="rounded-xl border border-slate-300 py-3 font-bold text-slate-700 disabled:opacity-60"
                   >
                     Keep order
                   </button>
@@ -335,7 +338,7 @@ export default function CustomerDropPage() {
                     type="button"
                     onClick={cancelOrder}
                     disabled={cancelling}
-                    className="flex items-center justify-center rounded-2xl bg-red-600 py-3 font-bold text-white disabled:opacity-60"
+                    className="flex items-center justify-center rounded-xl bg-red-600 py-3 font-bold text-white disabled:opacity-60"
                   >
                     {cancelling ? <Loader2 className="h-5 w-5 animate-spin" /> : "Yes, cancel"}
                   </button>
@@ -345,7 +348,7 @@ export default function CustomerDropPage() {
               <button
                 type="button"
                 onClick={() => setConfirmingCancel(true)}
-                className="w-full rounded-2xl border border-red-200 py-3 font-bold text-red-600"
+                className="w-full rounded-xl border border-red-200 py-3 font-bold text-red-600"
               >
                 Cancel order
               </button>
@@ -358,12 +361,12 @@ export default function CustomerDropPage() {
 
         {/* share location */}
         {active && (
-          <section className="space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+          <section className="space-y-3 rounded-xl bg-white p-4 ring-1 ring-slate-200">
             <button
               type="button"
               onClick={shareLocation}
               disabled={sharing}
-              className="flex w-full flex-col items-center justify-center gap-1 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-700 px-4 py-6 text-center text-white shadow-lg transition active:scale-95 disabled:opacity-70"
+              className="flex w-full flex-col items-center justify-center gap-1 rounded-xl bg-gradient-to-br from-green-500 to-emerald-700 px-4 py-6 text-center text-white transition active:scale-95 disabled:opacity-70"
             >
               {sharing ? <Loader2 className="h-8 w-8 animate-spin" /> : <MapPin className="h-8 w-8" />}
               <span className="text-2xl font-extrabold">📍 Share My Current Location</span>
@@ -396,7 +399,7 @@ export default function CustomerDropPage() {
 
         {/* voice + landmark */}
         {active && (
-          <section className="space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+          <section className="space-y-3 rounded-xl bg-white p-4 ring-1 ring-slate-200">
             <h2 className="font-bold">Help the rider find your house</h2>
             <div>
               <label htmlFor="turning-point" className="mb-1 block text-sm font-semibold">
@@ -418,7 +421,7 @@ export default function CustomerDropPage() {
                 type="button"
                 onClick={resendWithVoice}
                 disabled={sharing}
-                className="w-full rounded-2xl bg-slate-900 py-3.5 font-bold text-white disabled:opacity-60"
+                className="w-full rounded-xl bg-slate-900 py-3.5 font-bold text-white disabled:opacity-60"
               >
                 {fix ? "Send directions to rider" : "Share location with these directions"}
               </button>
@@ -430,7 +433,7 @@ export default function CustomerDropPage() {
         {(active || delivered) && (
           <section className="space-y-2">
             {active && eta && (
-              <p className="flex items-center justify-center gap-2 rounded-2xl bg-orange-50 py-2.5 text-center font-bold text-orange-800 ring-1 ring-orange-200">
+              <p className="flex items-center justify-center gap-2 rounded-xl bg-orange-50 py-2.5 text-center font-bold text-orange-800 ring-1 ring-orange-200">
                 🛵 About {eta} min away <span className="font-medium text-orange-700">· {formatDistance(ahead.metres)} by road</span>
               </p>
             )}
@@ -449,7 +452,7 @@ export default function CustomerDropPage() {
 
         {/* tip */}
         {order.can_tip && (
-          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+          <section className="rounded-xl bg-white p-4 ring-1 ring-slate-200">
             <h2 className="mb-1 font-bold">🌧️🌙 Add Tip for Rider</h2>
             <p className="mb-3 text-sm text-slate-500">100% goes to your rider. Pay it together with your bill.</p>
             <div className="grid grid-cols-3 gap-2">
@@ -459,7 +462,7 @@ export default function CustomerDropPage() {
                   type="button"
                   onClick={() => addTip(amount)}
                   disabled={tipping !== null}
-                  className="flex items-center justify-center gap-1 rounded-2xl border-2 border-orange-300 bg-orange-50 py-4 text-lg font-extrabold text-orange-700 active:scale-95 disabled:opacity-60"
+                  className="flex items-center justify-center gap-1 rounded-xl border-2 border-orange-300 bg-orange-50 py-4 text-lg font-extrabold text-orange-700 active:scale-95 disabled:opacity-60"
                 >
                   {tipping === amount ? <Loader2 className="h-5 w-5 animate-spin" /> : `+₹${amount}`}
                 </button>
@@ -470,17 +473,17 @@ export default function CustomerDropPage() {
 
         {/* optional proof: no PIN is ever asked */}
         {order.can_confirm_received && (
-          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-            <button type="button" onClick={confirmReceived} disabled={confirming} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-green-600 py-3.5 text-base font-extrabold text-white disabled:opacity-60">
+          <section className="rounded-xl bg-white p-4 ring-1 ring-slate-200">
+            <button type="button" onClick={confirmReceived} disabled={confirming} className="flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 py-3.5 text-base font-extrabold text-white disabled:opacity-60">
               {confirming ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle2 className="h-5 w-5" />} I received my order · ഓർഡർ കിട്ടി
             </button>
             <p className="mt-2 text-center text-xs text-slate-500">Tap this once the rider has handed it over. You do not need to give any code.</p>
           </section>
         )}
-        {order.received_at && <p className="rounded-2xl bg-green-50 px-4 py-3 text-center text-sm font-semibold text-green-800 ring-1 ring-green-200">✅ You confirmed you received this order.</p>}
+        {order.received_at && <p className="rounded-xl bg-green-50 px-4 py-3 text-center text-sm font-semibold text-green-800 ring-1 ring-green-200">✅ You confirmed you received this order.</p>}
 
         {/* bill */}
-        <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+        <section className="rounded-xl bg-white p-4 ring-1 ring-slate-200">
           <h2 className="mb-2 font-bold">Bill</h2>
           {billReady ? (
             <>
@@ -516,7 +519,7 @@ export default function CustomerDropPage() {
             type="button"
             onClick={async () => { setRefreshing(true); await load(); setRefreshing(false); }}
             disabled={refreshing}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-orange-300 bg-white py-3.5 font-bold text-orange-700 disabled:opacity-60"
+            className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-orange-300 bg-white py-3.5 font-bold text-orange-700 disabled:opacity-60"
           >
             {refreshing && <Loader2 className="h-5 w-5 animate-spin" />} Refresh order status
           </button>

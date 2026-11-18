@@ -135,7 +135,7 @@ function CenterOnHome({ home, hasBike }) {
 export default function LiveTrackingMap({ home, bike, route }) {
   const center = bike || home || [11.0, 76.0];
   return (
-    <div className="h-72 overflow-hidden rounded-2xl ring-1 ring-slate-200">
+    <div className="h-72 overflow-hidden rounded-xl ring-1 ring-slate-200">
       <MapContainer center={center} zoom={15} scrollWheelZoom={false} className="h-full w-full">
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

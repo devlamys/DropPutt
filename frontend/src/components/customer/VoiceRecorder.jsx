@@ -88,7 +88,7 @@ export default function VoiceRecorder({ value, onChange, disabled }) {
   return (
     <div className="space-y-2">
       {value ? (
-        <div className="flex items-center gap-2 rounded-2xl bg-blue-50 p-3">
+        <div className="flex items-center gap-2 rounded-xl bg-blue-50 p-3">
           <audio controls src={url.current} className="h-10 min-w-0 flex-1" />
           <button
             type="button"
@@ -107,7 +107,7 @@ export default function VoiceRecorder({ value, onChange, disabled }) {
           onPointerLeave={() => recording && stop()}
           onPointerCancel={stop}
           onContextMenu={(e) => e.preventDefault()}
-          className={`flex w-full touch-none select-none items-center justify-center gap-3 rounded-2xl py-5 text-lg font-bold text-white shadow transition disabled:opacity-60 ${
+          className={`flex w-full touch-none select-none items-center justify-center gap-3 rounded-xl py-5 text-lg font-bold text-white  transition disabled:opacity-60 ${
             recording ? "scale-[1.02] bg-red-600" : "bg-blue-600 active:scale-95"
           }`}
         >

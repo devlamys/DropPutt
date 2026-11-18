@@ -7,6 +7,8 @@ import VendorMenuDrawer from "../components/VendorMenuDrawer.jsx";
 import CustomBuyModal from "../components/CustomBuyModal.jsx";
 import CustomOrderSheet from "../components/shop/CustomOrderSheet.jsx";
 import OrdersDrawer from "../components/shop/OrdersDrawer.jsx";
+import AccountSheet from "../components/shop/AccountSheet.jsx";
+import BottomNav from "../components/shop/BottomNav.jsx";
 import { StorefrontContext, readOrders, readProfile, rememberOrder, saveProfile } from "../components/shop/StorefrontContext.jsx";
 import ZoneSheet from "../components/shop/ZoneSheet.jsx";
 import { useToast } from "../components/Toast.jsx";
@@ -41,6 +43,7 @@ export default function Storefront() {
   const [placed, setPlaced] = useState(null);
   const [customKind, setCustomKind] = useState(null); // "CUSTOM_BUY" | "PICK_DROP" | "MINI_TRUCK"
   const [ordersOpen, setOrdersOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [vendorId, setVendorId] = useState(null); // shop whose menu drawer is open
   const [orderCount, setOrderCount] = useState(() => readOrders().length);
   // The customer's area ("Chullikode"), remembered with the saved pin.
@@ -56,8 +59,8 @@ export default function Storefront() {
     }
   }, [setPlace]);
   const location = useLocation();
-  // The home page draws its own cart bar; every other page uses the shared one.
-  const homeHasOwnCartBar = location.pathname.replace(/\/+$/, "") === "/shop";
+  const onHomePage = location.pathname.replace(/\/+$/, "") === "/shop";
+  const activeTab = accountOpen ? "account" : ordersOpen ? "orders" : customKind === "CUSTOM_BUY" ? "buy" : onHomePage ? "home" : null;
   const loadedAt = useRef(0);
 
   const load = useCallback(async () => {
@@ -185,7 +188,7 @@ export default function Storefront() {
     franchiseName: feed?.franchise?.name ?? null,
     place,
     openCustom: (kind) => setCustomKind(kind),
-    openOrders: () => setOrdersOpen(true),
+    openOrders: () => { setAccountOpen(false); setOrdersOpen(true); },
     orderCount,
     minOrder,
     cartShop,
@@ -194,15 +197,26 @@ export default function Storefront() {
 
   return (
     <StorefrontContext.Provider value={value}>
-      <div className="min-h-screen bg-[#F3F3F0] font-display text-pine-950">
+      <div className="min-h-screen bg-slate-100 font-display text-slate-900">
         {toastNode}
         <Outlet />
-        {/* room for the floating cart bar so it never covers the footer text */}
-        {totals.count > 0 && <div className="h-24 bg-pine-950" aria-hidden="true" />}
 
-        {!cartOpen && !placed && !homeHasOwnCartBar && (
-          <CartBar cart={cart} totals={totals} minOrder={minOrder} shopCategory={cartShop?.shop_category} onOpen={() => setCartOpen(true)} />
+        {!cartOpen && !placed && !ordersOpen && !accountOpen && (
+          <CartBar cart={cart} totals={totals} minOrder={minOrder} onOpen={() => setCartOpen(true)} />
         )}
+        <BottomNav
+          active={activeTab}
+          orderCount={orderCount}
+          onHome={() => {
+            setOrdersOpen(false);
+            setAccountOpen(false);
+            if (!onHomePage) navigate("/shop");
+            else window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          onBuy={() => { setOrdersOpen(false); setAccountOpen(false); setCustomKind("CUSTOM_BUY"); }}
+          onOrders={() => { setAccountOpen(false); setOrdersOpen(true); }}
+          onAccount={() => { setOrdersOpen(false); setAccountOpen(true); }}
+        />
 
         {cartOpen && totals.count > 0 && (
           <CartCheckoutModal
@@ -247,17 +261,27 @@ export default function Storefront() {
 
         {ordersOpen && <OrdersDrawer onClose={() => { setOrdersOpen(false); setOrderCount(readOrders().length); }} />}
 
+        {accountOpen && (
+          <AccountSheet
+            onClose={() => setAccountOpen(false)}
+            onZones={() => setZoneOpen(true)}
+            place={place}
+            orderCount={orderCount}
+            onClearedOrders={() => setOrderCount(readOrders().length)}
+          />
+        )}
+
         {zoneOpen && <ZoneSheet zones={zones} onClose={() => setZoneOpen(false)} onPlace={setPlace} />}
 
         {switching && (
           <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/50 p-4 motion-safe:animate-fade-in sm:items-center" role="alertdialog" aria-modal="true" aria-label="Start a new cart?">
-            <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl motion-safe:animate-sheet-up">
+            <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-5 motion-safe:animate-sheet-up">
               <p className="text-lg font-semibold text-pine-950">Start a new cart?</p>
               <p className="mt-1 text-sm text-slate-600">
                 One order comes from one shop. Adding this will clear your items from <b>{cart.shop_name}</b>.
               </p>
               <div className="mt-4 flex gap-2">
-                <button type="button" onClick={() => setSwitching(null)} className="flex-1 rounded-full bg-slate-100 py-3 text-sm font-semibold text-slate-700">
+                <button type="button" onClick={() => setSwitching(null)} className="flex-1 rounded-lg bg-slate-100 py-3 text-sm font-semibold text-slate-700">
                   Keep cart
                 </button>
                 <button
@@ -266,7 +290,7 @@ export default function Storefront() {
                     replaceWith(switching.product, switching.shopName);
                     setSwitching(null);
                   }}
-                  className="flex-1 rounded-full bg-flame-600 py-3 text-sm font-semibold text-white hover:bg-flame-700"
+                  className="flex-1 rounded-lg bg-[#E8431A] py-3 text-sm font-semibold text-white"
                 >
                   New cart
                 </button>

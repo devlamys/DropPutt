@@ -44,7 +44,7 @@ const press = "transition-transform active:scale-[0.98]";
 const shimmer = "bg-[linear-gradient(90deg,#E7E7E2_25%,#D9D9D2_37%,#E7E7E2_63%)] bg-[length:400%_100%] motion-safe:animate-shimmer";
 
 function Skeleton({ className = "" }) {
-  return <div className={`rounded-2xl ${shimmer} ${className}`} />;
+  return <div className={`rounded-xl ${shimmer} ${className}`} />;
 }
 
 function HomeSkeleton() {
@@ -56,9 +56,9 @@ function HomeSkeleton() {
         <Skeleton className="h-[5.25rem]" />
         <Skeleton className="h-[5.25rem]" />
       </div>
-      <div className="flex gap-2 overflow-hidden">{Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-12 w-28 shrink-0 !rounded-full" />)}</div>
+      <div className="flex gap-2 overflow-hidden">{Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-12 w-28 shrink-0 !rounded-lg" />)}</div>
       {Array.from({ length: 4 }, (_, i) => (
-        <div key={i} className="flex gap-3 rounded-2xl bg-white p-3">
+        <div key={i} className="flex gap-3 rounded-xl bg-white p-3">
           <Skeleton className="h-20 w-20 shrink-0" />
           <div className="flex-1 space-y-2 pt-1">
             <Skeleton className="h-4 w-3/5 !rounded-md" />
@@ -68,20 +68,6 @@ function HomeSkeleton() {
         </div>
       ))}
     </div>
-  );
-}
-
-/** Fixed bottom tab bar: the four things a customer does most. */
-function BottomNav({ cartCount, orderCount, onHome, onSearch, onCart, onOrders }) {
-  const tab = "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-semibold text-slate-500 transition-colors active:text-flame-600";
-  const badge = (n) => n > 0 && <span className="absolute right-[28%] top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-flame-600 px-1 text-[10px] font-bold tabular-nums text-white">{n}</span>;
-  return (
-    <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 mx-auto flex h-16 max-w-md border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)]">
-      <button type="button" onClick={onHome} className={`${tab} !text-flame-600`}><Home className="h-6 w-6" />Home</button>
-      <button type="button" onClick={onSearch} className={tab}><Search className="h-6 w-6" />Search</button>
-      <button type="button" onClick={onCart} className={tab}><ShoppingBag className="h-6 w-6" />Cart{badge(cartCount)}</button>
-      <button type="button" onClick={onOrders} className={tab}><ClipboardList className="h-6 w-6" />Orders{badge(orderCount)}</button>
-    </nav>
   );
 }
 
@@ -138,17 +124,14 @@ export default function StorefrontHome() {
     return [...vendors, ...closedVendors].filter((v) => v.shop_name.toLowerCase().includes(needle) || categoryOf(v.shop_category).label.toLowerCase().includes(needle));
   }, [text, vendors, closedVendors]);
 
-  const short = minOrder - totals.subtotal;
-  const progress = minOrder > 0 ? Math.min(100, Math.round((totals.subtotal / minOrder) * 100)) : 100;
-
   return (
-    <div className="mx-auto min-h-screen max-w-md bg-slate-50 pb-36 text-slate-900 shadow-xl">
+    <div className="mx-auto min-h-screen max-w-md bg-slate-50 pb-44 text-slate-900 sm:border-x sm:border-slate-200">
       {/* ── 1. Sticky header ─────────────────────────────────────────── */}
-      <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 px-4 pb-2 pt-2 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white px-4 pb-2 pt-2">
         <div className="flex items-center gap-2.5">
           <DropPuttLogo iconOnly size="sm" />
           <h1 className="min-w-0 flex-1 truncate text-lg font-extrabold leading-none text-slate-900">{town}</h1>
-          <button type="button" onClick={openZones} aria-label="Set delivery location and see charges" className="flex h-8 shrink-0 items-center gap-1 rounded-full bg-flame-50 px-3 text-xs font-bold text-flame-700 ring-1 ring-flame-200">
+          <button type="button" onClick={openZones} aria-label="Set delivery location and see charges" className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-[#E8431A] bg-white px-3 text-xs font-bold text-[#E8431A]">
             <MapPin className="h-3.5 w-3.5" /> Set delivery location
           </button>
         </div>
@@ -164,7 +147,7 @@ export default function StorefrontHome() {
             className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-slate-400 [&::-webkit-search-cancel-button]:hidden"
           />
           {query && (
-            <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-slate-600">
+            <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-200 text-slate-600">
               <X className="h-4 w-4" />
             </button>
           )}
@@ -173,11 +156,11 @@ export default function StorefrontHome() {
 
       {loading && !feed && <HomeSkeleton />}
       {error && !feed && (
-        <div className="m-4 rounded-2xl border border-slate-200/80 bg-white p-6 text-center shadow-sm">
+        <div className="m-4 rounded-xl border border-slate-200/80 bg-white p-6 text-center ">
           <p className="text-4xl" aria-hidden="true">📡</p>
           <p className="mt-2 font-bold">We couldn't load the shops</p>
           <p className="text-sm text-slate-500">{error}</p>
-          <button type="button" onClick={reload} className={`mt-4 h-12 rounded-2xl bg-flame-600 px-6 text-sm font-bold text-white ${press}`}>Try again</button>
+          <button type="button" onClick={reload} className={`mt-4 h-12 rounded-lg bg-[#E8431A] px-6 text-sm font-bold text-white ${press}`}>Try again</button>
         </div>
       )}
 
@@ -189,11 +172,11 @@ export default function StorefrontHome() {
             <DishGrid
               list={list}
               empty={
-                <div className="rounded-2xl bg-white px-5 py-10 text-center shadow-sm ring-1 ring-slate-200/70">
+                <div className="rounded-xl bg-white px-5 py-10 text-center ring-1 ring-slate-200/70">
                   <p className="text-5xl" aria-hidden="true">🔍</p>
                   <p className="mt-3 text-lg font-bold">No dish matches "{text}"</p>
                   <p className="text-sm text-slate-500">Try another name, or ask a rider to buy it for you.</p>
-                  <button type="button" onClick={() => openCustom("CUSTOM_BUY")} className={`mt-5 h-12 rounded-2xl bg-amber-400 px-6 text-sm font-bold text-slate-900 ${press}`}>
+                  <button type="button" onClick={() => openCustom("CUSTOM_BUY")} className={`mt-5 h-12 rounded-lg bg-[#E8431A] px-6 text-sm font-bold text-white ${press}`}>
                     Buy Anything • എന്തും വാങ്ങാം
                   </button>
                 </div>
@@ -206,7 +189,7 @@ export default function StorefrontHome() {
               <div className="space-y-3">{shopHits.map((s) => <ShopCard key={s.id} shop={s} inCart={cart.vendor_id === s.id} onOpen={(id) => navigate(`/shop/restaurant/${id}`)} closed={s.is_open === false} />)}</div>
             </section>
           )}
-          <button type="button" onClick={() => navigate(`/shop/mart?q=${encodeURIComponent(text)}`)} className={`flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-sm font-bold text-white ${press}`}>
+          <button type="button" onClick={() => navigate(`/shop/mart?q=${encodeURIComponent(text)}`)} className={`flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-[#E8431A] bg-white text-sm font-bold text-[#E8431A] ${press}`}>
             <ShoppingBasket className="h-5 w-5" /> Also search the Mart for "{text}"
           </button>
         </main>
@@ -220,21 +203,21 @@ export default function StorefrontHome() {
             <ImageTile
               slot="chayakadi"
               onClick={() => goDishes("EVENING_SNACKS")}
-              className={`flex w-full rounded-2xl text-left shadow-sm ${press}`}
-              plain={`items-center gap-3 p-4 ${windowState.open ? "bg-gradient-to-br from-amber-400 to-amber-500 text-slate-900" : "border border-amber-200 bg-amber-50 text-slate-800"}`}
+              className={`flex w-full rounded-xl text-left ${press}`}
+              plain={`items-center gap-3 p-4 border border-slate-200 bg-white text-slate-900`}
               withImage="min-h-[7rem] items-end p-3 text-white"
             >
               {(photo) => (
                 <>
                   {!photo && (
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/85 text-amber-700 shadow-sm" aria-hidden="true">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white/85 text-amber-700 " aria-hidden="true">
                       <CupSoda className="h-6 w-6" />
                     </span>
                   )}
                   <span className={`min-w-0 flex-1 ${photo ? TEXT_SHADOW : ""}`}>
                     <span className={`block font-extrabold leading-snug ${photo ? "text-[13px]" : "text-[15px]"}`}>4 PM ചായക്കടി &amp; കൂൾബാർ സമയം</span>
                     <span className={`block font-semibold ${photo ? "text-[11px] opacity-95" : "mt-0.5 text-sm"}`}>4 PM Chayakadi &amp; Coolbar Combos (Min {inr(snackMin)})</span>
-                    <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-white/85 px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-slate-900 [text-shadow:none]">
+                    <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg bg-white/85 px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-slate-900 [text-shadow:none]">
                       <Clock className="h-3 w-3" />
                       {windowState.open ? `Live now · ends in ${hm(windowState.left)}` : `Opens 3:00 PM · in ${hm(windowState.left)}`}
                     </span>
@@ -246,25 +229,25 @@ export default function StorefrontHome() {
 
           {/* 3. Action bento grid */}
           <section className="grid grid-cols-2 gap-3 px-4" aria-label="What would you like to do?">
-            <ImageTile slot="restaurants" onClick={() => navigate("/shop/restaurants")} className={`row-span-2 flex min-h-[11rem] flex-col rounded-2xl text-left shadow-sm ${press}`} plain="justify-between bg-flame-600 p-4 text-white hover:bg-flame-700" withImage="justify-end p-3 text-white">
+            <ImageTile slot="restaurants" onClick={() => navigate("/shop/restaurants")} className={`row-span-2 flex min-h-[11rem] flex-col rounded-xl text-left ${press}`} plain="justify-between border border-slate-200 bg-white p-4 text-slate-900" withImage="justify-end p-3 text-white">
               {(photo) => (
                 <>
-                  {!photo && <Utensils className="h-8 w-8 text-flame-100" />}
+                  {!photo && <Utensils className="h-8 w-8 text-[#E8431A]" />}
                   <span className={photo ? TEXT_SHADOW : ""}>
                     <span className={`block font-extrabold leading-tight ${photo ? "text-[15px]" : "text-lg"}`}>Open Restaurants</span>
-                    <span className={`block font-medium ${photo ? "text-[11px] opacity-95" : "mt-1 text-xs text-flame-100"}`}>തുറന്ന ഹോട്ടലുകൾ</span>
+                    <span className={`block font-medium ${photo ? "text-[11px] opacity-95" : "mt-1 text-xs text-slate-500"}`}>തുറന്ന ഹോട്ടലുകൾ</span>
                   </span>
                   {!photo && <span className="pointer-events-none absolute -bottom-3 -right-2 text-7xl opacity-25" aria-hidden="true">🍛</span>}
                 </>
               )}
             </ImageTile>
 
-            <ImageTile slot="buy_anything" onClick={() => openCustom("CUSTOM_BUY")} className={`flex min-h-[5.25rem] rounded-2xl text-left shadow-md ring-2 ring-amber-500/60 ${press}`} plain="items-center gap-2 bg-amber-400 p-3 text-slate-900" withImage="items-end p-3 text-white">
+            <ImageTile slot="buy_anything" onClick={() => openCustom("CUSTOM_BUY")} className={`flex min-h-[5.25rem] rounded-xl text-left ring-2 ring-amber-500/60 ${press}`} plain="items-center gap-2 border border-[#E8431A] bg-orange-50 p-3 text-slate-900" withImage="items-end p-3 text-white">
               {(photo) => (
                 <>
-                  {!photo && <ShoppingBasket className="h-7 w-7 shrink-0" />}
+                  {!photo && <ShoppingBasket className="h-7 w-7 shrink-0 text-[#E8431A]" />}
                   <span className={`min-w-0 ${photo ? TEXT_SHADOW : ""}`}>
-                    <span className={photo ? "absolute right-2 top-2 rounded-full bg-amber-400 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-slate-900 [text-shadow:none]" : "mb-1 inline-block rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300"}>Popular</span>
+                    <span className={photo ? "absolute right-2 top-2 rounded-lg bg-amber-400 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-slate-900 [text-shadow:none]" : "mb-1 inline-block rounded-lg bg-slate-900 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300"}>Popular</span>
                     <span className={`block font-extrabold leading-tight ${photo ? "text-[13px]" : "text-[15px]"}`}>Buy Anything <span className="font-bold">(Custom Book)</span></span>
                     <span className={`block font-semibold ${photo ? "text-[10px] opacity-95" : "text-[11px]"}`}>എന്തും വാങ്ങാം</span>
                   </span>
@@ -272,7 +255,7 @@ export default function StorefrontHome() {
               )}
             </ImageTile>
 
-            <ImageTile slot="pick_drop" onClick={() => openCustom("PICK_DROP")} className={`flex min-h-[5.25rem] rounded-2xl text-left shadow-sm ${press}`} plain="items-center gap-2 border border-slate-200/80 bg-white p-3 text-slate-900" withImage="items-end p-3 text-white">
+            <ImageTile slot="pick_drop" onClick={() => openCustom("PICK_DROP")} className={`flex min-h-[5.25rem] rounded-xl text-left ${press}`} plain="items-center gap-2 border border-slate-200/80 bg-white p-3 text-slate-900" withImage="items-end p-3 text-white">
               {(photo) => (
                 <>
                   {!photo && <Truck className="h-7 w-7 shrink-0 text-flame-700" />}
@@ -284,13 +267,13 @@ export default function StorefrontHome() {
               )}
             </ImageTile>
 
-            <ImageTile slot="mart" onClick={() => navigate("/shop/mart")} className={`col-span-2 flex rounded-2xl text-left shadow-sm ${press}`} plain="items-center gap-3 bg-gradient-to-r from-emerald-600 to-emerald-500 p-4 text-white" withImage="min-h-[4.5rem] items-end p-3 text-white">
+            <ImageTile slot="mart" onClick={() => navigate("/shop/mart")} className={`col-span-2 flex rounded-xl text-left ${press}`} plain="items-center gap-3 border border-slate-200 bg-white p-4 text-slate-900" withImage="min-h-[4.5rem] items-end p-3 text-white">
               {(photo) => (
                 <>
-                  {!photo && <ShoppingBasket className="h-8 w-8 shrink-0" />}
+                  {!photo && <ShoppingBasket className="h-8 w-8 shrink-0 text-[#E8431A]" />}
                   <span className={`min-w-0 ${photo ? TEXT_SHADOW : ""}`}>
                     <span className={`block font-extrabold leading-tight ${photo ? "text-[15px]" : "text-lg"}`}>DropPutt Mart</span>
-                    <span className={`block font-medium ${photo ? "text-[11px] opacity-95" : "text-xs text-emerald-50"}`}>Grocery · Fish &amp; Meat · Medicines · മാർട്ട്</span>
+                    <span className={`block font-medium ${photo ? "text-[11px] opacity-95" : "text-xs text-slate-500"}`}>Grocery · Fish &amp; Meat · Medicines · മാർട്ട്</span>
                   </span>
                   {!photo && <span className="pointer-events-none absolute -bottom-3 -right-1 text-6xl opacity-25" aria-hidden="true">🛒</span>}
                 </>
@@ -317,15 +300,14 @@ export default function StorefrontHome() {
           <nav aria-label="Food categories" className="flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {[{ key: "", label: "All" }, ...list.categories].map((c) => {
               const on = category === c.key;
-              const snack = c.key === "EVENING_SNACKS";
               return (
                 <button
                   key={c.key || "all"}
                   type="button"
                   aria-pressed={on}
                   onClick={() => setCategory(c.key)}
-                  className={`flex h-11 shrink-0 items-center rounded-full border-2 px-4 text-sm font-bold ${press} ${
-                    on ? (snack ? "border-amber-500 bg-amber-400 text-slate-900" : "border-flame-600 bg-flame-600 text-white") : "border-slate-200 bg-white text-slate-700"
+                  className={`flex h-11 shrink-0 items-center rounded-lg border px-4 text-sm font-bold ${press} ${
+                    on ? "border-[#E8431A] bg-[#E8431A] text-white" : "border-slate-200 bg-white text-slate-700"
                   }`}
                 >
                   {c.label}
@@ -339,13 +321,13 @@ export default function StorefrontHome() {
             <DishGrid
               list={list}
               empty={
-                <section aria-label="Dishes" className="rounded-2xl border border-slate-200/80 bg-white px-5 py-10 text-center shadow-sm">
+                <section aria-label="Dishes" className="rounded-xl border border-slate-200/80 bg-white px-5 py-10 text-center ">
                   <p className="text-5xl" aria-hidden="true">{category === "EVENING_SNACKS" ? "☕" : "🍽️"}</p>
                   <p className="mt-3 text-base font-bold">{category === "EVENING_SNACKS" ? "No snacks available right now" : "Nothing to order right now"}</p>
                   <p className="mt-1 text-sm text-slate-500">{category === "EVENING_SNACKS" ? "4 PM snacks come between 3 and 6 PM." : "Shops may be closed. A rider can buy it for you from any shop in town."}</p>
                   <div className="mt-4 flex flex-col gap-2">
-                    <button type="button" onClick={() => openCustom("CUSTOM_BUY")} className={`h-12 rounded-2xl bg-amber-400 text-sm font-bold text-slate-900 ${press}`}>Buy Anything • എന്തും വാങ്ങാം</button>
-                    {category && <button type="button" onClick={() => setCategory("")} className={`h-12 rounded-2xl bg-slate-100 text-sm font-bold text-slate-700 ${press}`}>See all dishes</button>}
+                    <button type="button" onClick={() => openCustom("CUSTOM_BUY")} className={`h-12 rounded-lg bg-[#E8431A] text-sm font-bold text-white ${press}`}>Buy Anything • എന്തും വാങ്ങാം</button>
+                    {category && <button type="button" onClick={() => setCategory("")} className={`h-12 rounded-lg bg-slate-100 text-sm font-bold text-slate-700 ${press}`}>See all dishes</button>}
                   </div>
                 </section>
               }
@@ -356,37 +338,6 @@ export default function StorefrontHome() {
         </main>
       )}
 
-      {/* ── Floating cart summary bar ────────────────────────────────── */}
-      {totals.count > 0 && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-16 z-40 mx-auto max-w-md px-3 pb-2">
-          <div className="pointer-events-auto motion-safe:animate-sheet-up">
-            {short > 0 && (
-              <div className="mb-2 rounded-2xl bg-amber-50 px-4 pb-2.5 pt-2 text-xs font-semibold text-amber-900 shadow-md ring-1 ring-amber-200">
-                Add <span className="tabular-nums">{inr(short)}</span> more to reach {cart.shop_name}'s minimum order
-                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-amber-200"><div className="h-full rounded-full bg-amber-500 transition-all" style={{ width: `${progress}%` }} /></div>
-              </div>
-            )}
-            <button type="button" onClick={openCart} aria-label={`View cart, ${totals.count} item${totals.count === 1 ? "" : "s"}, ${inr(totals.subtotal)}`} className={`flex h-14 w-full items-center gap-3 rounded-2xl bg-flame-600 px-4 text-left text-white shadow-xl shadow-flame-900/25 hover:bg-flame-700 ${press}`}>
-              <span className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-white/20">
-                <ShoppingBag className="h-5 w-5" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-extrabold tabular-nums">{totals.count} item{totals.count === 1 ? "" : "s"} · {inr(totals.subtotal)}</span>
-                <span className="block truncate text-xs text-flame-100">{cartShop?.shop_name ?? cart.shop_name}</span>
-              </span>
-              <span className="text-sm font-extrabold">View cart ›</span>
-            </button>
-          </div>
-        </div>
-      )}
-      <BottomNav
-        cartCount={totals.count}
-        orderCount={orderCount}
-        onHome={() => { setQuery(""); setCategory(""); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-        onSearch={() => { window.scrollTo({ top: 0, behavior: "smooth" }); setTimeout(() => searchRef.current?.focus(), 250); }}
-        onCart={() => (totals.count > 0 ? openCart() : toast?.("Your cart is empty. Add something tasty first.", "info"))}
-        onOrders={openOrders}
-      />
     </div>
   );
 }

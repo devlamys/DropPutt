@@ -1,4 +1,4 @@
-import { Banknote, Loader2, Plus, Smartphone, X } from "lucide-react";
+import { ArrowLeft, Banknote, Loader2, Plus, Smartphone } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import api, { getErrorMessage, idempotencyHeaders } from "../utils/api.js";
 import { inr } from "../utils/format.js";
@@ -17,7 +17,7 @@ const validPhone = (value) => {
 
 const press = "transition-transform active:scale-[0.98]";
 const field =
-  "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100";
+  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100";
 
 const PAYMENTS = [
   {
@@ -38,7 +38,7 @@ const PAYMENTS = [
 
 function Section({ title, ml, children, action }) {
   return (
-    <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+    <section className="rounded-xl border border-slate-200/80 bg-white p-4 ">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-sm font-extrabold text-slate-900">
           {title} {ml && <span className="font-semibold text-slate-500">• {ml}</span>}
@@ -136,15 +136,15 @@ export default function CartCheckoutModal({ cart, totals, shop, minOrder, onQuan
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 motion-safe:animate-fade-in" role="dialog" aria-modal="true" aria-label="Your cart">
-      <form onSubmit={submit} noValidate className="flex max-h-[95vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-slate-50 shadow-2xl motion-safe:animate-sheet-up">
-        <header className="flex items-center justify-between gap-3 bg-white px-5 py-4 shadow-sm">
-          <div className="min-w-0">
-            <h2 className="text-lg font-extrabold text-slate-900">Your cart <span className="font-bold text-slate-500">• നിങ്ങളുടെ കാർട്ട്</span></h2>
-            <p className="truncate text-sm text-slate-500">{cart.shop_name}</p>
-          </div>
-          <button type="button" onClick={onClose} disabled={busy} aria-label="Close cart" className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 ${press}`}>
-            <X className="h-5 w-5" />
+      <form onSubmit={submit} noValidate className="flex h-full w-full max-w-md flex-col overflow-hidden bg-slate-50 motion-safe:animate-sheet-up">
+        <header className="flex h-14 shrink-0 items-center gap-1 border-b border-slate-200 bg-white pl-1 pr-4">
+          <button type="button" onClick={onClose} disabled={busy} aria-label="Back" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-900 active:bg-slate-100">
+            <ArrowLeft className="h-5 w-5" />
           </button>
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-base font-bold text-slate-900">Your cart</h2>
+            <p className="truncate text-xs text-slate-500">{cart.shop_name}</p>
+          </div>
         </header>
 
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
@@ -210,16 +210,16 @@ export default function CartCheckoutModal({ cart, totals, shop, minOrder, onQuan
                     role="radio"
                     aria-checked={on}
                     onClick={() => setPayment(p.value)}
-                    className={`flex min-h-[3.5rem] w-full items-center gap-3 rounded-2xl border-2 p-3 text-left ${press} ${on ? "border-emerald-600 bg-emerald-50" : "border-slate-200 bg-white"}`}
+                    className={`flex min-h-[3.5rem] w-full items-center gap-3 rounded-xl border-2 p-3 text-left ${press} ${on ? "border-emerald-600 bg-emerald-50" : "border-slate-200 bg-white"}`}
                   >
-                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${on ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"}`}>
+                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${on ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"}`}>
                       <Icon className="h-5 w-5" />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-extrabold text-slate-900">{p.title} <span className="font-semibold text-slate-500">• {p.ml}</span></span>
                       <span className="block text-xs text-slate-600">{p.hint}</span>
                     </span>
-                    <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${on ? "border-emerald-600" : "border-slate-300"}`} aria-hidden="true">
+                    <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-lg border-2 ${on ? "border-emerald-600" : "border-slate-300"}`} aria-hidden="true">
                       {on && <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />}
                     </span>
                   </button>
@@ -246,17 +246,17 @@ export default function CartCheckoutModal({ cart, totals, shop, minOrder, onQuan
             </p>
           </Section>
 
-          {error && <p role="alert" className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700 ring-1 ring-red-200">{error}</p>}
+          {error && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700 ring-1 ring-red-200">{error}</p>}
         </div>
 
-        <footer className="bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]">
+        <footer className="bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 border-t border-slate-200">
           {touched && blocked && <p className="mb-2 text-center text-sm font-semibold text-amber-800">{problems[0]}</p>}
           <button
             type="submit"
             disabled={busy}
             aria-disabled={blocked}
             aria-label={busy ? "Placing order" : `Place order, ${total == null ? inr(totals.subtotal) : inr(total)}, ${upi ? "UPI" : "cash on delivery"}`}
-            className={`flex h-14 w-full items-center justify-between rounded-2xl px-5 text-white ${press} ${blocked ? "bg-slate-400" : "bg-emerald-600 shadow-lg shadow-emerald-900/25 hover:bg-emerald-700"}`}
+            className={`flex h-14 w-full items-center justify-between rounded-xl px-5 text-white ${press} ${blocked ? "bg-slate-400" : "bg-emerald-600 hover:bg-emerald-700"}`}
           >
             <span className="text-base font-extrabold tabular-nums">{total == null ? inr(totals.subtotal) : inr(total)}</span>
             <span className="flex flex-col items-end leading-tight">

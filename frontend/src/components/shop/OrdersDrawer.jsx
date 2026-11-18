@@ -1,4 +1,5 @@
-import { ChevronRight, PackageOpen, X } from "lucide-react";
+import { ChevronRight, PackageOpen } from "lucide-react";
+import AppBar from "./AppBar.jsx";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../../utils/api.js";
@@ -61,25 +62,15 @@ export default function OrdersDrawer({ onClose }) {
   }, [refresh, onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/50 motion-safe:animate-fade-in" role="dialog" aria-modal="true" aria-label="My orders" onClick={onClose}>
-      <aside onClick={(e) => e.stopPropagation()} className="flex h-full w-full max-w-sm flex-col bg-slate-50 shadow-2xl">
-        <header className="flex items-center justify-between gap-3 bg-white px-5 py-4 shadow-sm">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">My Orders</h2>
-            <p className="text-xs text-slate-500">എന്റെ ഓർഡറുകൾ · on this phone</p>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close my orders" className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600 active:scale-[0.98]">
-            <X className="h-5 w-5" />
-          </button>
-        </header>
-
-        <div className="flex-1 overflow-y-auto p-4">
+    <div className="fixed inset-x-0 bottom-16 top-0 z-[35] mx-auto flex max-w-md flex-col bg-slate-50 sm:border-x sm:border-slate-200" role="dialog" aria-label="My orders">
+      <AppBar title="My Orders" subtitle="എന്റെ ഓർഡറുകൾ · on this phone" onBack={onClose} />
+      <div className="flex-1 overflow-y-auto p-4">
           {orders.length === 0 ? (
             <div className="mt-16 text-center">
               <PackageOpen className="mx-auto h-14 w-14 text-slate-300" />
               <p className="mt-4 font-bold text-slate-900">No orders yet</p>
               <p className="mt-1 text-sm text-slate-500">Orders you place from this phone will show up here, with live status.</p>
-              <button type="button" onClick={onClose} className="mt-6 h-12 rounded-2xl bg-emerald-600 px-6 text-sm font-bold text-white transition-transform active:scale-[0.98]">
+              <button type="button" onClick={onClose} className="mt-6 h-12 rounded-lg bg-[#E8431A] px-6 text-sm font-bold text-white transition-transform active:scale-[0.98]">
                 Start ordering
               </button>
             </div>
@@ -93,13 +84,13 @@ export default function OrdersDrawer({ onClose }) {
                     <Link
                       to={`/drop/${o.token}`}
                       onClick={onClose}
-                      className="flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition-transform active:scale-[0.98]"
+                      className="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-white p-4 transition-transform active:scale-[0.98]"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <p className="truncate font-bold text-slate-900">{o.shop || KIND_LABEL[o.kind] || "Order"}</p>
                           {code ? (
-                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${TONE[code] ?? "bg-slate-100 text-slate-600"}`}>{ORDER_STATUS_LABELS[code] ?? code}</span>
+                            <span className={`shrink-0 rounded-lg px-2 py-0.5 text-[11px] font-bold ${TONE[code] ?? "bg-slate-100 text-slate-600"}`}>{ORDER_STATUS_LABELS[code] ?? code}</span>
                           ) : (
                             <span className="h-4 w-16 shrink-0 animate-pulse rounded-full bg-slate-100" aria-label="Loading status" />
                           )}
@@ -117,7 +108,6 @@ export default function OrdersDrawer({ onClose }) {
             </ul>
           )}
         </div>
-      </aside>
     </div>
   );
 }

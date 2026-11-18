@@ -1,4 +1,4 @@
-import { Bike, Loader2, Truck, X } from "lucide-react";
+import { ArrowLeft, Bike, Loader2, Truck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import api, { getErrorMessage, idempotencyHeaders } from "../../utils/api.js";
 import { inr } from "../../utils/format.js";
@@ -106,30 +106,23 @@ export default function CustomOrderSheet({ kind: initialKind, onClose, onPlaced 
   };
 
   const field =
-    "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-flame-500 focus:ring-4 focus:ring-flame-100";
+    "w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-flame-500 focus:ring-4 focus:ring-flame-100";
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 motion-safe:animate-fade-in" role="dialog" aria-modal="true" aria-label={cfg.title}>
-      <form onSubmit={submit} noValidate className="flex max-h-[94vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-slate-50 shadow-2xl motion-safe:animate-sheet-up">
-        <header className="flex items-start justify-between gap-3 bg-white px-5 py-4 shadow-sm">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
-              <Icon className="h-6 w-6" />
-            </span>
-            <div className="min-w-0">
-              <h2 className="text-lg font-bold text-slate-900">
-                {cfg.title} <span className="font-semibold text-slate-500">• {cfg.ml}</span>
-              </h2>
-              <p className="text-xs text-slate-500">{cfg.hint}</p>
-            </div>
-          </div>
-          <button type="button" onClick={onClose} disabled={busy} aria-label="Close" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 active:scale-[0.98]">
-            <X className="h-5 w-5" />
+      <form onSubmit={submit} noValidate className="flex h-full w-full max-w-md flex-col overflow-hidden bg-slate-50 motion-safe:animate-sheet-up">
+        <header className="flex h-14 shrink-0 items-center gap-1 border-b border-slate-200 bg-white pl-1 pr-4">
+          <button type="button" onClick={onClose} disabled={busy} aria-label="Back" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-900 active:bg-slate-100">
+            <ArrowLeft className="h-5 w-5" />
           </button>
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-base font-bold text-slate-900">{cfg.title} <span className="font-semibold text-slate-500">• {cfg.ml}</span></h2>
+            <p className="truncate text-xs text-slate-500">{cfg.hint}</p>
+          </div>
         </header>
 
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
-          <div className="grid grid-cols-2 gap-2 rounded-2xl bg-white p-1.5 ring-1 ring-slate-200" role="radiogroup" aria-label="Type of pickup">
+          <div className="grid grid-cols-2 gap-2 rounded-xl bg-white p-1.5 ring-1 ring-slate-200" role="radiogroup" aria-label="Type of pickup">
             {["PICK_DROP", "MINI_TRUCK"].map((k) => (
               <button
                 key={k}
@@ -137,7 +130,7 @@ export default function CustomOrderSheet({ kind: initialKind, onClose, onPlaced 
                 role="radio"
                 aria-checked={kind === k}
                 onClick={() => setKind(k)}
-                className={`h-12 rounded-xl text-sm font-bold transition-transform active:scale-[0.98] ${kind === k ? "bg-flame-600 text-white shadow" : "text-slate-600"}`}
+                className={`h-12 rounded-xl text-sm font-bold transition-transform active:scale-[0.98] ${kind === k ? "bg-[#E8431A] text-white " : "text-slate-600"}`}
               >
                 {KINDS[k].title}
               </button>
@@ -174,21 +167,21 @@ export default function CustomOrderSheet({ kind: initialKind, onClose, onPlaced 
             <input className={`${field} col-span-2`} autoComplete="given-name" aria-label="Your name (optional)" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />
           </div>
 
-          <p className="rounded-2xl bg-amber-50 px-4 py-3 text-xs font-medium text-amber-900 ring-1 ring-amber-200">
+          <p className="rounded-xl bg-amber-50 px-4 py-3 text-xs font-medium text-amber-900 ring-1 ring-amber-200">
             Delivery <b className="tabular-nums">{quote?.deliverable ? inr(quote.delivery_fee) : "from ₹30"}</b>. The rider confirms the final amount with you before pickup. Pay cash on delivery.
           </p>
           {error && (
-            <p role="alert" className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700 ring-1 ring-red-200">{error}</p>
+            <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700 ring-1 ring-red-200">{error}</p>
           )}
         </div>
 
-        <footer className="bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+        <footer className="bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 border-t border-slate-200">
           {touched && blocked && <p className="mb-2 text-center text-sm font-medium text-amber-800">{problems[0]}</p>}
           <button
             type="submit"
             disabled={busy}
             aria-disabled={blocked}
-            className={`flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-base font-bold text-white transition-transform active:scale-[0.98] ${blocked ? "bg-slate-400" : "bg-flame-600 shadow-lg shadow-flame-900/20 hover:bg-flame-700"}`}
+            className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl text-base font-bold text-white transition-transform active:scale-[0.98] ${blocked ? "bg-slate-400" : "bg-[#E8431A] "}`}
           >
             {busy && <Loader2 className="h-5 w-5 animate-spin" />}
             {busy ? "Sending request…" : "Request a rider • റൈഡറെ വിളിക്കാം"}
