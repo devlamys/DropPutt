@@ -1,5 +1,5 @@
 import LogoMark from "../components/LogoMark.jsx";
-import { ChevronDown, ClipboardList, Clock, Home, Search, ShoppingBag, ShoppingBasket, Truck, Utensils, X } from "lucide-react";
+import { ClipboardList, Clock, Home, MapPin, Search, ShoppingBag, ShoppingBasket, Truck, Utensils, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DishGrid from "../components/shop/DishGrid.jsx";
@@ -83,7 +83,7 @@ function BottomNav({ cartCount, orderCount, onHome, onSearch, onCart, onOrders }
 export default function StorefrontHome() {
   const {
     feed, vendors, closedVendors, zone, loading, error, reload, cart, quantityOf, addProduct, removeOne, openZones,
-    totals, minOrder, cartShop, openCart, openCustom, openOrders, openVendor, orderCount, franchiseName, toast,
+    totals, minOrder, cartShop, openCart, openCustom, openOrders, openVendor, orderCount, franchiseName, place, toast,
   } = useStorefront();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
@@ -120,7 +120,7 @@ export default function StorefrontHome() {
     }
   }, [error, toast]);
 
-  const town = franchiseName || placeName() || "your town";
+  const town = place || franchiseName || placeName() || "your town";
   const snackMin = feed?.pinned?.min_order_value ?? "80";
 
   const allProducts = useMemo(() => vendors.flatMap((shop) => shop.products.map((product) => ({ product, shop }))), [vendors]);
@@ -138,18 +138,15 @@ export default function StorefrontHome() {
   return (
     <div className="mx-auto min-h-screen max-w-md bg-slate-50 pb-36 text-slate-900 shadow-xl">
       {/* ── 1. Sticky header ─────────────────────────────────────────── */}
-      <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 px-4 pb-3 pt-3 backdrop-blur">
-        <div className="flex items-center gap-3">
-          <LogoMark size={48} className="shrink-0" />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[11px] font-semibold text-slate-500">Delivering in • നമ്മുടെ നാട്</p>
-            <h1 className="truncate text-lg font-extrabold leading-tight text-slate-900">{town}</h1>
-            <button type="button" onClick={openZones} aria-label="Set delivery location and see charges" className="flex items-center gap-1 text-xs font-semibold text-flame-700">
-              Set delivery location <ChevronDown className="h-3.5 w-3.5" strokeWidth={3} />
-            </button>
-          </div>
+      <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 px-4 pb-2 pt-2 backdrop-blur">
+        <div className="flex items-center gap-2.5">
+          <LogoMark size={28} className="shrink-0" />
+          <h1 className="min-w-0 flex-1 truncate text-lg font-extrabold leading-none text-slate-900">{town}</h1>
+          <button type="button" onClick={openZones} aria-label="Set delivery location and see charges" className="flex h-8 shrink-0 items-center gap-1 rounded-full bg-flame-50 px-3 text-xs font-bold text-flame-700 ring-1 ring-flame-200">
+            <MapPin className="h-3.5 w-3.5" /> Set delivery location
+          </button>
         </div>
-        <label className="mt-3 flex h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 focus-within:border-flame-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-flame-100">
+        <label className="mt-1.5 flex h-9 items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 focus-within:border-flame-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-flame-100">
           <Search className="h-5 w-5 shrink-0 text-slate-400" />
           <span className="sr-only">Search dishes and shops</span>
           <input
@@ -317,7 +314,7 @@ export default function StorefrontHome() {
           </nav>
 
           {/* 5. Dishes */}
-          <div ref={shopsRef} className="scroll-mt-44 px-4">
+          <div ref={shopsRef} className="scroll-mt-28 px-4">
             <DishGrid
               list={list}
               empty={

@@ -1,5 +1,6 @@
 import { MapPin } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { fetchPlaceName } from "../../utils/place.js";
 import { inr } from "../../utils/format.js";
 import Modal from "../Modal.jsx";
 import LocationPicker from "./LocationPicker.jsx";
@@ -11,11 +12,25 @@ import { readProfile, saveProfile } from "./StorefrontContext.jsx";
  * phone and pre-fills every order form; the charge is worked out from it. The
  * distance bands are listed underneath for anyone who only wants the prices.
  */
-export default function ZoneSheet({ zones, onClose }) {
+export default function ZoneSheet({ zones, onClose, onPlace }) {
   const profile = readProfile();
   const [pin, setPin] = useState(profile.lat != null && profile.lng != null ? { lat: profile.lat, lng: profile.lng } : null);
   const [address, setAddress] = useState(profile.address || "");
   let from = 0;
+
+  // Name the area for the header label once the pin stops moving.
+  useEffect(() => {
+    if (!pin) return undefined;
+    let live = true;
+    const timer = setTimeout(async () => {
+      const name = await fetchPlaceName(pin.lat, pin.lng);
+      if (live && name) onPlace?.(name);
+    }, 600);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [pin?.lat, pin?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const done = () => {
     saveProfile({ address: address.trim(), ...(pin ? { lat: pin.lat, lng: pin.lng } : {}) });

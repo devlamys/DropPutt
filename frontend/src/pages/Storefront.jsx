@@ -12,6 +12,7 @@ import ZoneSheet from "../components/shop/ZoneSheet.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { useCart } from "../hooks/useCart.js";
 import api, { getErrorMessage } from "../utils/api.js";
+import { fetchPlaceName } from "../utils/place.js";
 
 const publicApi = { skipAuth: true };
 const MAX_PAGES = 10; // 10 shops per page
@@ -42,6 +43,18 @@ export default function Storefront() {
   const [ordersOpen, setOrdersOpen] = useState(false);
   const [vendorId, setVendorId] = useState(null); // shop whose menu drawer is open
   const [orderCount, setOrderCount] = useState(() => readOrders().length);
+  // The customer's area ("Chullikode"), remembered with the saved pin.
+  const [place, setPlaceState] = useState(() => readProfile().place ?? "");
+  const setPlace = useCallback((name) => {
+    setPlaceState(name);
+    saveProfile({ place: name });
+  }, []);
+  useEffect(() => {
+    const profile = readProfile();
+    if (profile.lat != null && profile.lng != null && !profile.place) {
+      fetchPlaceName(profile.lat, profile.lng).then((name) => name && setPlace(name));
+    }
+  }, [setPlace]);
   const location = useLocation();
   // The home page draws its own cart bar; every other page uses the shared one.
   const homeHasOwnCartBar = location.pathname.replace(/\/+$/, "") === "/shop";
@@ -170,6 +183,7 @@ export default function Storefront() {
     totals,
     openCart: () => setCartOpen(true),
     franchiseName: feed?.franchise?.name ?? null,
+    place,
     openCustom: (kind) => setCustomKind(kind),
     openOrders: () => setOrdersOpen(true),
     openVendor: (id) => setVendorId(id),
@@ -234,7 +248,7 @@ export default function Storefront() {
 
         {ordersOpen && <OrdersDrawer onClose={() => { setOrdersOpen(false); setOrderCount(readOrders().length); }} />}
 
-        {zoneOpen && <ZoneSheet zones={zones} onClose={() => setZoneOpen(false)} />}
+        {zoneOpen && <ZoneSheet zones={zones} onClose={() => setZoneOpen(false)} onPlace={setPlace} />}
 
         {switching && (
           <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/50 p-4 motion-safe:animate-fade-in sm:items-center" role="alertdialog" aria-modal="true" aria-label="Start a new cart?">

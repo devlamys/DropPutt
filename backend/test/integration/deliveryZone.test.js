@@ -19,6 +19,7 @@ before(async () => {
   geocoder = http.createServer((req, res) => {
     geocoderCalls += 1;
     res.writeHead(200, { "content-type": "application/json" });
+    if (req.url.startsWith("/reverse")) return res.end(JSON.stringify({ address: { road: "Main Road", suburb: "Chullikode", county: "Malappuram" } }));
     res.end(JSON.stringify([{ display_name: "Kizhissery, Malappuram, Kerala, India", lat: "11.18", lon: "76.07" }]));
   });
   await Promise.all([osrm, geocoder].map((s) => new Promise((r) => s.listen(0, "127.0.0.1", r))));
@@ -189,6 +190,15 @@ describe("Call Rider Now: the zone at pickup", () => {
 });
 
 describe("place search proxy", () => {
+  it("names the area for a point, caches it, and validates the coordinates", async () => {
+    const res = await api("GET", "/public/reverse-geocode?lat=11.18&lng=76.07", {});
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.data.name, "Chullikode");
+    await api("GET", "/public/reverse-geocode?lat=11.1801&lng=76.0702", {});
+    assert.equal(geocoderCalls, 1);
+    assert.equal((await api("GET", "/public/reverse-geocode?lat=abc&lng=76", {})).status, 422);
+  });
+
   it("returns places from the geocoder, and serves repeats from the cache", async () => {
     const res = await api("GET", "/public/geocode?q=Kizhissery", {});
     assert.equal(res.status, 200, JSON.stringify(res.body));

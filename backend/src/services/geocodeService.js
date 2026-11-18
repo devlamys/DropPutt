@@ -7,12 +7,14 @@
 const CACHE_MS = 24 * 60 * 60 * 1000;
 const CACHE_MAX = 500;
 const cache = new Map(); // "query|near" -> { at, results }
+const placeCache = new Map(); // "lat,lng" (3 decimals, about 100 m) -> { at, name }
 let lastCall = 0;
 
 const baseUrl = () => (process.env.GEOCODER_URL || "https://nominatim.openstreetmap.org").replace(/\/+$/, "");
 
 export function clearGeocodeCache() {
   cache.clear();
+  placeCache.clear();
   lastCall = 0;
 }
 
@@ -55,5 +57,38 @@ export async function searchPlaces(query, near) {
     return results;
   } catch {
     return [];
+  }
+}
+
+// Smallest named area first: "Chullikode", not the whole address.
+const AREA_KEYS = ["neighbourhood", "suburb", "hamlet", "village", "locality", "town", "city_district", "city", "municipality", "county"];
+
+/** The area name for a point ("Chullikode"), or "" when it cannot be found. */
+export async function placeNameAt(lat, lng) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return "";
+  const key = `${lat.toFixed(3)},${lng.toFixed(3)}`;
+  const hit = placeCache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.name;
+
+  const url = new URL(`${baseUrl()}/reverse`);
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("lat", String(lat));
+  url.searchParams.set("lon", String(lng));
+  url.searchParams.set("zoom", "14");
+  url.searchParams.set("addressdetails", "1");
+  try {
+    await pace();
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(5000),
+      headers: { "user-agent": "DropPutt/1.0 (local delivery app place search)", accept: "application/json" },
+    });
+    if (!res.ok) return "";
+    const address = (await res.json())?.address ?? {};
+    const name = String(AREA_KEYS.map((k) => address[k]).find(Boolean) ?? "").slice(0, 60);
+    if (placeCache.size >= CACHE_MAX) placeCache.delete(placeCache.keys().next().value);
+    if (name) placeCache.set(key, { at: Date.now(), name });
+    return name;
+  } catch {
+    return "";
   }
 }

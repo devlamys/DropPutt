@@ -9,7 +9,7 @@ import { z } from "zod";
 import { prisma, TX_OPTIONS } from "../config/prisma.js";
 import { idempotency } from "../middleware/idempotency.js";
 import { geocodeLimiter, publicLimiter, publicWriteLimiter } from "../middleware/rateLimit.js";
-import { searchPlaces } from "../services/geocodeService.js";
+import { placeNameAt, searchPlaces } from "../services/geocodeService.js";
 import { voiceUpload } from "../middleware/upload.js";
 import { cancelOrder } from "../services/orderCancelService.js";
 import { refreshRouteFromRider, routeView } from "../services/routeService.js";
@@ -44,6 +44,19 @@ router.get(
     const query = parse(geocodeSchema, req.query);
     const near = query.near_lat !== undefined && query.near_lng !== undefined ? { lat: query.near_lat, lng: query.near_lng } : null;
     ok(res, { places: await searchPlaces(query.q, near) });
+  })
+);
+
+const reverseSchema = z.object({ lat: zLat, lng: zLng });
+
+// GET /api/v1/public/reverse-geocode?lat=..&lng=.. — the area name for a point, for the
+// "where are you" label in the storefront header. { name: "" } when unknown.
+router.get(
+  "/reverse-geocode",
+  geocodeLimiter,
+  asyncHandler(async (req, res) => {
+    const { lat, lng } = parse(reverseSchema, req.query);
+    ok(res, { name: await placeNameAt(lat, lng) });
   })
 );
 
