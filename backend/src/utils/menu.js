@@ -31,3 +31,29 @@ export const isSellable = (product, minutesOfDay, now = new Date()) =>
   product.is_available &&
   hasStock(product) &&
   isProductInSlot(product, minutesOfDay);
+
+export const FOOD_CATEGORIES = Object.freeze([
+  { key: "MEALS", label: "Meals" },
+  { key: "BIRYANI", label: "Biryani" },
+  { key: "FAST_FOOD", label: "Fast food" },
+  { key: "SNACKS", label: "Chai & snacks" },
+  { key: "JUICE_SHAKES", label: "Juice & shakes" },
+  { key: "BAKERY_SWEETS", label: "Bakery & sweets" },
+  { key: "OTHER", label: "Other" },
+]);
+
+const GUESSES = [
+  ["BIRYANI", /biriyani|biryani|ബിരിയാണി|mandi|kuzhi/i],
+  ["JUICE_SHAKES", /juice|shake|lime|soda|lassi|falooda|mojito|ജ്യൂസ്/i],
+  ["FAST_FOOD", /burger|pizza|wrap|sandwich|fries|shawarma|roll|noodles|fried rice|momo|nugget/i],
+  ["BAKERY_SWEETS", /cake|puff|bun|cookie|brownie|ice cream|dessert|pudding|sweet|laddu|halwa/i],
+  ["SNACKS", /chai|tea|coffee|vada|bonda|pazham|samosa|cutlet|pakoda|unniyappam|ചായ|കടി/i],
+  ["MEALS", /meals|thali|parotta|porotta|appam|dosa|idli|puttu|curry|fry|chicken|beef|fish|egg|ഊണ്/i],
+];
+
+/** Default food category for a new item whose vendor did not choose one. */
+export function guessFoodCategory(name, slot_type) {
+  const hit = GUESSES.find(([, pattern]) => pattern.test(name));
+  if (hit) return hit[0];
+  return slot_type === "EVENING_SNACKS_3_TO_6" ? "SNACKS" : "OTHER";
+}

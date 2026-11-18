@@ -23,6 +23,17 @@ enum ShopCategory {
   MEDICAL_PHARMACY
 }
 
+// What a dish is, for the storefront's food tabs. Shop category is separate (HOTEL, GROCERY, ...).
+enum FoodCategory {
+  MEALS
+  BIRYANI
+  FAST_FOOD
+  SNACKS
+  JUICE_SHAKES
+  BAKERY_SWEETS
+  OTHER
+}
+
 enum TimeSlot {
   ALL_DAY
   LUNCH_ONLY
@@ -231,6 +242,7 @@ model Product {
   price          Decimal  @db.Decimal(12, 2)
   image_url      String?
   slot_type      TimeSlot @default(ALL_DAY)
+  food_category  FoodCategory @default(OTHER)
   available_from String?
   available_to   String?
   is_combo       Boolean  @default(false)
@@ -252,6 +264,7 @@ model Product {
 
   @@index([vendor_id, is_available])
   @@index([vendor_id, slot_type, is_available])
+  @@index([food_category])
   @@map("products")
 }
 

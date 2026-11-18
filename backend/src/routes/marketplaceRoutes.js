@@ -18,7 +18,7 @@ import { buildPage, parsePagination } from "../utils/pagination.js";
 import { AppError, asyncHandler, fieldError, ok } from "../utils/response.js";
 import { moneyStr } from "../utils/serializers.js";
 import { saveUpload } from "../utils/storage.js";
-import { hasStock, isOfferActive, isSellable, stockLeft } from "../utils/menu.js";
+import { FOOD_CATEGORIES, hasStock, isOfferActive, isSellable, stockLeft } from "../utils/menu.js";
 import { slotWindowLabel } from "../utils/slots.js";
 import { isChayakadiWindow, istDayRange, istMinutesOfDay } from "../utils/time.js";
 import { parse, zId, zLat, zLng } from "../utils/validate.js";
@@ -49,6 +49,7 @@ const productView = (product) => ({
   price: moneyStr(product.price),
   image_url: product.image_url,
   slot_type: product.slot_type,
+  food_category: product.food_category,
   is_combo: product.is_combo,
   // The hotel's own offer: `price` is what the customer pays.
   ...(isOfferActive(product)
@@ -189,6 +190,134 @@ router.get(
         items,
       },
       { pagination: page.pagination }
+    );
+  })
+);
+
+// ---- Dishes / products list (food-first storefront) ----
+
+const GROUPS = Object.freeze({
+  FOOD: ["HOTEL", "BAKERY_COOLBAR"],
+  MART: ["GROCERY", "FISH_MEAT", "MEDICAL_PHARMACY"],
+});
+const MART_CATEGORIES = Object.freeze([
+  { key: "GROCERY", label: "Grocery" },
+  { key: "FISH_MEAT", label: "Fish & Meat" },
+  { key: "MEDICAL_PHARMACY", label: "Medical" },
+]);
+const SNACKS_NOW = { key: "EVENING_SNACKS", label: "4 PM Snacks" };
+
+const productsSchema = z
+  .object({
+    group: z.enum(["FOOD", "MART"]).default("FOOD"),
+    category: z.string().trim().max(30).optional(),
+    vendor_id: zId.optional(),
+    q: z.string().trim().min(2).max(60).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.category || value.vendor_id) return;
+    const allowed =
+      value.group === "FOOD"
+        ? [...FOOD_CATEGORIES.map((c) => c.key), SNACKS_NOW.key]
+        : MART_CATEGORIES.map((c) => c.key);
+    if (!allowed.includes(value.category)) {
+      ctx.addIssue({ code: "custom", path: ["category"], message: "unknown category" });
+    }
+  });
+
+const SCAN_CHUNK = 60;
+const MAX_SCANS = 5;
+
+// GET /api/v1/marketplace/products?group=FOOD|MART&category=&vendor_id=&q=&limit=&cursor=
+//
+// The dish list behind the home tabs, the Mart and one shop's page (vendor_id).
+// Newest first, cursor-paginated. Only items a customer can order right now:
+// open shop of this franchise, in stock, available in the current time slot.
+router.get(
+  "/products",
+  asyncHandler(async (req, res) => {
+    const franchise_id = req.franchise_id;
+    const { group, category, vendor_id, q } = parse(productsSchema, req.query);
+    const { limit, cursorId } = parsePagination(req.query);
+    const now = new Date();
+    const minutes = istMinutesOfDay(now);
+
+    // A shop page: that shop's whole menu, whatever its category.
+    let shop = null;
+    if (vendor_id) {
+      shop = await prisma.vendor.findFirst({
+        where: { id: vendor_id, franchise_id },
+        select: { id: true, shop_name: true, shop_category: true, address: true, is_open: true, min_order_value: true, lat: true, lng: true },
+      });
+      if (!shop) throw new AppError(404, "NOT_FOUND", "Shop not found");
+    }
+    const shopView = shop && {
+      ...shop,
+      lat: Number(shop.lat),
+      lng: Number(shop.lng),
+      min_order_value: moneyStr(shop.min_order_value),
+    };
+
+    const where = {
+      is_archived: false,
+      is_available: true,
+      OR: [{ stock_qty: null }, { stock_qty: { gt: 0 } }],
+      vendor: vendor_id
+        ? { id: vendor_id, franchise_id, is_open: true }
+        : {
+            franchise_id,
+            is_open: true,
+            shop_category: { in: category && group === "MART" ? [category] : GROUPS[group] },
+          },
+      ...(q ? { name: { contains: q, mode: "insensitive" } } : {}),
+      ...(!vendor_id && group === "FOOD" && category === SNACKS_NOW.key ? { slot_type: "EVENING_SNACKS_3_TO_6" } : {}),
+      ...(!vendor_id && group === "FOOD" && category && category !== SNACKS_NOW.key ? { food_category: category } : {}),
+    };
+
+    // The time-slot rules live in code, so scan in chunks until a page is filled.
+    const found = [];
+    let before = cursorId;
+    let exhausted = false;
+    let lastScanned = null;
+    for (let scan = 0; scan < MAX_SCANS && found.length <= limit && !exhausted; scan += 1) {
+      const rows = await prisma.product.findMany({
+        where: { ...where, ...(before ? { id: { lt: before } } : {}) },
+        orderBy: { id: "desc" },
+        take: SCAN_CHUNK,
+        include: { vendor: { select: { shop_name: true, shop_category: true } } },
+      });
+      exhausted = rows.length < SCAN_CHUNK;
+      for (const row of rows) {
+        if (isSellable(row, minutes, now)) found.push(row);
+      }
+      if (rows.length) {
+        lastScanned = rows[rows.length - 1].id;
+        before = lastScanned;
+      }
+    }
+    const items = found.slice(0, limit);
+    const full = found.length > limit;
+    const has_more = full || !exhausted;
+    const cursorFrom = full ? items[items.length - 1].id : lastScanned;
+    const next_cursor = has_more && cursorFrom ? Buffer.from(JSON.stringify({ id: cursorFrom })).toString("base64") : null;
+
+    const chayakadi = isChayakadiWindow(now);
+    const foodChips = [...FOOD_CATEGORIES.filter((c) => c.key !== "OTHER"), SNACKS_NOW];
+    if (chayakadi) foodChips.unshift(foodChips.pop());
+    ok(
+      res,
+      {
+        group,
+        is_chayakadi_window: chayakadi,
+        categories: group === "FOOD" ? foodChips : MART_CATEGORIES,
+        shop: shopView,
+        items: items.map((product) => ({
+          ...productView(product),
+          shop_name: product.vendor.shop_name,
+          shop_category: product.vendor.shop_category,
+        })),
+      },
+      { pagination: { limit, has_more, next_cursor } }
     );
   })
 );

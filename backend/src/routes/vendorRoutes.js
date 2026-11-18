@@ -12,7 +12,7 @@ import { settlementView } from "../services/vendorSettlementService.js";
 import { idempotency } from "../middleware/idempotency.js";
 import { money } from "../utils/orderMath.js";
 import { audit } from "../utils/audit.js";
-import { effectivePrice, isOfferActive } from "../utils/menu.js";
+import { effectivePrice, FOOD_CATEGORIES, guessFoodCategory, isOfferActive } from "../utils/menu.js";
 import { productImageUpload } from "../middleware/upload.js";
 import { saveUpload } from "../utils/storage.js";
 import {
@@ -54,6 +54,7 @@ const productView = (product) => ({
   price: moneyStr(product.price),
   image_url: product.image_url,
   slot_type: product.slot_type,
+  food_category: product.food_category,
   is_combo: product.is_combo,
   is_available: product.is_available,
   description: product.description,
@@ -85,6 +86,7 @@ const productFields = {
   price: zMoney,
   description: z.string().trim().max(300).nullable(),
   slot_type: z.enum(["ALL_DAY", "LUNCH_ONLY", "EVENING_SNACKS_3_TO_6", "DINNER_ONLY"]),
+  food_category: z.enum(FOOD_CATEGORIES.map((c) => c.key)),
   available_from: hhmm.nullable(),
   available_to: hhmm.nullable(),
   is_combo: z.boolean(),
@@ -98,6 +100,7 @@ const createSchema = z.object({
   ...productFields,
   description: productFields.description.optional(),
   slot_type: productFields.slot_type.default("ALL_DAY"),
+  food_category: productFields.food_category.optional(),
   available_from: productFields.available_from.optional(),
   available_to: productFields.available_to.optional(),
   is_combo: productFields.is_combo.default(false),
@@ -143,6 +146,7 @@ router.post(
     const body = parse(createSchema, req.body);
     checkProduct(body);
     const data = normaliseOffer({ ...body });
+    data.food_category ??= guessFoodCategory(data.name, data.slot_type);
     const duplicate = await prisma.product.findFirst({
       where: { vendor_id: req.vendor.id, is_archived: false, name: { equals: data.name, mode: "insensitive" } },
     });

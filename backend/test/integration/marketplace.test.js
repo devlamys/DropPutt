@@ -491,3 +491,109 @@ describe("feed with closed shops", () => {
     assert.deepEqual(shown.body.data.items[0].products, []);
   });
 });
+
+describe("products list: dishes, Mart and a shop's page", () => {
+  const list = (query = "", opts = {}) => api("GET", `/marketplace/products${query}`, opts);
+  const names = (res) => res.body.data.items.map((p) => p.name);
+  const dish = (data) => prisma.product.create({ data: { vendor_id: w.vendor.id, slot_type: "ALL_DAY", ...data } });
+
+  async function martShop(world = w, shop_category = "GROCERY") {
+    const user = await prisma.user.create({
+      data: { franchise_id: world.franchise.id, role: "VENDOR", name: "Mart owner", phone: nextPhone(), pin_hash: "x" },
+    });
+    return prisma.vendor.create({
+      data: {
+        franchise_id: world.franchise.id,
+        user_id: user.id,
+        shop_name: "Town Mart",
+        shop_category,
+        address: "Bazaar",
+        lat: "11.0000000",
+        lng: "76.0000000",
+        min_order_value: 50,
+      },
+    });
+  }
+
+  it("lists only orderable dishes, each with its shop name", async () => {
+    await dish({ name: "Stock out", price: 40, stock_qty: 0 });
+    const res = await list();
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.ok(names(res).includes("Biryani"));
+    assert.ok(!names(res).includes("Sold out"));
+    assert.ok(!names(res).includes("Stock out"));
+    assert.equal(res.body.data.items[0].shop_name, w.vendor.shop_name);
+    assert.ok(res.body.data.categories.some((c) => c.key === "BIRYANI"));
+  });
+
+  it("hides dishes of closed shops and of other franchises", async () => {
+    await prisma.vendor.update({ where: { id: w.vendor.id }, data: { is_open: false } });
+    assert.deepEqual(names(await list()), []);
+    await prisma.vendor.update({ where: { id: w.vendor.id }, data: { is_open: true } });
+    await prisma.product.create({ data: { vendor_id: other.vendor.id, name: "Other dish", price: 10, slot_type: "ALL_DAY" } });
+    assert.ok(!names(await list()).includes("Other dish"));
+  });
+
+  it("keeps grocery out of the food list and puts it in the Mart", async () => {
+    const mart = await martShop();
+    await prisma.product.create({ data: { vendor_id: mart.id, name: "Rice 5 kg", price: 300 } });
+    assert.ok(!names(await list()).includes("Rice 5 kg"));
+    const res = await list("?group=MART");
+    assert.deepEqual(names(res), ["Rice 5 kg"]);
+    assert.ok(res.body.data.categories.some((c) => c.key === "FISH_MEAT"));
+    assert.deepEqual(names(await list("?group=MART&category=MEDICAL_PHARMACY")), []);
+  });
+
+  it("filters by food category and by 4 PM snacks", async () => {
+    await dish({ name: "Chicken biryani", price: 150, food_category: "BIRYANI" });
+    await dish({ name: "Pazham pori", price: 15, food_category: "SNACKS", slot_type: "EVENING_SNACKS_3_TO_6", available_from: "00:00", available_to: "23:59" });
+    assert.deepEqual(names(await list("?category=BIRYANI")), ["Chicken biryani"]);
+    assert.deepEqual(names(await list("?category=EVENING_SNACKS")), ["Pazham pori"]);
+    assert.equal((await list("?category=NOPE")).status, 422);
+    assert.equal((await list("?group=MART&category=BIRYANI")).status, 422);
+  });
+
+  it("searches by dish name", async () => {
+    await dish({ name: "Chicken biryani", price: 150 });
+    assert.deepEqual(names(await list("?q=chicken")), ["Chicken biryani"]);
+    assert.equal((await list("?q=a")).status, 422);
+  });
+
+  it("pages through everything once, newest first, with a cursor", async () => {
+    for (let i = 1; i <= 8; i += 1) await dish({ name: `Dish ${i}`, price: 10 + i });
+    const seen = [];
+    let cursor = "";
+    for (let page = 0; page < 10; page += 1) {
+      const res = await list(`?limit=3${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
+      assert.equal(res.status, 200);
+      assert.ok(res.body.data.items.length <= 3);
+      seen.push(...res.body.data.items.map((p) => p.id));
+      if (!res.body.meta.pagination.has_more) break;
+      cursor = res.body.meta.pagination.next_cursor;
+      assert.ok(cursor);
+    }
+    assert.equal(new Set(seen).size, seen.length, "no dish twice");
+    assert.ok(seen.length >= 10); // 8 new + biryani + meals
+    assert.deepEqual(seen, [...seen].sort((a, b) => b - a));
+  });
+
+  it("a shop's page lists that shop's dishes with the shop's details", async () => {
+    const mart = await martShop();
+    await prisma.product.create({ data: { vendor_id: mart.id, name: "Sugar", price: 45 } });
+    const res = await list(`?vendor_id=${w.vendor.id}`);
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.shop.id, w.vendor.id);
+    assert.equal(res.body.data.shop.is_open, true);
+    assert.ok(names(res).includes("Biryani"));
+    assert.ok(!names(res).includes("Sugar"));
+    assert.deepEqual(names(await list(`?vendor_id=${mart.id}`)), ["Sugar"]);
+  });
+
+  it("a closed shop's page shows the shop but no dishes; another franchise's shop is not found", async () => {
+    await prisma.vendor.update({ where: { id: w.vendor.id }, data: { is_open: false } });
+    const res = await list(`?vendor_id=${w.vendor.id}`);
+    assert.equal(res.body.data.shop.is_open, false);
+    assert.deepEqual(res.body.data.items, []);
+    assert.equal((await list(`?vendor_id=${other.vendor.id}`)).status, 404);
+  });
+});

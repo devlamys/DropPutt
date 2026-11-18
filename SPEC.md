@@ -3472,3 +3472,25 @@ The delivery zone, and so the delivery fee, is decided by the software from the 
 ## 62.3 Tests
 
 * New order → shop device pushed with items; shop with `app_enabled = false` not pushed; the rider's push and `open_requests` carry only `item_count`; after accepting the rider's order lists the items; accept → shop push names the rider; pickup → customer status `PICKED_UP` with the "on the way to you" message and the shop is pushed; `PATCH /admin/vendors/:id` guarded; `/device/unregister` touches only the caller's device.
+
+# 63. Food-first storefront: products list
+
+## 63.1 Product list
+
+`GET /marketplace/products?group=FOOD|MART&category=&vendor_id=&q=&limit=&cursor=` (tenant from `x-franchise-slug`) lists **orderable items**, not shops. One endpoint serves the home tabs, the Mart and a shop's page.
+
+* Only items of an open shop of this franchise that are not archived, `is_available`, in stock (`stock_qty` null or > 0) and inside their time slot right now (`isSellable`). Slot rules live in code, so the server scans in chunks until a page is full.
+* Order: newest first (`id` descending), cursor pagination (`pagination.next_cursor`, `has_more`). The 4 PM snack pin of `/marketplace/feed` does not apply here; snacks have their own tab (`category=EVENING_SNACKS`).
+* `group=FOOD` (default) = shops `HOTEL` and `BAKERY_COOLBAR`; `group=MART` = `GROCERY`, `FISH_MEAT`, `MEDICAL_PHARMACY`. Each item carries `shop_name`, `shop_category`, `food_category`, price (offer price applied, `original_price` when on offer).
+* `category`: FOOD → a `FoodCategory` value or `EVENING_SNACKS`; MART → a shop category. Unknown value → 422.
+* `q`: name contains (2–60 chars).
+* `vendor_id`: that shop's whole menu, any category (ignores `group`/`category`). The response has `shop` (name, address, `is_open`, `min_order_value`, lat/lng). A closed shop returns `shop` with `is_open = false` and no items. A shop of another franchise → 404.
+* `categories` in the response are the chips for the group; during the 3–6 PM window "4 PM Snacks" comes first.
+
+## 63.2 Food category
+
+`Product.food_category` (`MEALS`, `BIRYANI`, `FAST_FOOD`, `SNACKS`, `JUICE_SHAKES`, `BAKERY_SWEETS`, `OTHER`, default `OTHER`). The vendor can set it when adding or editing an item (`POST/PATCH /vendor/products`); if left out on create it is guessed from the name and slot (`guessFoodCategory`). The migration fills existing items with the same guess.
+
+## 63.3 Delivery confirmation
+
+No customer PIN. The rider's GPS gate at delivery stays the check; a "received" tap by the customer is optional proof only (planned with the tracking screen).
