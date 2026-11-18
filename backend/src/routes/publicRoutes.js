@@ -47,6 +47,17 @@ router.get(
   })
 );
 
+// GET /api/v1/public/site-images — the home tiles' background photos { slot: url }.
+// Slots the Super Admin has not set are missing; the app then uses its built-in default.
+router.get(
+  "/site-images",
+  asyncHandler(async (req, res) => {
+    const rows = await prisma.siteImage.findMany({ select: { slot: true, image_url: true } });
+    res.set("Cache-Control", "public, max-age=60");
+    ok(res, { images: Object.fromEntries(rows.map((row) => [row.slot, row.image_url])) });
+  })
+);
+
 const reverseSchema = z.object({ lat: zLat, lng: zLng });
 
 // GET /api/v1/public/reverse-geocode?lat=..&lng=.. — the area name for a point, for the

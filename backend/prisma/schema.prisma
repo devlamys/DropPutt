@@ -268,6 +268,16 @@ model Product {
   @@map("products")
 }
 
+// Background photos of the storefront home tiles, set by the Super Admin (the same for every franchise).
+model SiteImage {
+  id         Int      @id @default(autoincrement())
+  slot       String   @unique
+  image_url  String
+  updated_at DateTime @updatedAt
+
+  @@map("site_images")
+}
+
 model Rider {
   id                 Int         @id @default(autoincrement())
   franchise_id       Int

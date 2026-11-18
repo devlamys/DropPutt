@@ -1,9 +1,10 @@
-import { Building2, Gauge, Loader2, LogOut, Radar, Receipt, Settings2, Store, Wallet } from "lucide-react";
+import { Building2, Gauge, ImagePlus, Loader2, LogOut, Radar, Receipt, Settings2, Store, Wallet } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ControlsPanel from "../components/admin/ControlsPanel.jsx";
 import ZonesPanel from "../components/admin/ZonesPanel.jsx";
 import FleetRadar from "../components/admin/FleetRadar.jsx";
 import FranchisesPanel from "../components/admin/FranchisesPanel.jsx";
+import SiteImagesPanel from "../components/admin/SiteImagesPanel.jsx";
 import ReconciliationPanel from "../components/admin/ReconciliationPanel.jsx";
 import SettlementLedger from "../components/admin/SettlementLedger.jsx";
 import StuckOrders from "../components/admin/StuckOrders.jsx";
@@ -22,6 +23,7 @@ const TABS = [
   { key: "wallet", label: "Wallet", icon: Wallet },
   { key: "reconcile", label: "Reconcile", icon: Receipt },
   { key: "franchises", label: "Franchises", icon: Building2, superOnly: true },
+  { key: "images", label: "Home photos", icon: ImagePlus, superOnly: true },
 ];
 
 export default function AdminDashboard() {
@@ -242,6 +244,7 @@ function FranchiseWorkspace({ slug, tab, isSuper, franchises, onSelectFranchise,
         />
       )}
       {tab === "reconcile" && <ReconciliationPanel toast={toast} />}
+      {tab === "images" && isSuper && <SiteImagesPanel toast={toast} />}
       {tab === "franchises" && isSuper && (
         <FranchisesPanel
           franchises={franchises}

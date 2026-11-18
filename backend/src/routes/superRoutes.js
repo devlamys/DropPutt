@@ -6,6 +6,9 @@ import { z } from "zod";
 import { prisma, TX_OPTIONS } from "../config/prisma.js";
 import { env } from "../config/env.js";
 import { authenticate, requireRole } from "../middleware/auth.js";
+import { siteImageUpload } from "../middleware/upload.js";
+import { SITE_IMAGE_SLOTS } from "../utils/constants.js";
+import { saveUpload } from "../utils/storage.js";
 import { normalizeSlug } from "../middleware/resolveTenant.js";
 import { audit } from "../utils/audit.js";
 import { money } from "../utils/orderMath.js";
@@ -214,3 +217,36 @@ router.patch(
 );
 
 export default router;
+
+// PUT /api/v1/super/site-images/:slot — multipart field `image`. Replaces the background photo
+// of one storefront home tile (for every franchise). DELETE puts the built-in default back.
+function siteImageSlot(req) {
+  const slot = String(req.params.slot);
+  if (!SITE_IMAGE_SLOTS.includes(slot)) {
+    throw validationError("Unknown image slot", [{ field: "slot", issue: `use one of ${SITE_IMAGE_SLOTS.join(", ")}` }]);
+  }
+  return slot;
+}
+
+router.put(
+  "/site-images/:slot",
+  siteImageUpload,
+  asyncHandler(async (req, res) => {
+    const slot = siteImageSlot(req);
+    if (!req.file) throw validationError("Image required", [{ field: "image", issue: "required" }]);
+    const image_url = await saveUpload(req.file, `site/${slot}`);
+    await prisma.siteImage.upsert({ where: { slot }, update: { image_url }, create: { slot, image_url } });
+    audit("site_image.set", { actor_id: req.user.id, slot });
+    ok(res, { slot, image_url });
+  })
+);
+
+router.delete(
+  "/site-images/:slot",
+  asyncHandler(async (req, res) => {
+    const slot = siteImageSlot(req);
+    await prisma.siteImage.deleteMany({ where: { slot } });
+    audit("site_image.reset", { actor_id: req.user.id, slot });
+    ok(res, { slot });
+  })
+);

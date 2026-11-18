@@ -13,3 +13,6 @@ export const GPS_ACCURACY_WARNING_ML =
 
 export const CHAYAKADI_LABEL = "☕ 4 PM Chayakadi & Coolbar Combos";
 export const SNACK_MIN_ORDER_VALUE = "80.00";
+
+/** Storefront home tiles whose background photo the Super Admin can change. */
+export const SITE_IMAGE_SLOTS = Object.freeze(["restaurants", "buy_anything", "pick_drop", "chayakadi", "mart"]);

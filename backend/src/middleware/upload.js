@@ -70,3 +70,10 @@ export const customRequestUpload = multer({
   { name: "photo", maxCount: 1 },
   { name: "voice", maxCount: 1 },
 ]);
+
+/** multipart field `image` — a home tile background, JPEG / PNG / WebP up to 3 MB. */
+export const siteImageUpload = uploader({
+  field: "image",
+  mimeTypes: IMAGE_MIME_TYPES,
+  maxBytes: 3 * 1024 * 1024,
+});

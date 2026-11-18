@@ -3505,3 +3505,12 @@ No customer PIN or code is ever asked. The rider's GPS gate at delivery stays th
 * Emits `order_prep_time { order_id, prep_ready_at }` to the shop and to the order room (customer page and the accepted rider).
 * The customer's Magic Link page (`prep_ready_at`, null once the rider has collected) shows "The shop will have it ready in about N min (by time)". The rider's pickup card shows "Shop says ready by time". The vendor's order card has the buttons.
 * Nothing else depends on it: it is information only, never blocks pickup.
+
+# 64. Home tile photos
+
+The customer home screen has five tiles with a photo behind the text: `restaurants` (Open Restaurants), `buy_anything`, `pick_drop`, `chayakadi` (4 PM banner) and `mart`. No SVG: JPG/PNG/WebP only.
+
+* **Built-in photo:** `frontend/public/tiles/<slot>.jpg`. Until a photo has loaded (or if none exists) the tile keeps its plain colours; once one is shown the text turns white over a dark gradient so it stays readable.
+* **Super Admin upload:** `PUT /super/site-images/:slot` (multipart `image`, JPEG/PNG/WebP up to 3 MB; SUPER_ADMIN only; unknown slot or file type → 422) stores it (`site_images`, one row per slot, the same for every franchise); `DELETE /super/site-images/:slot` returns to the built-in photo. The admin dashboard tab "Home photos" (Super Admin only) shows each slot with a preview, Change and Reset; the browser shrinks the picture (about 1200 px) before upload.
+* **Reading:** `GET /public/site-images` → `{ images: { slot: url } }` (cached 60 s). Slots not set are missing.
+* The 4 PM banner uses a small glass icon instead of an emoji.
