@@ -3491,6 +3491,10 @@ The delivery zone, and so the delivery fee, is decided by the software from the 
 
 `Product.food_category` (`MEALS`, `BIRYANI`, `FAST_FOOD`, `SNACKS`, `JUICE_SHAKES`, `BAKERY_SWEETS`, `OTHER`, default `OTHER`). The vendor can set it when adding or editing an item (`POST/PATCH /vendor/products`); if left out on create it is guessed from the name and slot (`guessFoodCategory`). The migration fills existing items with the same guess.
 
-## 63.3 Delivery confirmation
+## 63.3 Delivery confirmation and the tracking page
 
-No customer PIN. The rider's GPS gate at delivery stays the check; a "received" tap by the customer is optional proof only (planned with the tracking screen).
+No customer PIN or code is ever asked. The rider's GPS gate at delivery stays the check.
+
+* `POST /public/drop/:token/received` ("I received my order"): optional proof. Allowed once the order is `PICKED_UP`, `LOCATION_SHARED` or `DELIVERED` (otherwise 409); stores `orders.customer_received_at` once, repeating it returns `already: true` and changes nothing. It never moves the order's status or any money. The page shows `can_confirm_received` and `received_at`.
+* The Magic Link page shows progress as a list, newest step on top (Order placed, Rider assigned, Picked up and on the way with the road ETA, Delivered), later steps greyed out, plus a "Refresh order status" button.
+* The rider's phone number is still not shown to the customer (§60.6: the Magic Link comes from the business number to keep it private). A "Call rider" button is therefore not offered.

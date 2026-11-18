@@ -47,6 +47,8 @@ export default function CustomerDropPage() {
   const [tipping, setTipping] = useState(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -200,6 +202,19 @@ export default function CustomerDropPage() {
     }
   }
 
+  async function confirmReceived() {
+    setConfirming(true);
+    try {
+      await api.post(`/public/drop/${token}/received`, {}, publicApi());
+      toast("Thank you! Noted.", "success");
+    } catch (error) {
+      toast(getErrorMessage(error, "Could not save that. Please try again."), "error");
+    } finally {
+      setConfirming(false);
+      await load();
+    }
+  }
+
   async function cancelOrder() {
     setCancelling(true);
     try {
@@ -240,6 +255,14 @@ export default function CustomerDropPage() {
   const weakGps =
     shareResult?.gps_accuracy_poor || (fix && fix.accuracy > GPS_LIMIT_M && !shareResult?.saved);
   const warningText = shareResult?.warning?.message || INDOOR_GPS_WARNING_ML;
+  const riderName = order.rider?.first_name;
+  const stage = (index) => (cancelled ? "todo" : current > index ? "done" : current === index ? "current" : "todo");
+  const timeline = [
+    { key: "placed", icon: "🧾", title: "Order placed", text: "Confirmed and processing", state: "done" },
+    { key: "rider", icon: "🛵", title: riderName ? `${riderName} is your delivery rider` : "Finding a rider", text: current >= 1 && riderName ? "Rider is going to the shop" : "Looking for a rider near you", state: current >= 1 ? stage(1) : cancelled ? "todo" : "current" },
+    { key: "way", icon: "📦", title: "Picked up · on the way", text: eta && active ? `About ${eta} min away` : "Your order is on its way to you", state: stage(2) },
+    { key: "done", icon: "🏠", title: "Delivered", text: "Enjoy! Thank you for ordering", state: delivered ? "done" : "todo" },
+  ];
 
   return (
     <div className="mx-auto min-h-screen max-w-md pb-12">
@@ -256,17 +279,16 @@ export default function CustomerDropPage() {
       </header>
 
       <main className="-mt-3 space-y-4 px-4">
-        {/* progress */}
-        <ol className="grid grid-cols-4 gap-1 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200">
-          {STEPS.map((step, i) => (
-            <li key={step.status} className="text-center">
-              <div
-                className={`mx-auto mb-1 h-2 rounded-full ${
-                  cancelled ? "bg-slate-200" : i <= current ? "bg-orange-500" : "bg-slate-200"
-                }`}
-              />
-              <span className={`text-[11px] ${i <= current ? "font-semibold text-slate-900" : "text-slate-400"}`}>
-                {step.label}
+        {/* progress: newest step on top, what is still to come greyed out */}
+        <ol className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200" aria-label="Order progress">
+          {[...timeline].reverse().map((step) => (
+            <li key={step.key} className={`flex items-center gap-3 border-b border-slate-100 px-4 py-3.5 last:border-b-0 ${step.state === "todo" ? "opacity-45" : ""}`} aria-current={step.state === "current" ? "step" : undefined}>
+              <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xl ${step.state === "done" ? "bg-green-600 text-white" : step.state === "current" ? "bg-orange-100 ring-2 ring-orange-400" : "bg-slate-100"}`} aria-hidden="true">
+                {step.state === "done" ? <CheckCircle2 className="h-6 w-6" /> : step.icon}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className={`block font-bold leading-snug ${step.state === "current" ? "text-slate-900" : "text-slate-700"}`}>{step.title}</span>
+                <span className="block text-sm text-slate-500">{step.text}</span>
               </span>
             </li>
           ))}
@@ -437,6 +459,17 @@ export default function CustomerDropPage() {
           </section>
         )}
 
+        {/* optional proof: no PIN is ever asked */}
+        {order.can_confirm_received && (
+          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+            <button type="button" onClick={confirmReceived} disabled={confirming} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-green-600 py-3.5 text-base font-extrabold text-white disabled:opacity-60">
+              {confirming ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle2 className="h-5 w-5" />} I received my order · ഓർഡർ കിട്ടി
+            </button>
+            <p className="mt-2 text-center text-xs text-slate-500">Tap this once the rider has handed it over. You do not need to give any code.</p>
+          </section>
+        )}
+        {order.received_at && <p className="rounded-2xl bg-green-50 px-4 py-3 text-center text-sm font-semibold text-green-800 ring-1 ring-green-200">✅ You confirmed you received this order.</p>}
+
         {/* bill */}
         <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
           <h2 className="mb-2 font-bold">Bill</h2>
@@ -468,6 +501,17 @@ export default function CustomerDropPage() {
             <p className="text-sm text-slate-500">The bill appears here once the rider picks up your order.</p>
           )}
         </section>
+
+        {!delivered && !cancelled && (
+          <button
+            type="button"
+            onClick={async () => { setRefreshing(true); await load(); setRefreshing(false); }}
+            disabled={refreshing}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-orange-300 bg-white py-3.5 font-bold text-orange-700 disabled:opacity-60"
+          >
+            {refreshing && <Loader2 className="h-5 w-5 animate-spin" />} Refresh order status
+          </button>
+        )}
       </main>
     </div>
   );

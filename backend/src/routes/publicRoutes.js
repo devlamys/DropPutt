@@ -58,6 +58,8 @@ const STATUS_MESSAGES = Object.freeze({
   CANCELLED: "Order cancelled",
 });
 
+const CAN_CONFIRM_STATUSES = ["PICKED_UP", "LOCATION_SHARED", "DELIVERED"];
+
 function requireToken(req) {
   const token = req.params.token;
   if (!TOKEN_PATTERN.test(token)) throw orderNotFound();
@@ -130,6 +132,9 @@ router.get(
       // The customer may withdraw only until a rider has taken the order.
       can_cancel: order.order_status === "RIDER_REQUESTED",
       cancel_reason: order.order_status === "CANCELLED" ? order.cancel_reason : null,
+      // The customer may tell us they have the order once the rider has it in hand.
+      can_confirm_received: CAN_CONFIRM_STATUSES.includes(order.order_status) && !order.customer_received_at,
+      received_at: order.customer_received_at,
       gps_accuracy_limit_metres: GPS_ACCURACY_LIMIT_METRES,
       ...riderPosition(order),
     });
@@ -302,6 +307,32 @@ const tipSchema = z.object({
     .regex(/^[A-Za-z0-9-]{8,64}$/)
     .optional(),
 });
+
+// POST /api/v1/public/drop/:token/received — "I received my order". Optional proof only:
+// delivery is settled by the rider's GPS gate, never by this tap. Repeating it changes nothing.
+router.post(
+  "/drop/:token/received",
+  publicWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const token = requireToken(req);
+    const order = await prisma.order.findUnique({
+      where: { location_token: token },
+      select: { id: true, franchise_id: true, order_status: true, customer_received_at: true },
+    });
+    if (!order) throw orderNotFound();
+    if (!CAN_CONFIRM_STATUSES.includes(order.order_status)) {
+      throw new AppError(409, "NOT_YET", "You can confirm once the rider has picked up your order");
+    }
+    if (order.customer_received_at) return ok(res, { received_at: order.customer_received_at, already: true });
+    const received_at = new Date();
+    const { count } = await prisma.order.updateMany({
+      where: { id: order.id, customer_received_at: null },
+      data: { customer_received_at: received_at },
+    });
+    if (count > 0) audit("order.customer_received", { franchise_id: order.franchise_id, order_id: order.id });
+    ok(res, { received_at, already: count === 0 });
+  })
+);
 
 router.post(
   "/drop/:token/tip",

@@ -522,6 +522,8 @@ model Order {
   vendor_seen_at       DateTime?
   // When the Magic Link reached the customer from the business WhatsApp number (SPEC §60.6); null = the rider must send it.
   magic_link_sent_at   DateTime?
+  // The customer tapped "I received it" on the tracking page (optional proof; delivery never waits for it).
+  customer_received_at DateTime?
   // Road route rider → drop (OSRM). { coords: [[lat,lng]...], distance_m, duration_s, dest: [lat,lng] }
   route                Json?
   route_updated_at     DateTime?
