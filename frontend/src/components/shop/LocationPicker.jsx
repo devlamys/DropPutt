@@ -38,7 +38,7 @@ function TapToPlace({ onPick }) {
  * `shop`: { id, shop_name, lat, lng }. `pin`: { lat, lng } | null.
  * `onChange(pin, quote)` is called when the pin moves and again when its quote arrives.
  */
-export default function LocationPicker({ shop, pin, onChange }) {
+export default function LocationPicker({ shop, pin, onChange, hideCharge = false }) {
   const [query, setQuery] = useState("");
   const [places, setPlaces] = useState(null);
   const [searching, setSearching] = useState(false);
@@ -74,7 +74,7 @@ export default function LocationPicker({ shop, pin, onChange }) {
         setQuote(data.data);
         onChange(pin, data.data);
       } catch (error) {
-        if (ticket === latest.current) setNote(getErrorMessage(error, "Could not check the delivery charge."));
+        if (ticket === latest.current && !hideCharge) setNote(getErrorMessage(error, "Could not check the delivery charge."));
       } finally {
         if (ticket === latest.current) setQuoting(false);
       }
@@ -180,7 +180,7 @@ export default function LocationPicker({ shop, pin, onChange }) {
         {pin ? "Drag the pin to your exact house." : "Tap the map where the delivery should come."}
       </p>
 
-      {pin && (
+      {pin && (!hideCharge || out) && (
         <p aria-live="polite" className={`rounded-xl px-3 py-2 text-sm font-semibold ${out ? "bg-red-50 text-red-700" : "bg-flame-50 text-flame-900"}`}>
           {quoting && !quote
             ? "Checking the delivery charge…"

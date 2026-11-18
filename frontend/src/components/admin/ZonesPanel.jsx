@@ -1,4 +1,4 @@
-import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Crosshair, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import api, { getErrorMessage } from "../../utils/api.js";
 import { inr } from "../../utils/format.js";
@@ -16,6 +16,11 @@ export default function ZonesPanel({ franchise, onUpdated, toast }) {
   const [form, setForm] = useState({ zone_name: "", max_km: "", delivery_fee: "" });
   const [limit, setLimit] = useState(String(Number(franchise.max_delivery_km ?? 8)));
   const [busy, setBusy] = useState(null);
+  const [where, setWhere] = useState({
+    address: franchise.address ?? "",
+    lat: franchise.lat != null ? String(Number(franchise.lat)) : "",
+    lng: franchise.lng != null ? String(Number(franchise.lng)) : "",
+  });
 
   const load = useCallback(async () => {
     try {
@@ -36,6 +41,29 @@ export default function ZonesPanel({ franchise, onUpdated, toast }) {
       const { data } = await api.patch("/admin/franchise/settings", { max_delivery_km: Number(limit) });
       onUpdated(data.data.franchise);
       toast(`We now deliver up to ${Number(data.data.franchise.max_delivery_km)} km`, "success");
+    } catch (error) {
+      toast(getErrorMessage(error), "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function useHere() {
+    if (!("geolocation" in navigator)) return toast("This device cannot share its location.", "error");
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => setWhere((w) => ({ ...w, lat: coords.latitude.toFixed(6), lng: coords.longitude.toFixed(6) })),
+      () => toast("Could not get the location. Type the latitude and longitude instead.", "error"),
+      { enableHighAccuracy: true, timeout: 15_000 }
+    );
+  }
+
+  async function saveWhere() {
+    if (where.lat === "" || where.lng === "") return toast("Enter the franchise's latitude and longitude.", "error");
+    setBusy("where");
+    try {
+      const { data } = await api.patch("/admin/franchise/settings", { address: where.address.trim(), lat: Number(where.lat), lng: Number(where.lng) });
+      onUpdated(data.data.franchise);
+      toast("Franchise location saved", "success");
     } catch (error) {
       toast(getErrorMessage(error), "error");
     } finally {
@@ -91,6 +119,27 @@ export default function ZonesPanel({ franchise, onUpdated, toast }) {
         <button type="button" onClick={saveLimit} disabled={busy === "limit"} className="rounded-xl bg-slate-900 px-3 py-2 font-semibold text-white disabled:opacity-60">
           {busy === "limit" ? "…" : "Save"}
         </button>
+      </div>
+
+      <div className="mt-4 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+        <h4 className="text-sm font-bold">Franchise address &amp; location</h4>
+        <p className="mt-0.5 text-xs text-slate-500">Customers near you see this franchise first. Without a location it is not listed.</p>
+        <label htmlFor="fr-address" className="mt-2 block text-xs font-semibold">Address</label>
+        <input id="fr-address" type="text" maxLength={200} value={where.address} onChange={(e) => setWhere({ ...where, address: e.target.value })} placeholder="Town, landmark" className={`${field} mt-1`} />
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <div>
+            <label htmlFor="fr-lat" className="block text-xs font-semibold">Latitude</label>
+            <input id="fr-lat" type="number" step="any" min="-90" max="90" value={where.lat} onChange={(e) => setWhere({ ...where, lat: e.target.value })} className={`${field} mt-1`} />
+          </div>
+          <div>
+            <label htmlFor="fr-lng" className="block text-xs font-semibold">Longitude</label>
+            <input id="fr-lng" type="number" step="any" min="-180" max="180" value={where.lng} onChange={(e) => setWhere({ ...where, lng: e.target.value })} className={`${field} mt-1`} />
+          </div>
+        </div>
+        <div className="mt-2 flex gap-2">
+          <button type="button" onClick={useHere} className="flex items-center gap-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold"><Crosshair className="h-4 w-4" /> Use this device</button>
+          <button type="button" onClick={saveWhere} disabled={busy === "where"} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">{busy === "where" ? "…" : "Save location"}</button>
+        </div>
       </div>
 
       <div className="mt-4 flex items-center justify-between">

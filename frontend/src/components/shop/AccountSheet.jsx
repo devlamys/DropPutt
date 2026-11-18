@@ -25,7 +25,7 @@ export default function AccountSheet({ onClose, onZones, place, orderCount, onCl
         <button type="button" onClick={onZones} className={row}>
           <MapPin className="h-5 w-5 text-slate-500" />
           <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold text-slate-900">Delivery location &amp; charges</span>
+            <span className="block text-sm font-semibold text-slate-900">Delivery location</span>
             <span className="block truncate text-xs text-slate-500">{place || "Not set"}</span>
           </span>
           <ChevronRight className="h-5 w-5 text-slate-400" />

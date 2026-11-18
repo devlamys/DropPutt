@@ -131,7 +131,7 @@ export default function StorefrontHome() {
         <div className="flex items-center gap-2.5">
           <DropPuttLogo iconOnly size="sm" />
           <h1 className="min-w-0 flex-1 truncate text-lg font-extrabold leading-none text-slate-900">{town}</h1>
-          <button type="button" onClick={openZones} aria-label="Set delivery location and see charges" className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-[#E8431A] bg-white px-3 text-xs font-bold text-[#E8431A]">
+          <button type="button" onClick={openZones} aria-label="Set delivery location" className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-[#E8431A] bg-white px-3 text-xs font-bold text-[#E8431A]">
             <MapPin className="h-3.5 w-3.5" /> Set delivery location
           </button>
         </div>

@@ -260,6 +260,9 @@ model Franchise {
   rain_surge_fee         Decimal  @default(0) @db.Decimal(12, 2)
   daily_milestone_target Int      @default(20)
   daily_milestone_bonus  Decimal  @default(50) @db.Decimal(12, 2)
+  address                String?
+  lat                    Decimal? @db.Decimal(9, 6)
+  lng                    Decimal? @db.Decimal(9, 6)
   is_active              Boolean  @default(true)
   created_at             DateTime @default(now())
 
@@ -3404,6 +3407,9 @@ The delivery zone, and so the delivery fee, is decided by the software from the 
 |---|---|
 | `Zone.max_km` | Upper edge of a distance band; a band starts where the previous (smaller) one ends. `delivery_fee` is the charge for the band. `rider_commission` and `franchise_profit` default to 0 and take no part in the split (§15). |
 | `Franchise.max_delivery_km` (default 8) | Orders further than this are refused. Edited by the franchise admin. |
+| `Franchise.address`, `lat`, `lng` | Where the franchise is, set by its admin in `PATCH /admin/franchise/settings` (`lat` and `lng` go together). A franchise without a location is not listed to customers. |
+
+**Nearest franchises.** `GET /public/franchises/nearby?lat&lng` (public, no tenant header) lists active franchises that have a location, nearest first, each with `km` (road distance when routing is on, else straight line x1.3), its own `max_delivery_km` and `within_limit`. The customer's "Set delivery location" sheet shows them under the map: distance green when `within_limit`, red otherwise (not selectable). Picking another franchise opens that franchise's address (subdomain hosts) or stores `dropputt.shop_slug` (localhost, tunnels, native app) and reloads; a non-empty cart is cleared after confirmation.
 | `Order.zone_source` | `AUTO` (from the customer's location), `MANUAL` (no location was known; the rider chose) or `RIDER_OVERRIDE` (the rider changed the automatic zone). |
 
 ## 61.2 Rule

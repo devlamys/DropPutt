@@ -65,8 +65,8 @@ async function main() {
   // ─── Franchise ────────────────────────────────────────────────────────────
   const franchise = await prisma.franchise.upsert({
     where: { slug: FRANCHISE_SLUG },
-    update: { name: "Kizhissery", is_active: true },
-    create: { name: "Kizhissery", slug: FRANCHISE_SLUG },
+    update: { name: "Kizhissery", is_active: true, address: "Kizhissery Junction", lat: "11.1786000", lng: "75.9982000" },
+    create: { name: "Kizhissery", slug: FRANCHISE_SLUG, address: "Kizhissery Junction", lat: "11.1786000", lng: "75.9982000" },
   });
   const franchise_id = franchise.id;
 

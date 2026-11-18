@@ -39,7 +39,7 @@ import { addMoney, money } from "../utils/orderMath.js";
 import { buildPage, parsePagination } from "../utils/pagination.js";
 import { AppError, asyncHandler, forbidden, ok, validationError } from "../utils/response.js";
 import { isCommissionFreeOrder, moneyStr } from "../utils/serializers.js";
-import { parse, parseId, zMoney } from "../utils/validate.js";
+import { parse, parseId, zLat, zLng, zMoney } from "../utils/validate.js";
 
 /**
  * Throws a validation error if x-franchise-slug header is missing.
@@ -699,6 +699,9 @@ const franchiseSettingsView = (franchise) => ({
   default_commission_rate: moneyStr(franchise.default_commission_rate),
   rain_surge_fee: moneyStr(franchise.rain_surge_fee),
   max_delivery_km: moneyStr(franchise.max_delivery_km),
+  address: franchise.address,
+  lat: coordStr(franchise.lat),
+  lng: coordStr(franchise.lng),
   daily_milestone_target: franchise.daily_milestone_target,
   daily_milestone_bonus: moneyStr(franchise.daily_milestone_bonus),
 });
@@ -935,11 +938,19 @@ const settingsSchema = z
     rain_surge_fee: zMoney.optional(),
     // Orders further than this from the hotel are refused (SPEC "Delivery zones by distance").
     max_delivery_km: z.coerce.number().min(0.5).max(50).optional(),
+    // Where the franchise is: customers are shown the nearest franchises first.
+    address: z.string().trim().max(200).optional(),
+    lat: zLat.optional(),
+    lng: zLng.optional(),
   })
   .refine((body) => Object.keys(body).length > 0, { message: "nothing to update" })
   .refine((body) => body.rain_surge_fee === undefined || Number(body.rain_surge_fee) <= 200, {
     message: "rain_surge_fee must be at most 200",
     path: ["rain_surge_fee"],
+  })
+  .refine((body) => (body.lat === undefined) === (body.lng === undefined), {
+    message: "lat and lng go together",
+    path: ["lat"],
   });
 
 router.patch(
@@ -955,6 +966,8 @@ router.patch(
           ? { rain_surge_fee: moneyStr(body.rain_surge_fee) }
           : {}),
         ...(body.max_delivery_km !== undefined ? { max_delivery_km: km2(body.max_delivery_km) } : {}),
+        ...(body.address !== undefined ? { address: body.address || null } : {}),
+        ...(body.lat !== undefined ? { lat: Number(body.lat).toFixed(6), lng: Number(body.lng).toFixed(6) } : {}),
       },
     });
     audit("franchise.settings", {
@@ -963,10 +976,16 @@ router.patch(
       before: {
         rain_surge_fee: moneyStr(before.rain_surge_fee),
         max_delivery_km: moneyStr(before.max_delivery_km),
+        address: before.address,
+        lat: coordStr(before.lat),
+        lng: coordStr(before.lng),
       },
       after: {
         rain_surge_fee: moneyStr(franchise.rain_surge_fee),
         max_delivery_km: moneyStr(franchise.max_delivery_km),
+        address: franchise.address,
+        lat: coordStr(franchise.lat),
+        lng: coordStr(franchise.lng),
       },
     });
     emitTo(rooms.franchise(req.franchise_id), "franchise_settings_changed", {

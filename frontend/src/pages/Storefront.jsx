@@ -271,7 +271,7 @@ export default function Storefront() {
           />
         )}
 
-        {zoneOpen && <ZoneSheet zones={zones} onClose={() => setZoneOpen(false)} onPlace={setPlace} />}
+        {zoneOpen && <ZoneSheet onClose={() => setZoneOpen(false)} onPlace={setPlace} cartCount={totals.count} onClearCart={() => { clear(); try { localStorage.removeItem("dropputt.cart"); } catch { /* ignore */ } }} />}
 
         {switching && (
           <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/50 p-4 motion-safe:animate-fade-in sm:items-center" role="alertdialog" aria-modal="true" aria-label="Start a new cart?">

@@ -44,9 +44,32 @@ export function slugFromHostname(hostname) {
   return slug;
 }
 
+const SHOP_SLUG_KEY = "dropputt.shop_slug";
+const isCustomerPath = () => /^\/(shop|drop)(\/|$)/.test(window.location.pathname);
+
 /** The franchise this browser tab belongs to. */
 export function getHostSlug() {
-  return slugFromHostname(window.location.hostname) || DEFAULT_SLUG;
+  const fromHost = slugFromHostname(window.location.hostname);
+  if (fromHost) return fromHost;
+  // No tenant in the address (localhost, dev tunnel, the Android app): a customer may have chosen one.
+  const chosen = isCustomerPath() ? readJSON(SHOP_SLUG_KEY) : null;
+  return chosen && SLUG_PATTERN.test(chosen) ? chosen : DEFAULT_SLUG;
+}
+
+/**
+ * Customer picks another franchise. On a franchise address (kizhissery.techkerala.in) that means
+ * opening the other one's address; elsewhere the choice is remembered and the app reloads.
+ */
+export function switchShopFranchise(slug) {
+  if (!SLUG_PATTERN.test(slug)) return;
+  const { protocol, hostname, port } = window.location;
+  if (slugFromHostname(hostname)) {
+    const rest = hostname.split(".").slice(1).join(".");
+    window.location.assign(`${protocol}//${slug}.${rest}${port ? `:${port}` : ""}/shop`);
+    return;
+  }
+  writeJSON(SHOP_SLUG_KEY, slug);
+  window.location.assign("/shop");
 }
 
 // ---- session storage (wrapped: private windows can throw) ----------------

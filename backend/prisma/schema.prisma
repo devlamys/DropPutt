@@ -139,6 +139,10 @@ model Franchise {
   whatsapp_enabled         Boolean @default(false)
   // Orders further than this (km, hotel to customer) are refused. Franchise admin edits it.
   max_delivery_km          Decimal @default(8) @db.Decimal(5, 2)
+  // Where the franchise is (set by its admin). Customers are shown the nearest franchises first.
+  address                  String?
+  lat                      Decimal? @db.Decimal(9, 6)
+  lng                      Decimal? @db.Decimal(9, 6)
   is_active              Boolean  @default(true)
   created_at             DateTime @default(now())
 
