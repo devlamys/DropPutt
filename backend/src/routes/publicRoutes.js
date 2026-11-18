@@ -9,7 +9,7 @@ import { z } from "zod";
 import { prisma, TX_OPTIONS } from "../config/prisma.js";
 import { idempotency } from "../middleware/idempotency.js";
 import { geocodeLimiter, publicLimiter, publicWriteLimiter } from "../middleware/rateLimit.js";
-import { distanceKm } from "../services/deliveryZoneService.js";
+import { distancesKm, estimateKm } from "../services/deliveryZoneService.js";
 import { placeNameAt, searchPlaces } from "../services/geocodeService.js";
 import { voiceUpload } from "../middleware/upload.js";
 import { cancelOrder } from "../services/orderCancelService.js";
@@ -59,33 +59,34 @@ router.get(
   })
 );
 
-const nearbySchema = z.object({ lat: zLat, lng: zLng });
+const nearbySchema = z.object({ lat: zLat, lng: zLng, precise: z.enum(["0", "1"]).optional() });
 
 // GET /api/v1/public/franchises/nearby?lat=..&lng=.. — every active franchise that has set its
-// location, nearest first, with the distance to the customer's pin. `within_limit` is true when
+// location, nearest first, with the distance to the customer's pin (`?precise=0` = instant estimate). `within_limit` is true when
 // the pin is inside that franchise's own delivery limit (max_delivery_km); the customer app shows
 // those in green and the rest in red. No tenant header: the customer is choosing the tenant.
 router.get(
   "/franchises/nearby",
   asyncHandler(async (req, res) => {
-    const { lat, lng } = parse(nearbySchema, req.query);
+    const { lat, lng, precise } = parse(nearbySchema, req.query);
     const rows = await prisma.franchise.findMany({
       where: { is_active: true, lat: { not: null }, lng: { not: null } },
       select: { name: true, slug: true, address: true, lat: true, lng: true, max_delivery_km: true },
     });
-    const franchises = await Promise.all(
-      rows.map(async (row) => {
-        const { km } = await distanceKm({ lat, lng }, { lat: row.lat, lng: row.lng });
-        return {
-          name: row.name,
-          slug: row.slug,
-          address: row.address,
-          km,
-          max_delivery_km: moneyStr(row.max_delivery_km),
-          within_limit: km <= Number(row.max_delivery_km),
-        };
-      })
-    );
+    // precise=0: straight line x1.3, instant, for the first paint. Otherwise road distance
+    // (one router call for every franchise), which is what the delivery limit is judged on.
+    const quick = precise === "0";
+    const here = { lat, lng };
+    const dist = quick ? rows.map((row) => ({ km: estimateKm(here, row) })) : await distancesKm(here, rows);
+    const franchises = rows.map((row, i) => ({
+      name: row.name,
+      slug: row.slug,
+      address: row.address,
+      km: dist[i].km,
+      max_delivery_km: moneyStr(row.max_delivery_km),
+      within_limit: dist[i].km <= Number(row.max_delivery_km),
+      precise: !quick,
+    }));
     franchises.sort((a, b) => a.km - b.km);
     ok(res, { franchises });
   })

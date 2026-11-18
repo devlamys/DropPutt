@@ -7,7 +7,7 @@
 import { prisma } from "../config/prisma.js";
 import { AppError } from "../utils/response.js";
 import { haversineMetres, isLatLng } from "../utils/geo.js";
-import { fetchRoadDistance, routingEnabled } from "./routeService.js";
+import { fetchRoadDistance, fetchRoadDistances, routingEnabled } from "./routeService.js";
 
 /** Roads wind: with no router, a straight line is stretched by this much. */
 export const STRAIGHT_LINE_FACTOR = 1.3;
@@ -21,6 +21,17 @@ export async function distanceKm(from, to) {
     if (road !== null) return { km: Math.round(road / 100) / 10, method: "ROAD" };
   }
   return { km: Math.round((haversineMetres(a, b) * STRAIGHT_LINE_FACTOR) / 100) / 10, method: "STRAIGHT" };
+}
+
+/** Straight-line distance stretched for winding roads, in km (one decimal). No network, instant. */
+export function estimateKm(from, to) {
+  return Math.round((haversineMetres([Number(from.lat), Number(from.lng)], [Number(to.lat), Number(to.lng)]) * STRAIGHT_LINE_FACTOR) / 100) / 10;
+}
+
+/** Distances in km from one point to many with a single router call. [{ km, method }] aligned with `tos`. */
+export async function distancesKm(from, tos) {
+  const roads = routingEnabled() ? await fetchRoadDistances([Number(from.lat), Number(from.lng)], tos.map((t) => [Number(t.lat), Number(t.lng)])) : tos.map(() => null);
+  return tos.map((to, i) => (roads[i] === null ? { km: estimateKm(from, to), method: "STRAIGHT" } : { km: Math.round(roads[i] / 100) / 10, method: "ROAD" }));
 }
 
 /**

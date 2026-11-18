@@ -40,23 +40,34 @@ export default function ZoneSheet({ onClose, onPlace, cartCount = 0, onClearCart
     };
   }, [pin?.lat, pin?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Franchises for this pin; the nearest one that delivers here becomes the selected one.
+  // Franchises for this pin, nearest first. Two requests: an instant estimate (straight line) for the
+  // first paint, then the road distance, which decides green / red and the automatic selection.
+  const firstLoad = useRef(true);
   useEffect(() => {
     if (!pin) return undefined;
     let live = true;
+    const apply = (franchises) => {
+      setList(franchises);
+      setListError("");
+      setAsking(false);
+      setChosen(franchises.find((f) => f.within_limit)?.slug ?? current);
+    };
+    const get = (precise) => api.get("/public/franchises/nearby", { ...publicApi, params: { lat: pin.lat, lng: pin.lng, precise } });
+    // No wait when the sheet opens; wait for the pin to settle while it is being dragged.
+    const delay = firstLoad.current ? 0 : 400;
+    firstLoad.current = false;
     const timer = setTimeout(() => {
-      api
-        .get("/public/franchises/nearby", { ...publicApi, params: { lat: pin.lat, lng: pin.lng } })
+      let preciseDone = false;
+      get("0")
+        .then(({ data }) => live && !preciseDone && apply(data.data.franchises))
+        .catch(() => {});
+      get("1")
         .then(({ data }) => {
-          if (!live) return;
-          const franchises = data.data.franchises;
-          setList(franchises);
-          setListError("");
-          setAsking(false);
-          setChosen(franchises.find((f) => f.within_limit)?.slug ?? current);
+          preciseDone = true;
+          if (live) apply(data.data.franchises);
         })
-        .catch((err) => live && setListError(getErrorMessage(err, "Could not load the nearby franchises.")));
-    }, 400);
+        .catch((err) => live && !preciseDone && setListError(getErrorMessage(err, "Could not load the nearby franchises.")));
+    }, delay);
     return () => {
       live = false;
       clearTimeout(timer);
@@ -101,17 +112,23 @@ export default function ZoneSheet({ onClose, onPlace, cartCount = 0, onClearCart
           }}
         />
         {listError && <p className="mt-3 text-sm text-amber-700">{listError}</p>}
+        {pin && !list && !listError && (
+          <div className="mt-3 flex gap-2 overflow-hidden" aria-busy="true" aria-label="Finding nearby franchises">
+            {[0, 1, 2].map((i) => <div key={i} className="h-[4.75rem] w-44 shrink-0 animate-pulse rounded-xl bg-slate-100" />)}
+          </div>
+        )}
         {pin && list && list.length > 0 && (
           <section className="mt-3" aria-label="Nearby franchises">
             <ul ref={rowRef} className="relative -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {list.map((f) => {
                 const on = f.slug === chosen;
                 const ok = f.within_limit;
+                const exact = f.precise !== false;
                 return (
                   <li key={f.slug} className="w-44 shrink-0 snap-start">
                     <button
                       type="button"
-                      disabled={!ok}
+                      disabled={!ok && exact}
                       onClick={() => { setChosen(f.slug); setAsking(false); }}
                       aria-pressed={on}
                       aria-label={`${f.name}, ${f.km} km${ok ? "" : ", too far to deliver"}`}
@@ -119,8 +136,8 @@ export default function ZoneSheet({ onClose, onPlace, cartCount = 0, onClearCart
                     >
                       <span className="truncate text-sm font-bold text-slate-900">{f.name}</span>
                       <span className="truncate text-xs text-slate-500">{f.address || " "}</span>
-                      <span className={`mt-1 text-sm font-bold tabular-nums ${ok ? "text-green-700" : "text-red-600"}`}>{f.km} km</span>
-                      {!ok && <span className="text-[11px] font-semibold leading-tight text-red-600">Outside its {Number(f.max_delivery_km)} km limit</span>}
+                      <span className={`mt-1 text-sm font-bold tabular-nums ${!exact ? "text-slate-400" : ok ? "text-green-700" : "text-red-600"}`}>{exact ? "" : "~"}{f.km} km</span>
+                      {!ok && exact && <span className="text-[11px] font-semibold leading-tight text-red-600">Outside its {Number(f.max_delivery_km)} km limit</span>}
                     </button>
                   </li>
                 );

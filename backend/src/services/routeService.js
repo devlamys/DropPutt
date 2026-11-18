@@ -145,6 +145,45 @@ export async function fetchRoadDistance(from, to) {
   }
 }
 
+/**
+ * Road distances in metres from one point to many, in ONE router call (OSRM `table`).
+ * Returns an array aligned with `tos`; an entry is null when the router could not
+ * answer for it (the caller falls back to the straight line). Cached like fetchRoadDistance.
+ */
+export async function fetchRoadDistances(from, tos) {
+  const base = routingUrl();
+  const out = tos.map(() => null);
+  if (!base || tos.length === 0) return out;
+  const miss = [];
+  tos.forEach((to, i) => {
+    const key = `${roundKey(from)}>${roundKey(to)}`;
+    if (distanceCache.has(key)) out[i] = distanceCache.get(key);
+    else miss.push(i);
+  });
+  if (miss.length === 0) return out;
+  const coords = [from, ...miss.map((i) => tos[i])].map(([lat, lng]) => `${lng},${lat}`).join(";");
+  try {
+    const res = await fetch(`${base}/table/v1/driving/${coords}?sources=0&annotations=distance`, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      headers: { "user-agent": "DropPutt-routing/1.0" },
+    });
+    if (!res.ok) return out;
+    const body = await res.json();
+    const row = body?.code === "Ok" ? body.distances?.[0] : null;
+    if (!row) return out;
+    miss.forEach((i, n) => {
+      const metres = row[n + 1];
+      if (!Number.isFinite(metres)) return;
+      if (distanceCache.size >= CACHE_MAX) distanceCache.delete(distanceCache.keys().next().value);
+      distanceCache.set(`${roundKey(from)}>${roundKey(tos[i])}`, Math.round(metres));
+      out[i] = Math.round(metres);
+    });
+  } catch {
+    /* timeout, DNS, bad JSON: those entries stay null */
+  }
+  return out;
+}
+
 export function clearDistanceCache() {
   distanceCache.clear();
 }
