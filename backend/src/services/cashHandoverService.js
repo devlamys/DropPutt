@@ -19,6 +19,12 @@ import { pushToUsers } from "../utils/push.js";
 import { AppError, validationError } from "../utils/response.js";
 import { moneyStr } from "../utils/serializers.js";
 
+/** At the limit a rider cannot accept orders or go online (SPEC §15). */
+export const isCashLocked = (rider) => money(rider.cash_in_hand).gte(rider.max_cash_limit);
+
+/** + the rider owes the franchise, − the franchise owes the rider (SPEC §15.2). */
+export const netDue = (rider) => subtractMoney(rider.cash_in_hand, rider.wallet_earnings);
+
 export const handoverView = (row) => ({
   id: row.id,
   rider_id: row.rider_id,

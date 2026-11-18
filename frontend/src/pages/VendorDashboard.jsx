@@ -237,19 +237,19 @@ export default function VendorDashboard() {
       <AlertsPrompt />
       <header className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
         <div className="flex min-w-0 items-center gap-2.5">
-        <DropPuttLogo role="vendor" iconOnly size="sm" />
-        <div className="min-w-0">
-          <h1 className="truncate text-lg font-bold">{shop?.shop_name ?? user.name}</h1>
-          <p className="flex items-center gap-1.5 text-xs text-slate-500">
-            <RoleBadge role="vendor" />
-            {connected ? (
-              <Wifi className="h-3.5 w-3.5 text-green-600" />
-            ) : (
-              <WifiOff className="h-3.5 w-3.5 text-red-500" />
-            )}
-            {connected ? "Live" : "Reconnecting…"}
-          </p>
-        </div>
+          <DropPuttLogo role="vendor" iconOnly size="sm" />
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-bold">{shop?.shop_name ?? user.name}</h1>
+            <p className="flex items-center gap-1.5 text-xs text-slate-500">
+              <RoleBadge role="vendor" />
+              {connected ? (
+                <Wifi className="h-3.5 w-3.5 text-green-600" />
+              ) : (
+                <WifiOff className="h-3.5 w-3.5 text-red-500" />
+              )}
+              {connected ? "Live" : "Reconnecting…"}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {shop && (

@@ -34,7 +34,6 @@ const franchiseView = (franchise) => ({
   default_commission_rate: moneyStr(franchise.default_commission_rate),
   whatsapp_phone_number_id: franchise.whatsapp_phone_number_id,
   whatsapp_enabled: franchise.whatsapp_enabled,
-  is_launch_promo_active: franchise.is_launch_promo_active,
   created_at: franchise.created_at,
   counts: franchise._count
     ? {

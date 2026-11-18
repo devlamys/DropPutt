@@ -1,4 +1,4 @@
-import api from "./api.js";
+import api, { getRequestSlug } from "./api.js";
 
 /** The area name for a map point ("Chullikode"), or "" when it cannot be found. */
 export async function fetchPlaceName(lat, lng) {
@@ -8,4 +8,10 @@ export async function fetchPlaceName(lat, lng) {
   } catch {
     return "";
   }
+}
+
+/** "Kizhissery" from the franchise slug in the address. */
+export function placeName() {
+  const slug = getRequestSlug() || "";
+  return slug ? slug.charAt(0).toUpperCase() + slug.slice(1).replace(/-/g, " ") : "";
 }

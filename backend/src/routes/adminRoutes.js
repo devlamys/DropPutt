@@ -31,9 +31,11 @@ import {
   createHandover,
   handoverInclude,
   handoverView,
+  isCashLocked,
+  netDue,
   resolveHandover,
 } from "../services/cashHandoverService.js";
-import { addMoney, money, subtractMoney } from "../utils/orderMath.js";
+import { addMoney, money } from "../utils/orderMath.js";
 import { buildPage, parsePagination } from "../utils/pagination.js";
 import { AppError, asyncHandler, forbidden, ok, validationError } from "../utils/response.js";
 import { isCommissionFreeOrder, moneyStr } from "../utils/serializers.js";
@@ -92,7 +94,7 @@ router.get(
           cash_in_hand: moneyStr(rider.cash_in_hand),
           max_cash_limit: moneyStr(rider.max_cash_limit),
           wallet_earnings: moneyStr(rider.wallet_earnings),
-          net_due: moneyStr(subtractMoney(rider.cash_in_hand, rider.wallet_earnings)),
+          net_due: moneyStr(netDue(rider)),
         })),
       },
       { pagination: page.pagination }
@@ -695,7 +697,6 @@ const franchiseSettingsView = (franchise) => ({
   min_balance_limit: moneyStr(franchise.min_balance_limit),
   royalty_per_order: moneyStr(franchise.royalty_per_order),
   default_commission_rate: moneyStr(franchise.default_commission_rate),
-  is_launch_promo_active: franchise.is_launch_promo_active,
   rain_surge_fee: moneyStr(franchise.rain_surge_fee),
   max_delivery_km: moneyStr(franchise.max_delivery_km),
   daily_milestone_target: franchise.daily_milestone_target,
@@ -798,10 +799,10 @@ router.get(
         cash_in_hand: moneyStr(rider.cash_in_hand),
         max_cash_limit: moneyStr(rider.max_cash_limit),
         // At the limit a rider cannot accept orders or go online (§15).
-        is_cash_locked: rider.cash_in_hand.gte(rider.max_cash_limit),
+        is_cash_locked: isCashLocked(rider),
         wallet_earnings: moneyStr(rider.wallet_earnings),
         // + rider owes the franchise, − the franchise owes the rider (§15.2).
-        net_due: moneyStr(subtractMoney(rider.cash_in_hand, rider.wallet_earnings)),
+        net_due: moneyStr(netDue(rider)),
         active_orders: count(active, rider.id),
         delivered_today: count(deliveredToday, rider.id),
         cash_collected_today: moneyStr(
@@ -815,7 +816,7 @@ router.get(
   })
 );
 
-// PATCH /api/v1/admin/franchise/settings — launch promo and rain surge.
+// PATCH /api/v1/admin/franchise/settings — rain surge and the delivery radius.
 // ─────────────────────────────────────────────────────────────────────────────
 // Delivery zones: distance bands (hotel -> customer). SPEC "Delivery zones by distance".
 // ─────────────────────────────────────────────────────────────────────────────
@@ -931,7 +932,6 @@ router.delete(
 
 const settingsSchema = z
   .object({
-    is_launch_promo_active: z.boolean().optional(),
     rain_surge_fee: zMoney.optional(),
     // Orders further than this from the hotel are refused (SPEC "Delivery zones by distance").
     max_delivery_km: z.coerce.number().min(0.5).max(50).optional(),
@@ -951,9 +951,6 @@ router.patch(
     const franchise = await prisma.franchise.update({
       where: { id: req.franchise_id },
       data: {
-        ...(body.is_launch_promo_active !== undefined
-          ? { is_launch_promo_active: body.is_launch_promo_active }
-          : {}),
         ...(body.rain_surge_fee !== undefined
           ? { rain_surge_fee: moneyStr(body.rain_surge_fee) }
           : {}),
@@ -964,18 +961,15 @@ router.patch(
       franchise_id: req.franchise_id,
       by_user_id: req.user.id,
       before: {
-        is_launch_promo_active: before.is_launch_promo_active,
         rain_surge_fee: moneyStr(before.rain_surge_fee),
         max_delivery_km: moneyStr(before.max_delivery_km),
       },
       after: {
-        is_launch_promo_active: franchise.is_launch_promo_active,
         rain_surge_fee: moneyStr(franchise.rain_surge_fee),
         max_delivery_km: moneyStr(franchise.max_delivery_km),
       },
     });
     emitTo(rooms.franchise(req.franchise_id), "franchise_settings_changed", {
-      is_launch_promo_active: franchise.is_launch_promo_active,
       rain_surge_fee: moneyStr(franchise.rain_surge_fee),
     });
     ok(res, { franchise: franchiseSettingsView(franchise) });

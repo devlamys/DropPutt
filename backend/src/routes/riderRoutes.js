@@ -17,6 +17,7 @@ import {
   createHandover,
   handoverInclude,
   handoverView,
+  isCashLocked,
 } from "../services/cashHandoverService.js";
 
 const router = Router();
@@ -77,7 +78,7 @@ router.patch(
       if (!req.rider.is_approved) {
         throw new AppError(403, "RIDER_NOT_APPROVED", "Your account is not approved yet");
       }
-      if (req.rider.cash_in_hand.gte(req.rider.max_cash_limit)) {
+      if (isCashLocked(req.rider)) {
         throw new AppError(
           422,
           "CASH_LIMIT_REACHED",
@@ -269,7 +270,7 @@ router.get(
     ok(res, {
       cash_in_hand: moneyStr(cash),
       max_cash_limit: moneyStr(rider.max_cash_limit),
-      is_cash_locked: cash.gte(rider.max_cash_limit),
+      is_cash_locked: isCashLocked(rider),
       vendors: owed.map((row) => ({
         vendor_id: row.vendor_id,
         shop_name: row.shop_name,

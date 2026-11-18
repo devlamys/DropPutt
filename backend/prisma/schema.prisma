@@ -129,7 +129,6 @@ model Franchise {
   wallet_balance         Decimal  @default(0) @db.Decimal(12, 2)
   min_balance_limit      Decimal  @default(-50) @db.Decimal(12, 2)
   royalty_per_order      Decimal  @default(3) @db.Decimal(12, 2)
-  is_launch_promo_active Boolean  @default(false)
   rain_surge_fee         Decimal  @default(0) @db.Decimal(12, 2)
   daily_milestone_target Int      @default(20)
   daily_milestone_bonus  Decimal  @default(50) @db.Decimal(12, 2)
@@ -186,7 +185,6 @@ model User {
   pin_hash     String
   role         UserRole
   is_active    Boolean   @default(true)
-  fcm_token    String?
   created_at   DateTime  @default(now())
 
   franchise Franchise? @relation(fields: [franchise_id], references: [id])
@@ -435,7 +433,6 @@ model Customer {
   voice_direction_url  String?
   house_image_url      String?
   rider_delivery_note  String?
-  fcm_token            String?
   created_at           DateTime @default(now())
   updated_at            DateTime @updatedAt
 

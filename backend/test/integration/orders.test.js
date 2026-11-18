@@ -121,17 +121,6 @@ describe("pickup money (§12–§14, §20)", () => {
     assert.equal(row.super_admin_profit.toFixed(2), "3.00");
   });
 
-  it("the promo switch no longer changes the split: rider always keeps the whole delivery fee", async () => {
-    await prisma.franchise.update({ where: { id: w.franchise.id }, data: { is_launch_promo_active: true } });
-    const order = await placeOrder(api, w);
-    await accept(api, w.riders[0], order.id);
-    await pickup(api, w, w.riders[0], order);
-    const row = await orderRow(order.id);
-    assert.equal(row.rider_earning.toFixed(2), "30.00"); // full fee
-    assert.equal(row.franchise_profit.toFixed(2), "17.00"); // commission 20 - royalty 3
-    assert.equal(row.super_admin_profit.toFixed(2), "3.00");
-  });
-
   it("rain surge: pickup twice adds the surge once", async () => {
     await prisma.franchise.update({ where: { id: w.franchise.id }, data: { rain_surge_fee: 20 } });
     const order = await placeOrder(api, w);

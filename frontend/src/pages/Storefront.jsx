@@ -7,7 +7,7 @@ import VendorMenuDrawer from "../components/VendorMenuDrawer.jsx";
 import CustomBuyModal from "../components/CustomBuyModal.jsx";
 import CustomOrderSheet from "../components/shop/CustomOrderSheet.jsx";
 import OrdersDrawer from "../components/shop/OrdersDrawer.jsx";
-import { StorefrontContext, readOrders, readProfile, saveLastOrder, saveProfile } from "../components/shop/StorefrontContext.jsx";
+import { StorefrontContext, readOrders, readProfile, rememberOrder, saveProfile } from "../components/shop/StorefrontContext.jsx";
 import ZoneSheet from "../components/shop/ZoneSheet.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { useCart } from "../hooks/useCart.js";
@@ -153,7 +153,7 @@ export default function Storefront() {
   }, [totals.count]);
 
   const onPlaced = (order) => {
-    saveLastOrder({ token: order.location_token, number: order.order_number, shop: order.shop_name, kind: order.kind });
+    rememberOrder({ token: order.location_token, number: order.order_number, shop: order.shop_name, kind: order.kind });
     setOrderCount(readOrders().length);
     if (!order.kind) clear(); // shop checkout empties the cart; custom requests leave it alone
     setCartOpen(false);
@@ -186,7 +186,6 @@ export default function Storefront() {
     place,
     openCustom: (kind) => setCustomKind(kind),
     openOrders: () => setOrdersOpen(true),
-    openVendor: (id) => setVendorId(id),
     orderCount,
     minOrder,
     cartShop,

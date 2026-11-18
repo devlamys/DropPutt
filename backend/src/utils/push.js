@@ -46,14 +46,6 @@ async function deactivateTokens(tokens) {
     where: { fcm_token: { in: tokens } },
     data: { is_active: false },
   });
-  await prisma.user.updateMany({
-    where: { fcm_token: { in: tokens } },
-    data: { fcm_token: null },
-  });
-  await prisma.customer.updateMany({
-    where: { fcm_token: { in: tokens } },
-    data: { fcm_token: null },
-  });
   console.log(`[push] deactivated ${tokens.length} dead token(s)`);
 }
 
@@ -122,18 +114,12 @@ export async function pushToUsers(userIds, message) {
   const ids = [...new Set(userIds.filter(Boolean))];
   if (ids.length === 0 || !getMessagingClient()) return;
   try {
-    const [users, devices] = await Promise.all([
-      prisma.user.findMany({
-        where: { id: { in: ids }, is_active: true, fcm_token: { not: null } },
-        select: { fcm_token: true },
-      }),
-      prisma.deviceRegistration.findMany({
-        where: { user_id: { in: ids }, is_active: true },
-        select: { fcm_token: true },
-      }),
-    ]);
+    const devices = await prisma.deviceRegistration.findMany({
+      where: { user_id: { in: ids }, is_active: true },
+      select: { fcm_token: true },
+    });
     await sendToTokens(
-      [...users, ...devices].map((row) => row.fcm_token),
+      devices.map((row) => row.fcm_token),
       message
     );
   } catch (error) {

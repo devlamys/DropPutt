@@ -21,27 +21,15 @@ export async function runCampaigns(cronTime = CRON_TIME) {
 
   for (const campaign of campaigns) {
     try {
-      // Legacy single token on Customer, plus every active device.
-      const [customers, devices] = await Promise.all([
-        prisma.customer.findMany({
-          where: { franchise_id: campaign.franchise_id, fcm_token: { not: null } },
-          select: { fcm_token: true },
-        }),
-        prisma.deviceRegistration.findMany({
-          where: {
-            is_active: true,
-            customer: { franchise_id: campaign.franchise_id },
-          },
-          select: { fcm_token: true },
-        }),
-      ]);
-      const tokens = [
-        ...new Set(
-          [...customers, ...devices]
-            .map((row) => row.fcm_token)
-            .filter(Boolean)
-        ),
-      ];
+      // Every active device registered by a customer of this franchise.
+      const devices = await prisma.deviceRegistration.findMany({
+        where: {
+          is_active: true,
+          customer: { franchise_id: campaign.franchise_id },
+        },
+        select: { fcm_token: true },
+      });
+      const tokens = [...new Set(devices.map((row) => row.fcm_token).filter(Boolean))];
       if (tokens.length === 0) continue;
 
       const snackSlot = campaign.target_slot === "EVENING_SNACKS_3_TO_6";

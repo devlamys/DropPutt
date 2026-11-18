@@ -60,13 +60,6 @@ export function calculateLineTotal(unit_price, quantity) {
   return multiplyMoney(unit_price, quantity);
 }
 
-/** item_total = Σ(line_total). `lines` is [{ unit_price, quantity }]. */
-export function calculateItemTotal(lines) {
-  return addMoney(
-    ...lines.map((line) => calculateLineTotal(line.unit_price, line.quantity))
-  );
-}
-
 // ─── §10.1 Commission-free orders ───────────────────────────────────────────
 
 /**
@@ -205,7 +198,7 @@ export function calculateSplit({
  * @param {object} input
  * @param {Decimal.Value} input.item_total          Σ OrderItem.line_total (or the bill amount for custom flows)
  * @param {{delivery_fee, rider_commission, franchise_profit}} input.zone
- * @param {{royalty_per_order, is_launch_promo_active}} input.franchise
+ * @param {{royalty_per_order}} input.franchise
  * @param {string} input.payment_method              COD | PREPAID_AT_HOTEL | UPI_TO_ADMIN
  * @param {Decimal.Value} [input.commission_rate]    vendor.commission_rate; 0 when there is no partner vendor
  * @param {Decimal.Value} [input.rider_tip]

@@ -1,4 +1,13 @@
 
+# Dependencies, builds, local config, logs
+node_modules/
+dist/
+dist-*/
+.env
+.env.*.local
+*.log
+.DS_Store
+
 # Deployment secrets and generated files
 deploy/compose.env
 deploy/api.env

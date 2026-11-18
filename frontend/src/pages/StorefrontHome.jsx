@@ -7,7 +7,7 @@ import ImageTile from "../components/shop/ImageTile.jsx";
 import ShopCard from "../components/shop/ShopCard.jsx";
 import { useDebounced } from "../hooks/useDebounced.js";
 import { useProducts } from "../hooks/useProducts.js";
-import { placeName } from "../components/shop/chrome.jsx";
+import { placeName } from "../utils/place.js";
 import { useStorefront } from "../components/shop/StorefrontContext.jsx";
 import { categoryOf } from "../components/shop/visuals.js";
 import { inr } from "../utils/format.js";
@@ -88,7 +88,7 @@ function BottomNav({ cartCount, orderCount, onHome, onSearch, onCart, onOrders }
 export default function StorefrontHome() {
   const {
     feed, vendors, closedVendors, zone, loading, error, reload, cart, openZones,
-    totals, minOrder, cartShop, openCart, openCustom, openOrders, openVendor, orderCount, franchiseName, place, toast,
+    totals, minOrder, cartShop, openCart, openCustom, openOrders, orderCount, franchiseName, place, toast,
   } = useStorefront();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");

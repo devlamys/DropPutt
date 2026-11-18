@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
 import { APP } from "./appMode.js";
 import { DropPuttMark } from "./components/DropPuttLogo.jsx";
@@ -23,7 +23,6 @@ const StorefrontHome = HAS_CUSTOMER ? lazy(() => import("./pages/StorefrontHome.
 const RestaurantsPage = HAS_CUSTOMER ? lazy(() => import("./pages/RestaurantsPage.jsx")) : null;
 const MartPage = HAS_CUSTOMER ? lazy(() => import("./pages/MartPage.jsx")) : null;
 const ShopDishes = HAS_CUSTOMER ? lazy(() => import("./pages/ShopDishes.jsx")) : null;
-const ShopMenu = HAS_CUSTOMER ? lazy(() => import("./pages/ShopMenu.jsx")) : null;
 const RiderDashboard = HAS_RIDER ? lazy(() => import("./pages/RiderDashboard.jsx")) : null;
 const RiderEarnings = HAS_RIDER ? lazy(() => import("./pages/RiderEarnings.jsx")) : null;
 const VendorMenu = HAS_VENDOR ? lazy(() => import("./pages/VendorMenu.jsx")) : null;
@@ -56,6 +55,11 @@ function RequireAuth({ roles, children }) {
   return children;
 }
 
+function OldShopLink() {
+  const { vendorId } = useParams();
+  return <Navigate to={`/shop/restaurant/${vendorId}`} replace />;
+}
+
 const guard = (roles, page) => <RequireAuth roles={roles}>{page}</RequireAuth>;
 
 export default function App() {
@@ -72,7 +76,8 @@ export default function App() {
               <Route path="restaurants" element={<RestaurantsPage />} />
               <Route path="mart" element={<MartPage />} />
               <Route path="restaurant/:vendorId" element={<ShopDishes />} />
-              <Route path=":vendorId" element={<ShopMenu />} />
+              {/* The old shop page lives at /shop/restaurant/:id now; keep old links working. */}
+              <Route path=":vendorId" element={<OldShopLink />} />
             </Route>
             <Route path="/drop/:token" element={<CustomerDropPage />} />
           </>

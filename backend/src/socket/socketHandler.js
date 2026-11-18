@@ -31,8 +31,6 @@ export const rooms = Object.freeze({
 
 let io = null;
 
-export const getIO = () => io;
-
 /** Emits to a room; a no-op when Socket.io is not running (tests, scripts). */
 export function emitTo(room, event, payload) {
   if (io) io.to(room).emit(event, payload);

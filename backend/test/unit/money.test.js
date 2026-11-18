@@ -71,16 +71,9 @@ describe("four-way split (§11, §12)", () => {
     assert.equal(s(r.super_admin_profit), "3.00");
   });
 
-  it("the zone's franchise_profit and the promo flag no longer change the split", () => {
-    const r = calculateSplit({ ...base, is_launch_promo_active: false });
-    assert.equal(s(r.rider_earning), "70.00");
-    assert.equal(s(r.franchise_profit), "22.00");
-  });
-
   it("a negative franchise profit is kept, never clamped to zero", () => {
     const r = calculateSplit({
       ...base,
-      is_launch_promo_active: true,
       shop_markup_profit: 0,
       vendor_commission: 0,
     });
@@ -155,23 +148,21 @@ describe("vendor payable (§16)", () => {
 });
 
 describe("full order financials", () => {
-  const franchise = { royalty_per_order: 3, is_launch_promo_active: false };
+  const franchise = { royalty_per_order: 3 };
   const zone = { delivery_fee: 30, rider_commission: 20, franchise_profit: 10 };
 
   it("the four-way split accounts for the whole grand total", () => {
-    for (const promo of [false, true]) {
-      for (const payment_method of ["COD", "PREPAID_AT_HOTEL", "UPI_TO_ADMIN"]) {
-        const f = calculateOrderFinancials({
-          item_total: 250,
-          zone,
-          franchise: { ...franchise, is_launch_promo_active: promo },
-          payment_method,
-          commission_rate: 10,
-          rider_tip: 20,
-        });
-        const allocated = addMoney(f.vendor_earning, f.rider_earning, f.franchise_profit, f.super_admin_profit);
-        assert.equal(s(allocated), s(f.grand_total), `${payment_method} promo=${promo}`);
-      }
+    for (const payment_method of ["COD", "PREPAID_AT_HOTEL", "UPI_TO_ADMIN"]) {
+      const f = calculateOrderFinancials({
+        item_total: 250,
+        zone,
+        franchise,
+        payment_method,
+        commission_rate: 10,
+        rider_tip: 20,
+      });
+      const allocated = addMoney(f.vendor_earning, f.rider_earning, f.franchise_profit, f.super_admin_profit);
+      assert.equal(s(allocated), s(f.grand_total), payment_method);
     }
   });
 

@@ -6,4 +6,6 @@ coverage/
 firebase-service-account.json
 *.log
 .DS_Store
-uploads/
+# Uploaded media (development disk storage): keep the folder, not the files
+uploads/*
+!uploads/.gitkeep

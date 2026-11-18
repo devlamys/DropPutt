@@ -257,7 +257,6 @@ model Franchise {
   wallet_balance         Decimal  @default(0) @db.Decimal(12, 2)
   min_balance_limit      Decimal  @default(-50) @db.Decimal(12, 2)
   royalty_per_order      Decimal  @default(3) @db.Decimal(12, 2)
-  is_launch_promo_active Boolean  @default(false)
   rain_surge_fee         Decimal  @default(0) @db.Decimal(12, 2)
   daily_milestone_target Int      @default(20)
   daily_milestone_bonus  Decimal  @default(50) @db.Decimal(12, 2)
@@ -303,7 +302,6 @@ model User {
   pin_hash     String
   role         UserRole
   is_active    Boolean   @default(true)
-  fcm_token    String?
   created_at   DateTime  @default(now())
 
   franchise Franchise? @relation(fields: [franchise_id], references: [id])
@@ -418,7 +416,6 @@ model Customer {
   voice_direction_url  String?
   house_image_url      String?
   rider_delivery_note  String?
-  fcm_token            String?
   created_at           DateTime @default(now())
   updated_at            DateTime @updatedAt
 
@@ -814,7 +811,7 @@ All four values MUST be rounded to two decimals.
 
 # 12. Launch Promo (retired)
 
-The rule in §11 (rider keeps 100% of the delivery fee) is now permanent, so `Franchise.is_launch_promo_active` no longer changes any amount. The column is kept for compatibility and the admin UI no longer shows a switch.
+The rule in §11 (rider keeps 100% of the delivery fee) is now permanent, so the launch-promo switch changed no amount. The `Franchise.is_launch_promo_active` column, its admin/super API fields and the settings option have been removed (migration `drop_retired_columns`).
 
 If the resulting franchise profit is negative, it remains negative as a real accounting value; it MUST NOT silently be converted to zero.
 
@@ -1545,26 +1542,15 @@ export function startPushScheduler() {
           is_active: true,
           cron_time: "0 16 * * *",
         },
-        include: {
-          franchise: {
-            include: {
-              customers: {
-                where: {
-                  fcm_token: { not: null },
-                },
-                select: {
-                  fcm_token: true,
-                },
-              },
-            },
-          },
-        },
       });
 
       for (const campaign of campaigns) {
-        const tokens = campaign.franchise.customers
-          .map((customer) => customer.fcm_token)
-          .filter(Boolean);
+        // Tokens live only in DeviceRegistration (§49.3), never on User/Customer.
+        const devices = await prisma.deviceRegistration.findMany({
+          where: { is_active: true, customer: { franchise_id: campaign.franchise_id } },
+          select: { fcm_token: true },
+        });
+        const tokens = devices.map((device) => device.fcm_token).filter(Boolean);
 
         if (tokens.length === 0) continue;
 
@@ -2057,7 +2043,7 @@ Added with §10.1/§15.1/§16.1: trial HOTEL_DIRECT delivery (commission 0, roya
 - Server recalculates prices.
 - Product from another franchise/vendor -> reject.
 
-## Launch promo
+## Rider keeps the whole delivery fee
 
 Given:
 
@@ -3557,3 +3543,10 @@ One mark for every app: an isometric logistics cube (a food box, a grocery bag, 
 | admin | ADMIN (red) | Franchise Control |
 
 The logo is on every sign-in screen (with the badge), the storefront header, the page loader, and the vendor, rider and admin headers (mark plus badge).
+
+# 66. Pre-launch cleanup (what was removed)
+
+* The retired launch-promo flag `franchises.is_launch_promo_active` and the legacy single push tokens `users.fcm_token` / `customers.fcm_token` are dropped (migration `20261127100000_drop_retired_columns`); push tokens exist only in `device_registrations`.
+* One place for each rule: `isCashLocked` and `netDue` (`cashHandoverService.js`) for the rider's cash limit and what is owed, money maths only through `orderMath.js`.
+* The old customer shop page (`/shop/:vendorId`) is gone; that URL redirects to `/shop/restaurant/:vendorId`. The old storefront top bar/footer, product tiles and the duplicate shop card were deleted.
+* The Android rider shell (not the web code) owns the background-location plugin.
