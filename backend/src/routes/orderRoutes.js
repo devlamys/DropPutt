@@ -44,7 +44,7 @@ import {
 } from "../utils/response.js";
 import { moneyStr, orderView } from "../utils/serializers.js";
 import { saveUpload } from "../utils/storage.js";
-import { notifyWhatsappOrder } from "../services/whatsapp/notify.js";
+import { notifyWhatsappOrder, sendMagicLink } from "../services/whatsapp/notify.js";
 import { autoZoneForOrder, zoneAtGate } from "../services/deliveryZoneService.js";
 import { istDayRange } from "../utils/time.js";
 import { parse, parseId, zBoolean, zId, zLat, zLng, zMoney } from "../utils/validate.js";
@@ -323,6 +323,7 @@ router.post(
       order_status: order.order_status,
     });
     void notifyWhatsappOrder(order.id, "accepted");
+    void sendMagicLink(order.id);
     if (order.vendor_id) {
       // The shop sees who is coming, so the food is ready when they arrive.
       emitTo(rooms.vendor(order.vendor_id), "order_accepted", {
@@ -626,6 +627,7 @@ router.put(
       const event = { order_id: order.id, order_status: order.order_status };
       emitTo(rooms.order(order.id), "order_status_changed", event);
       void notifyWhatsappOrder(order.id, "picked_up");
+      void sendMagicLink(order.id); // no-op when the accept step already sent it
       if (order.vendor_id) {
         emitTo(rooms.vendor(order.vendor_id), "order_picked_up", event);
         pushToUsers([order.vendor.user_id], {

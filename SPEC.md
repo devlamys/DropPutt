@@ -3389,6 +3389,21 @@ Keywords at any time: `menu` (start over), `status`, `cancel`, `help`. A session
 
 `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_API_VERSION`, `PUBLIC_APP_URL` (tracking links). With no access token the bot runs in development mode: replies are only logged. `POST /whatsapp/dev/simulate` and `GET /whatsapp/dev/outbox` (never mounted in production) and `backend/scripts/whatsapp-sim.mjs` play a whole order without WhatsApp. Connecting a real Meta number needs business verification and a public HTTPS webhook URL, which is production-time work.
 
+## 60.6 Magic Link from the business number
+
+The Magic Link (tracking and "share my location" page, §28) is sent to the customer **by the server from the franchise's business WhatsApp number**, not from the rider's phone. This keeps the rider's personal number private, leaves a log, and needs no rider action.
+
+| Item | Rule |
+|---|---|
+| `Order.magic_link_sent_at` | Set when the link was sent; `null` = not sent. Returned as `magic_link_sent_at` in the rider's order payloads. |
+| Trigger | `sendMagicLink(orderId)` (`services/whatsapp/notify.js`) after a rider **accepts** and again at **pickup** (a Call Rider Now order learns the phone only at pickup). It sends once: the timestamp is claimed before sending and cleared if the send fails. |
+| Conditions | `channel = WEB`, the customer's phone is known, status `RIDER_ASSIGNED` or `PICKED_UP`, and the franchise has `whatsapp_enabled` and a `whatsapp_phone_number_id`. |
+| Message | If `WHATSAPP_MAGIC_LINK_TEMPLATE` is set, an approved utility **template** (body `{{1}}` order number, `{{2}}` link; language `WHATSAPP_MAGIC_LINK_TEMPLATE_LANG`, default `ml`). Templates are required because a web customer has never messaged the number, so there is no 24-hour window. Without a template it sends plain text, which only works inside the window. |
+| WhatsApp-channel orders | The "accepted" status message (§60.4 rule 5) already carries the link; it sets `magic_link_sent_at` and no second message is sent. |
+| Rider fallback | While `magic_link_sent_at` is `null` the rider app shows the big "Send WhatsApp Magic Link" button (`wa.me`, from the rider's own WhatsApp). Once sent it shows "Magic Link sent" and a small "send again" link. A `magic_link_sent` socket event (`rider:{id}`) refreshes the card. |
+
+With no access token (development) nothing is sent and the fallback button stays, so the flow is unchanged until a Meta number is connected.
+
 **Invariants:** every WhatsApp order goes through `placeMarketplaceOrder`; a customer's chat can never read or change another customer's order (orders are looked up by franchise and the sender's own number).
 
 ---

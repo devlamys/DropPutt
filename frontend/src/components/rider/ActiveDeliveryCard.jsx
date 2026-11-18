@@ -1,4 +1,4 @@
-import { Loader2, MessageCircle, Phone, Radio } from "lucide-react";
+import { CheckCircle2, Loader2, MessageCircle, Phone, Radio } from "lucide-react";
 import { useState } from "react";
 import Modal from "../Modal.jsx";
 import StatusBadge from "../StatusBadge.jsx";
@@ -109,13 +109,29 @@ export default function ActiveDeliveryCard({ order, riderPosition, tracking, onD
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={() => window.open(whatsappUrl(order), "_blank", "noopener")}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#25D366] py-4 text-base font-bold text-white shadow active:scale-95"
-      >
-        <MessageCircle className="h-5 w-5" /> Send WhatsApp Magic Link
-      </button>
+      {/* The server sends the Magic Link from the business number; the rider's own WhatsApp is only the fallback. */}
+      {order.magic_link_sent_at ? (
+        <div className="space-y-1.5">
+          <p className="flex items-center justify-center gap-2 rounded-2xl bg-green-50 py-3 text-sm font-semibold text-green-800">
+            <CheckCircle2 className="h-4 w-4" /> Magic Link sent to the customer
+          </p>
+          <button
+            type="button"
+            onClick={() => window.open(whatsappUrl(order), "_blank", "noopener")}
+            className="w-full text-center text-xs font-semibold text-slate-500 underline"
+          >
+            Customer did not get it? Send again from my WhatsApp
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => window.open(whatsappUrl(order), "_blank", "noopener")}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#25D366] py-4 text-base font-bold text-white shadow active:scale-95"
+        >
+          <MessageCircle className="h-5 w-5" /> Send WhatsApp Magic Link
+        </button>
+      )}
 
       <RouteMap order={{ ...order, drop_lat: order.drop_lat, drop_lng: order.drop_lng }} riderPosition={riderPosition} />
 

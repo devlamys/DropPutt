@@ -73,6 +73,7 @@ export function orderView(order) {
     rain_surge_applied: order.rain_surge_applied,
     is_batched_addon: order.is_batched_addon,
     location_token: order.location_token,
+    magic_link_sent_at: order.magic_link_sent_at ?? null,
     created_at: order.created_at,
     delivered_at: order.delivered_at,
     cancelled_at: order.cancelled_at ?? null,

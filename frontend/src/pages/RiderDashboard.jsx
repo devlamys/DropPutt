@@ -96,6 +96,10 @@ export default function RiderDashboard() {
       if (mine) toast(`❌ Order #${order_number} was cancelled — ${cancel_reason}`, "error");
       loadOrders().catch(() => {});
     },
+    // The server sent the Magic Link from the business number: the button becomes a fallback.
+    magic_link_sent: () => {
+      loadOrders().catch(() => {});
+    },
     customer_location_shared: () => {
       toast("📍 Customer shared their location", "success");
       loadOrders().catch(() => {});

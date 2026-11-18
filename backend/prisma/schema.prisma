@@ -507,6 +507,8 @@ model Order {
   cancel_reason        String?
   // When the shop tapped "Got it" on the new-order alert (SPEC §62); null = still ringing.
   vendor_seen_at       DateTime?
+  // When the Magic Link reached the customer from the business WhatsApp number (SPEC §60.6); null = the rider must send it.
+  magic_link_sent_at   DateTime?
   // Road route rider → drop (OSRM). { coords: [[lat,lng]...], distance_m, duration_s, dest: [lat,lng] }
   route                Json?
   route_updated_at     DateTime?

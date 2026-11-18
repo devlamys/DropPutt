@@ -36,6 +36,9 @@ export function normalizeMessage(msg) {
       })),
     };
   }
+  if (msg.type === "template") {
+    return { type: "template", body, name: msg.name, language: msg.language, params: (msg.params ?? []).map(String) };
+  }
   return { type: msg.type, body };
 }
 
@@ -69,6 +72,17 @@ export function toGraphPayload(to, msg) {
       ...base,
       type: "interactive",
       interactive: { type: "location_request_message", body: { text: msg.body }, action: { name: "send_location" } },
+    };
+  }
+  if (msg.type === "template") {
+    return {
+      ...base,
+      type: "template",
+      template: {
+        name: msg.name,
+        language: { code: msg.language },
+        components: [{ type: "body", parameters: msg.params.map((value) => ({ type: "text", text: value })) }],
+      },
     };
   }
   return { ...base, type: "text", text: { body: msg.body, preview_url: true } };

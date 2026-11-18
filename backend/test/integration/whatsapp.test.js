@@ -285,7 +285,7 @@ describe("WhatsApp status updates", () => {
     assert.ok(sent.every((m) => m.text.includes(order.order_number)));
   });
 
-  it("an admin cancel is announced; a web order sends nothing", async () => {
+  it("an admin cancel is announced; a web order gets only its Magic Link, no status updates", async () => {
     await placeViaChat(FROM);
     const order = await prisma.order.findFirst();
     const sent = [];
@@ -294,8 +294,87 @@ describe("WhatsApp status updates", () => {
     await accept(api, w.riders[0], web.id);
     const res = await api("POST", `/orders/${order.id}/cancel`, { token: w.adminToken, body: { reason: "Hotel closed early" } });
     assert.equal(res.status, 200, JSON.stringify(res.body));
-    await waitFor(() => sent.length > 0);
-    assert.equal(sent.length, 1);
-    assert.match(sent[0], /Hotel closed early/);
+    await waitFor(() => sent.some((body) => /Hotel closed early/.test(body)));
+    await new Promise((r) => setTimeout(r, 150));
+    // The web order's only message is its Magic Link (§60.6); the cancel went to the chat customer.
+    assert.equal(sent.filter((body) => body.includes(web.location_token)).length, 1);
+    const others = sent.filter((body) => !body.includes(web.location_token));
+    assert.equal(others.length, 1);
+    assert.match(others[0], /Hotel closed early/);
+  });
+});
+
+// ── Magic Link from the business number (§60.6) ─────────────────────────────
+describe("Magic Link from the business WhatsApp number", () => {
+  const sentTo = [];
+  const capture = (ok = true) =>
+    setWhatsappClientForTests(async (to, message) => {
+      sentTo.push({ to, message });
+      if (!ok) throw new Error("meta down");
+    });
+  beforeEach(() => {
+    sentTo.length = 0;
+  });
+  const sent = async (id) => (await prisma.order.findUnique({ where: { id } })).magic_link_sent_at;
+
+  it("is sent once when the rider accepts, and not again at pickup", async () => {
+    capture();
+    const order = await placeOrder(api, w);
+    assert.equal((await accept(api, w.riders[0], order.id)).status, 200);
+    await waitFor(() => sentTo.some((m) => m.message.body.includes(order.location_token)));
+    const link = sentTo.filter((m) => m.message.body.includes(order.location_token));
+    assert.equal(link.length, 1);
+    assert.equal(link[0].to, `91${order.phone}`);
+    assert.ok(await waitFor(() => sent(order.id)));
+
+    assert.equal((await pickup(api, w, w.riders[0], order)).status, 200);
+    await new Promise((r) => setTimeout(r, 150));
+    assert.equal(sentTo.filter((m) => m.message.body.includes(order.location_token)).length, 1);
+  });
+
+  it("uses the approved template when one is configured", async () => {
+    capture();
+    const { env } = await import("../../src/config/env.js");
+    env.whatsapp.magicLinkTemplate = "magic_link";
+    try {
+      const order = await placeOrder(api, w);
+      await accept(api, w.riders[0], order.id);
+      const msg = await waitFor(() => sentTo.find((m) => m.message.type === "template")?.message);
+      assert.equal(msg.name, "magic_link");
+      assert.deepEqual(msg.params, [order.order_number, `${env.publicAppUrl}/drop/${order.location_token}`]);
+    } finally {
+      env.whatsapp.magicLinkTemplate = "";
+    }
+  });
+
+  it("stays unsent when WhatsApp fails, so the rider's button remains", async () => {
+    capture(false);
+    const order = await placeOrder(api, w);
+    assert.equal((await accept(api, w.riders[0], order.id)).status, 200);
+    await waitFor(() => sentTo.length > 0);
+    await new Promise((r) => setTimeout(r, 150));
+    assert.equal(await sent(order.id), null);
+    const active = await api("GET", "/rider/me/active-orders", { token: w.riders[0].token });
+    assert.equal(active.body.data.orders[0].magic_link_sent_at, null);
+  });
+
+  it("is not sent for a franchise without a WhatsApp number", async () => {
+    capture();
+    await prisma.franchise.update({ where: { id: w.franchise.id }, data: { whatsapp_enabled: false } });
+    const order = await placeOrder(api, w);
+    await accept(api, w.riders[0], order.id);
+    await new Promise((r) => setTimeout(r, 150));
+    assert.equal(sentTo.length, 0);
+    assert.equal(await sent(order.id), null);
+  });
+
+  it("an order placed on WhatsApp gets the link in the accepted message only", async () => {
+    capture();
+    await placeViaChat(FROM);
+    const order = await prisma.order.findFirstOrThrow({ where: { customer_phone: FROM.slice(2) } });
+    sentTo.length = 0;
+    assert.equal((await accept(api, w.riders[0], order.id)).status, 200);
+    await waitFor(() => sent(order.id));
+    assert.equal(sentTo.filter((m) => m.message.body.includes(order.location_token)).length, 1);
   });
 });

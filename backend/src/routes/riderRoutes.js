@@ -139,6 +139,7 @@ router.get(
           house_image_url: customer?.house_image_url ?? null,
           rider_delivery_note: customer?.rider_delivery_note ?? null,
           location_token: order.location_token,
+          magic_link_sent_at: order.magic_link_sent_at,
           created_at: order.created_at,
         };
       }),

@@ -86,6 +86,10 @@ export const env = Object.freeze({
     appSecret: process.env.WHATSAPP_APP_SECRET || "",
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || "",
     apiVersion: process.env.WHATSAPP_API_VERSION || "v21.0",
+    // Approved utility template for the first Magic Link message (outside the 24-hour window).
+    // Body variables: {{1}} order number, {{2}} tracking link. Empty = send plain text (works inside the window only).
+    magicLinkTemplate: process.env.WHATSAPP_MAGIC_LINK_TEMPLATE || "",
+    magicLinkTemplateLang: process.env.WHATSAPP_MAGIC_LINK_TEMPLATE_LANG || "ml",
   },
   // Where customers open their tracking link (Magic Link) from WhatsApp.
   publicAppUrl: (process.env.PUBLIC_APP_URL || "http://localhost:5173").replace(/\/$/, ""),
