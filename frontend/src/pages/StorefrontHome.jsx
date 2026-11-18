@@ -4,11 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DishGrid from "../components/shop/DishGrid.jsx";
 import ShopCard from "../components/shop/ShopCard.jsx";
+import { useDebounced } from "../hooks/useDebounced.js";
 import { useProducts } from "../hooks/useProducts.js";
 import { placeName } from "../components/shop/chrome.jsx";
 import Stepper from "../components/shop/Stepper.jsx";
 import { useStorefront } from "../components/shop/StorefrontContext.jsx";
-import { categoryOf, productEmoji } from "../components/shop/visuals.js";
+import { categoryOf } from "../components/shop/visuals.js";
 import { inr } from "../utils/format.js";
 
 // ── 4 PM window, evaluated on the customer's clock in Asia/Kolkata ──────────
@@ -87,7 +88,10 @@ export default function StorefrontHome() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const navigate = useNavigate();
-  const list = useProducts({ group: "FOOD", category });
+  const text = query.trim();
+  const settled = useDebounced(text, 300);
+  const showSearch = text.length >= 2 && settled.length >= 2;
+  const list = useProducts({ group: "FOOD", category: showSearch ? "" : category, q: showSearch ? settled : "" });
   const goDishes = (key) => {
     setQuery("");
     if (key !== undefined) setCategory(key);
@@ -122,14 +126,11 @@ export default function StorefrontHome() {
   const allProducts = useMemo(() => vendors.flatMap((shop) => shop.products.map((product) => ({ product, shop }))), [vendors]);
   const offers = useMemo(() => allProducts.filter(({ product }) => product.original_price), [allProducts]);
 
-  const q = query.trim().toLowerCase();
-  const results = useMemo(() => {
-    if (!q) return null;
-    return {
-      dishes: allProducts.filter(({ product }) => product.name.toLowerCase().includes(q)),
-      shops: [...vendors, ...closedVendors].filter((v) => v.shop_name.toLowerCase().includes(q) || categoryOf(v.shop_category).label.toLowerCase().includes(q)),
-    };
-  }, [q, allProducts, vendors, closedVendors]);
+  const shopHits = useMemo(() => {
+    const needle = text.toLowerCase();
+    if (!needle) return [];
+    return [...vendors, ...closedVendors].filter((v) => v.shop_name.toLowerCase().includes(needle) || categoryOf(v.shop_category).label.toLowerCase().includes(needle));
+  }, [text, vendors, closedVendors]);
 
   const short = minOrder - totals.subtotal;
   const progress = minOrder > 0 ? Math.min(100, Math.round((totals.subtotal / minOrder) * 100)) : 100;
@@ -177,51 +178,39 @@ export default function StorefrontHome() {
         </div>
       )}
 
-      {/* ── Search results ───────────────────────────────────────────── */}
-      {feed && results && (
+      {/* ── Search results: dishes come from the server, so every dish in town can be found ── */}
+      {feed && showSearch && (
         <main className="space-y-6 px-4 pt-4">
-          {results.dishes.length === 0 && results.shops.length === 0 ? (
-            <div className="py-16 text-center">
-              <p className="text-5xl" aria-hidden="true">🔍</p>
-              <p className="mt-3 text-lg font-bold">Nothing matches "{query.trim()}"</p>
-              <p className="text-sm text-slate-500">Try another name, or ask a rider to buy it for you.</p>
-              <button type="button" onClick={() => openCustom("CUSTOM_BUY")} className={`mt-5 h-12 rounded-2xl bg-amber-400 px-6 text-sm font-bold text-slate-900 ${press}`}>
-                Buy Anything • എന്തും വാങ്ങാം
-              </button>
-            </div>
-          ) : (
-            <>
-              {results.dishes.length > 0 && (
-                <section>
-                  <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">Dishes · <span className="tabular-nums">{results.dishes.length}</span></h2>
-                  <ul className="space-y-2">
-                    {results.dishes.map(({ product, shop }) => (
-                      <li key={product.id} className="flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm">
-                        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-flame-50 text-3xl" aria-hidden="true">{productEmoji(product.name, shop.shop_category)}</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-bold">{product.name}</p>
-                          <p className="truncate text-xs text-slate-500">{shop.shop_name}</p>
-                          <p className="font-bold tabular-nums">{inr(product.price)}</p>
-                        </div>
-                        <Stepper quantity={quantityOf(product.id)} label={product.name} onAdd={() => addProduct(product, shop.shop_name)} onRemove={() => removeOne(product.id)} />
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-              {results.shops.length > 0 && (
-                <section>
-                  <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">Shops</h2>
-                  <div className="space-y-3">{results.shops.map((s) => <ShopCard key={s.id} shop={s} inCart={cart.vendor_id === s.id} onOpen={(id) => navigate(`/shop/restaurant/${id}`)} closed={s.is_open === false} />)}</div>
-                </section>
-              )}
-            </>
+          <section aria-label="Dishes">
+            <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">Dishes</h2>
+            <DishGrid
+              list={list}
+              empty={
+                <div className="rounded-2xl bg-white px-5 py-10 text-center shadow-sm ring-1 ring-slate-200/70">
+                  <p className="text-5xl" aria-hidden="true">🔍</p>
+                  <p className="mt-3 text-lg font-bold">No dish matches "{text}"</p>
+                  <p className="text-sm text-slate-500">Try another name, or ask a rider to buy it for you.</p>
+                  <button type="button" onClick={() => openCustom("CUSTOM_BUY")} className={`mt-5 h-12 rounded-2xl bg-amber-400 px-6 text-sm font-bold text-slate-900 ${press}`}>
+                    Buy Anything • എന്തും വാങ്ങാം
+                  </button>
+                </div>
+              }
+            />
+          </section>
+          {shopHits.length > 0 && (
+            <section aria-label="Shops">
+              <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">Shops</h2>
+              <div className="space-y-3">{shopHits.map((s) => <ShopCard key={s.id} shop={s} inCart={cart.vendor_id === s.id} onOpen={(id) => navigate(`/shop/restaurant/${id}`)} closed={s.is_open === false} />)}</div>
+            </section>
           )}
+          <button type="button" onClick={() => navigate(`/shop/mart?q=${encodeURIComponent(text)}`)} className={`flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-sm font-bold text-white ${press}`}>
+            <ShoppingBasket className="h-5 w-5" /> Also search the Mart for "{text}"
+          </button>
         </main>
       )}
 
       {/* ── Home ─────────────────────────────────────────────────────── */}
-      {feed && !results && (
+      {feed && !showSearch && (
         <main className="space-y-5 pt-4">
           {/* 2. 4 PM banner */}
           <section className="px-4" aria-label="4 PM Chayakadi">

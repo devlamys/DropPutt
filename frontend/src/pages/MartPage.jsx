@@ -1,6 +1,6 @@
 import { ArrowLeft, Search, Store, Utensils, X } from "lucide-react";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import DishGrid from "../components/shop/DishGrid.jsx";
 import MedicalNotice from "../components/shop/MedicalNotice.jsx";
 import { useDebounced } from "../hooks/useDebounced.js";
@@ -14,7 +14,8 @@ export default function MartPage() {
   useTheme("mart");
   const navigate = useNavigate();
   const [category, setCategory] = useState("");
-  const [query, setQuery] = useState("");
+  const [params] = useSearchParams();
+  const [query, setQuery] = useState(() => params.get("q") ?? "");
   const q = useDebounced(query.trim(), 300);
   const list = useProducts({ group: "MART", category, q: q.length >= 2 ? q : "" });
 
