@@ -140,6 +140,8 @@ model Franchise {
   // Orders further than this (km, hotel to customer) are refused. Franchise admin edits it.
   max_delivery_km          Decimal @default(8) @db.Decimal(5, 2)
   // Where the franchise is (set by its admin). Customers are shown the nearest franchises first.
+  // Extra charge for each shop beyond the first in one "deliver together" order. Edited by the franchise admin.
+  extra_stop_fee           Decimal @default(20) @db.Decimal(12, 2)
   address                  String?
   lat                      Decimal? @db.Decimal(9, 6)
   lng                      Decimal? @db.Decimal(9, 6)
@@ -520,6 +522,11 @@ model Order {
   royalty_deducted     Boolean           @default(false)
   settlement_completed Boolean           @default(false)
   is_batched_addon     Boolean           @default(false)
+  // "Deliver together": orders placed in one checkout from different shops share a group_id and one
+  // rider trip. group_delivery_fee is this order's share of the group's fee and replaces the zone fee
+  // at pickup (the farthest shop carries its zone fee, every other shop the franchise's extra_stop_fee).
+  group_id             String?
+  group_delivery_fee   Decimal?          @db.Decimal(12, 2)
 
   payment_method       PaymentMethod     @default(COD)
   order_status         OrderStatus       @default(RIDER_REQUESTED)
@@ -554,6 +561,7 @@ model Order {
   @@index([franchise_id, rider_id, order_status])
   @@index([franchise_id, vendor_id, order_status])
   @@index([franchise_id, customer_phone])
+  @@index([franchise_id, group_id])
   @@index([franchise_id, zone_id, order_status])
   @@map("orders")
 }

@@ -30,6 +30,7 @@ export default function ActiveDeliveryCard({ order, riderPosition, tracking, onD
           <p className="text-sm text-slate-500">
             {order.shop_name ? `From ${order.shop_name}` : "Custom order"}
             {order.is_batched_addon && " · 🔥 add-on"}
+            {order.group_id && " · 🔗 one trip, several shops"}
           </p>
         </div>
         <StatusBadge status={order.order_status} />

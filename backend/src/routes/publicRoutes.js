@@ -158,9 +158,19 @@ router.get(
     });
     if (!order) throw orderNotFound();
 
+    // "Deliver together": the customer's other orders on the same rider trip, by number and shop only.
+    const others = order.group_id
+      ? await prisma.order.findMany({
+          where: { franchise_id: order.franchise_id, group_id: order.group_id, id: { not: order.id } },
+          select: { order_number: true, order_status: true, vendor: { select: { shop_name: true } } },
+          orderBy: { id: "asc" },
+        })
+      : [];
+
     ok(res, {
       order_number: order.order_number,
       order_status: order.order_status,
+      together_with: others.map((o) => ({ order_number: o.order_number, shop_name: o.vendor?.shop_name ?? null, order_status: o.order_status })),
       estimated_message: STATUS_MESSAGES[order.order_status],
       shop_name: order.vendor?.shop_name ?? order.custom_shop_name ?? null,
       payment_method: order.payment_method,

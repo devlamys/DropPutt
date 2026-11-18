@@ -73,6 +73,7 @@ export function orderView(order) {
     payment_method: order.payment_method,
     rain_surge_applied: order.rain_surge_applied,
     is_batched_addon: order.is_batched_addon,
+    group_id: order.group_id ?? null,
     location_token: order.location_token,
     magic_link_sent_at: order.magic_link_sent_at ?? null,
     created_at: order.created_at,

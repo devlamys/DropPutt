@@ -7,7 +7,7 @@ import { prisma, TX_OPTIONS } from "../config/prisma.js";
 import { idempotency } from "../middleware/idempotency.js";
 import { customRequestUpload } from "../middleware/upload.js";
 import { checkoutIpLimiter, checkoutPhoneLimiter } from "../middleware/rateLimit.js";
-import { placeMarketplaceOrder } from "../services/checkoutService.js";
+import { MAX_GROUP_SHOPS, placeGroupOrder, placeMarketplaceOrder, quoteGroupDelivery } from "../services/checkoutService.js";
 import { deliveryMessage, franchiseCentre, requireDelivery, resolveDelivery } from "../services/deliveryZoneService.js";
 import { dispatchOrder } from "../services/dispatchService.js";
 import { emitTo, rooms } from "../socket/socketHandler.js";
@@ -425,6 +425,51 @@ router.post(
 
     const { summary } = await placeMarketplaceOrder({ franchise: req.franchise, body, customer_phone });
     ok(res, summary, { status: 201 });
+  })
+);
+
+const groupQuoteSchema = z.object({
+  vendor_ids: z.array(zId).min(2).max(MAX_GROUP_SHOPS),
+  lat: zLat,
+  lng: zLng,
+});
+
+// POST /api/v1/marketplace/group-quote — "deliver these shops together": what the trip costs at this pin
+// (the farthest shop's zone fee + the franchise's extra stop fee per other shop) against separate orders.
+router.post(
+  "/group-quote",
+  checkoutIpLimiter,
+  asyncHandler(async (req, res) => {
+    const body = parse(groupQuoteSchema, req.body);
+    ok(res, await quoteGroupDelivery({ franchise_id: req.franchise_id, vendor_ids: body.vendor_ids, lat: body.lat, lng: body.lng }));
+  })
+);
+
+const groupCheckoutSchema = checkoutSchema.omit({ vendor_id: true, items: true }).extend({
+  carts: z
+    .array(
+      z.object({
+        vendor_id: zId,
+        items: z.array(z.object({ product_id: zId, quantity: z.coerce.number().int().min(1).max(99) })).min(1).max(40),
+      })
+    )
+    .min(2)
+    .max(MAX_GROUP_SHOPS),
+});
+
+// POST /api/v1/marketplace/checkout-group — several shops, one drop, one rider trip. One order per shop
+// (each with its own items, commission and settlement) sharing a group_id; the trip fee is split between
+// them (see allocateGroupFees). Same rules and idempotency as /checkout.
+router.post(
+  "/checkout-group",
+  checkoutIpLimiter,
+  checkoutPhoneLimiter,
+  idempotency(),
+  asyncHandler(async (req, res) => {
+    const body = parse(groupCheckoutSchema, req.body);
+    const customer_phone = normalizePhone(body.customer_phone);
+    if (!customer_phone) throw fieldError("customer_phone", "must be a valid 10-digit mobile number");
+    ok(res, await placeGroupOrder({ franchise: req.franchise, body, customer_phone }), { status: 201 });
   })
 );
 

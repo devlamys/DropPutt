@@ -10,7 +10,7 @@ let phoneSeq = 0;
 /** Unique valid mobile numbers: 9xxxxxxxxx. */
 export const nextPhone = () => String(9_000_000_000 + ++phoneSeq * 7).slice(0, 10);
 
-async function makeUser(franchise_id, role, name, phone = nextPhone()) {
+export async function makeUser(franchise_id, role, name, phone = nextPhone()) {
   return prisma.user.create({
     data: { franchise_id, role, name, phone, pin_hash: await hash() },
   });

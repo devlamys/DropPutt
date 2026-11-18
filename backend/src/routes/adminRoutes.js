@@ -699,6 +699,7 @@ const franchiseSettingsView = (franchise) => ({
   default_commission_rate: moneyStr(franchise.default_commission_rate),
   rain_surge_fee: moneyStr(franchise.rain_surge_fee),
   max_delivery_km: moneyStr(franchise.max_delivery_km),
+  extra_stop_fee: moneyStr(franchise.extra_stop_fee),
   address: franchise.address,
   lat: coordStr(franchise.lat),
   lng: coordStr(franchise.lng),
@@ -938,6 +939,8 @@ const settingsSchema = z
     rain_surge_fee: zMoney.optional(),
     // Orders further than this from the hotel are refused (SPEC "Delivery zones by distance").
     max_delivery_km: z.coerce.number().min(0.5).max(50).optional(),
+    // Extra charge per additional shop when a customer has several shops delivered together.
+    extra_stop_fee: zMoney.optional(),
     // The name customers and staff see. The slug (the web address) never changes with it.
     name: z.string().trim().min(2).max(60).optional(),
     // Where the franchise is: customers are shown the nearest franchises first.
@@ -953,6 +956,10 @@ const settingsSchema = z
   .refine((body) => (body.lat === undefined) === (body.lng === undefined), {
     message: "lat and lng go together",
     path: ["lat"],
+  })
+  .refine((body) => body.extra_stop_fee === undefined || Number(body.extra_stop_fee) <= 200, {
+    message: "extra_stop_fee must be at most 200",
+    path: ["extra_stop_fee"],
   });
 
 router.patch(
@@ -969,6 +976,7 @@ router.patch(
           : {}),
         ...(body.max_delivery_km !== undefined ? { max_delivery_km: km2(body.max_delivery_km) } : {}),
         ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.extra_stop_fee !== undefined ? { extra_stop_fee: moneyStr(body.extra_stop_fee) } : {}),
         ...(body.address !== undefined ? { address: body.address || null } : {}),
         ...(body.lat !== undefined ? { lat: Number(body.lat).toFixed(6), lng: Number(body.lng).toFixed(6) } : {}),
       },

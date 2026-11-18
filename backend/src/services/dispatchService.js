@@ -45,7 +45,7 @@ export function isSameCustomer(a, b) {
  *
  * Runs after the order transaction commits; failures are logged, never thrown.
  */
-export async function dispatchOrder(order, { franchise_slug, shop_name } = {}) {
+export async function dispatchOrder(order, { franchise_slug, shop_name, item_count: itemCountOverride, group_size } = {}) {
   try {
     const riders = await prisma.rider.findMany({
       where: {
@@ -84,7 +84,7 @@ export async function dispatchOrder(order, { franchise_slug, shop_name } = {}) {
 
     // Before accepting, a rider sees only how many items there are; the list
     // itself appears once the order is theirs (SPEC §62.1).
-    const item_count = itemCount(order);
+    const item_count = itemCountOverride ?? itemCount(order);
 
     const request = {
       order_id: order.id,
@@ -95,6 +95,7 @@ export async function dispatchOrder(order, { franchise_slug, shop_name } = {}) {
       drop_address: order.drop_address,
       zone_id: order.zone_id,
       item_count,
+      ...(group_size > 1 ? { group_size } : {}),
     };
     const requestedUsers = [];
     const addonUsers = [];
@@ -124,6 +125,7 @@ export async function dispatchOrder(order, { franchise_slug, shop_name } = {}) {
           shop_name: request.shop_name,
           pickup_address: order.pickup_address,
           item_count,
+          ...(group_size > 1 ? { group_size } : {}),
         });
         (sameCustomerAs ? sameCustomerUsers : addonUsers).push(rider.user_id);
       }

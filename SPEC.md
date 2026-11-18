@@ -625,6 +625,17 @@ For `User`, `franchise_id` can remain nullable for a global `SUPER_ADMIN`. Postg
 
 **One cart per shop (customer storefront).** The storefront keeps a separate cart for each shop (`dropputt.carts` on the device: `{ carts: [{ vendor_id, shop_name, lines }], active }`); adding from another shop starts that shop's cart instead of clearing the first. An order is still one shop: checkout places one order for the active cart, with its own delivery fee, minimum order and rider, and the customer switches carts with the tabs at the top of the cart screen. A placed order removes only its own cart. No API change. Combining several shops into one order with one delivery is not built (see the multi-shop proposal).
 
+## Deliver together (several shops, one rider trip)
+
+A customer with carts from 2 or 3 shops (`MAX_GROUP_SHOPS`) may choose **Deliver together** on the cart screen instead of separate orders.
+
+- **Data.** One checkout creates one ordinary `Order` per shop (own items, commission, vendor settlement, status) in one transaction, all sharing `Order.group_id`. `Order.group_delivery_fee` is that order's share of the trip fee.
+- **Fee.** The trip costs the farthest shop's zone fee plus `Franchise.extra_stop_fee` (default 20, edited by the franchise admin in `PATCH /admin/franchise/settings`, 0 to 200) for every other shop. The order of the farthest shop (ties: the greater distance) carries its zone fee as its `group_delivery_fee`, every other order carries `extra_stop_fee`, so the shares add up to the trip fee and the rider keeps all of it. At rider pickup, `group_delivery_fee` replaces the zone fee in `calculateOrderFinancials`; commission, royalty and the money split are otherwise unchanged and per order. Cancelling one order drops its share: the trip fee follows the orders that remain.
+- **API.** `POST /marketplace/group-quote { vendor_ids, lat, lng }` returns `together_fee`, `separate_fee` and each shop's share (the cart screen shows the saving). `POST /marketplace/checkout-group { carts: [{ vendor_id, items }], drop_lat, drop_lng, customer_phone, ... }` has the same rules, idempotency and rate limits as `/checkout`; every shop must be open and deliverable, otherwise nothing is created. The response lists each order (`location_token`, items, its fee) plus the trip's `delivery_fee` and `estimated_total`.
+- **Dispatch and accept.** Riders are called once for the trip (the lead order, the one carrying the most fee, with `group_size` and every shop's name). Accepting any order of the group assigns all its still-open orders to that rider in one transaction, ignoring `max_active_orders` for the siblings; the group's rows are locked in id order, so two riders cannot split a trip (the loser gets 409 `ORDER_ALREADY_ACCEPTED`). `/orders/active` lists a group's open orders as one request. The rider then picks up at each shop and delivers each order as usual.
+- **Customer.** After ordering, each order has its own tracking link; `GET /public/drop/:token` returns `together_with` (the other orders' number, shop and status), shown as "Delivered together with ...". The rider app tags the cards "one trip, several shops".
+- **Not built.** Route ordering across the shops, WhatsApp group orders, merging a group into one tracking page, and combining Buy Anything with shop orders.
+
 A marketplace cart is not represented by one product field on `Order`.
 
 Each cart line MUST create an `OrderItem`:

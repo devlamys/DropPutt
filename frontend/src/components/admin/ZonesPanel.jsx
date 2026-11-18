@@ -16,6 +16,7 @@ export default function ZonesPanel({ franchise, onUpdated, toast }) {
   const [form, setForm] = useState({ zone_name: "", max_km: "", delivery_fee: "" });
   const [limit, setLimit] = useState(String(Number(franchise.max_delivery_km ?? 8)));
   const [busy, setBusy] = useState(null);
+  const [stopFee, setStopFee] = useState(String(Number(franchise.extra_stop_fee ?? 20)));
   const [where, setWhere] = useState({
     address: franchise.address ?? "",
     lat: franchise.lat != null ? String(Number(franchise.lat)) : "",
@@ -55,6 +56,19 @@ export default function ZonesPanel({ franchise, onUpdated, toast }) {
       () => toast("Could not get the location. Type the latitude and longitude instead.", "error"),
       { enableHighAccuracy: true, timeout: 15_000 }
     );
+  }
+
+  async function saveStopFee() {
+    setBusy("stop");
+    try {
+      const { data } = await api.patch("/admin/franchise/settings", { extra_stop_fee: String(Number(stopFee)) });
+      onUpdated(data.data.franchise);
+      toast(`Extra shop in one trip: ${inr(data.data.franchise.extra_stop_fee)}`, "success");
+    } catch (error) {
+      toast(getErrorMessage(error), "error");
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function saveWhere() {
@@ -119,6 +133,15 @@ export default function ZonesPanel({ franchise, onUpdated, toast }) {
         <button type="button" onClick={saveLimit} disabled={busy === "limit"} className="rounded-xl bg-slate-900 px-3 py-2 font-semibold text-white disabled:opacity-60">
           {busy === "limit" ? "…" : "Save"}
         </button>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+        <label htmlFor="stop-fee" className="font-semibold">Extra charge per additional shop (deliver together)</label>
+        <input id="stop-fee" type="number" min="0" max="200" step="1" value={stopFee} onChange={(e) => setStopFee(e.target.value)} className="w-24 rounded-xl border border-slate-300 px-3 py-2" />
+        <button type="button" onClick={saveStopFee} disabled={busy === "stop"} className="rounded-xl bg-slate-900 px-3 py-2 font-semibold text-white disabled:opacity-60">
+          {busy === "stop" ? "…" : "Save"}
+        </button>
+        <p className="w-full text-xs text-slate-500">When a customer has 2-3 shops delivered together, the trip costs the farthest shop&apos;s charge plus this amount for every other shop. The rider keeps all of it.</p>
       </div>
 
       <div className="mt-4 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">

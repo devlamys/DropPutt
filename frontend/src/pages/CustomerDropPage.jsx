@@ -283,6 +283,11 @@ export default function CustomerDropPage() {
         <p className="text-sm text-slate-500">Order #{order.order_number}</p>
         <h2 className="text-xl font-bold">{order.shop_name ?? "Your delivery"}</h2>
         <p className="mt-1 font-medium">{order.estimated_message}</p>
+        {order.together_with?.length > 0 && (
+          <p className="mt-2 rounded-lg bg-orange-50 px-3 py-2 text-sm font-semibold text-slate-800">
+            🛵 Delivered together with {order.together_with.map((o) => `${o.shop_name ?? "order"} #${o.order_number}`).join(", ")}: one rider brings everything in one trip.
+          </p>
+        )}
         {order.rider && (
           <p className="mt-3 inline-flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-1 text-sm font-semibold">
             🛵 {order.rider.first_name} · {VEHICLE[order.rider.vehicle_type] ?? order.rider.vehicle_type}

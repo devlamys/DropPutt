@@ -159,6 +159,17 @@ export default function Storefront() {
   }, [allTotals.count]);
 
   const onPlaced = (order) => {
+    if (order.orders) {
+      // "Deliver together": one order per shop, one trip. Every order is remembered; tracking opens on the first.
+      for (const o of order.orders) rememberOrder({ token: o.location_token, number: o.order_number, shop: o.shop_name });
+      setOrderCount(readOrders().length);
+      clearAll();
+      setCartOpen(false);
+      const first = order.orders[0];
+      setPlaced({ ...first, shop_name: order.orders.map((o) => o.shop_name).join(" + ") });
+      setTimeout(() => navigate(`/drop/${first.location_token}`), 900);
+      return;
+    }
     rememberOrder({ token: order.location_token, number: order.order_number, shop: order.shop_name, kind: order.kind });
     setOrderCount(readOrders().length);
     if (!order.kind) clear(); // shop checkout empties the cart; custom requests leave it alone
@@ -233,9 +244,10 @@ export default function Storefront() {
             onSelect={setActive}
             minOrder={minOrder}
             onQuantity={setQuantity}
-            onAddMore={() => {
+            minOrderOf={minOrderOf}
+            onAddMore={(id) => {
               setCartOpen(false);
-              setVendorId(cart.vendor_id);
+              setVendorId(id ?? cart.vendor_id);
             }}
             onClose={() => setCartOpen(false)}
             onPlaced={onPlaced}

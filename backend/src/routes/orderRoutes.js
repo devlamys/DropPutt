@@ -244,15 +244,21 @@ router.post(
     const order = await prisma.$transaction(async (tx) => {
       // Lock the order row. A concurrent accept blocks here and, once the
       // winner commits, finds the status changed and gets no row back.
+      // A "deliver together" group is locked as a whole, always in id order, so two riders tapping
+      // different orders of the same trip cannot deadlock: one wins all of them, the other gets a 409.
       const rows = await tx.$queryRaw`
         SELECT id, order_status
         FROM "orders"
-        WHERE id = ${orderId}
-          AND franchise_id = ${franchiseId}
+        WHERE franchise_id = ${franchiseId}
           AND order_status = 'RIDER_REQUESTED'
+          AND (
+            id = ${orderId}
+            OR group_id = (SELECT group_id FROM "orders" WHERE id = ${orderId} AND franchise_id = ${franchiseId})
+          )
+        ORDER BY id
         FOR UPDATE
       `;
-      if (rows.length === 0) {
+      if (!rows.some((row) => row.id === orderId)) {
         const exists = await tx.order.findFirst({
           where: { id: orderId, franchise_id: franchiseId },
           select: { id: true },
@@ -302,7 +308,7 @@ router.post(
         );
       }
 
-      return tx.order.update({
+      const taken = await tx.order.update({
         where: { id: orderId },
         data: {
           rider_id: rider.id,
@@ -311,9 +317,47 @@ router.post(
         },
         include: { vendor: { select: { user_id: true, shop_name: true } } },
       });
+      // "Deliver together": the rider takes the whole trip. The other shops' orders of the same group
+      // follow, even past max_active_orders (it is one trip, and the group size is capped at checkout).
+      if (taken.group_id) {
+        const siblings = await tx.order.findMany({
+          where: { franchise_id: franchiseId, group_id: taken.group_id, id: { not: taken.id }, order_status: "RIDER_REQUESTED" },
+          include: { vendor: { select: { user_id: true, shop_name: true } } },
+        });
+        for (const sibling of siblings) {
+          await tx.order.update({
+            where: { id: sibling.id },
+            data: { rider_id: rider.id, order_status: "RIDER_ASSIGNED", is_batched_addon: false },
+          });
+        }
+        taken.group_siblings = siblings;
+      }
+      return taken;
     }, TX_OPTIONS);
 
     joinRiderToOrder(req.rider.id, order.id);
+    // The group's other orders: same hand-over as for the accepted one, quietly (the rider took them all in one tap).
+    for (const sibling of order.group_siblings ?? []) {
+      joinRiderToOrder(req.rider.id, sibling.id);
+      emitTo(rooms.franchiseRiders(franchiseId), "order_taken", { order_id: sibling.id, order_number: sibling.order_number });
+      emitTo(rooms.franchise(franchiseId), "order_accepted", { order_id: sibling.id, order_number: sibling.order_number });
+      emitTo(rooms.order(sibling.id), "order_status_changed", { order_id: sibling.id, order_status: "RIDER_ASSIGNED" });
+      void notifyWhatsappOrder(sibling.id, "accepted");
+      void sendMagicLink(sibling.id);
+      if (sibling.vendor_id) {
+        emitTo(rooms.vendor(sibling.vendor_id), "order_accepted", {
+          order_id: sibling.id,
+          order_number: sibling.order_number,
+          rider_name: req.user.name,
+          vehicle_number: req.rider.vehicle_number ?? null,
+        });
+        pushToUsers([sibling.vendor.user_id], {
+          title: "✅ Order Accepted",
+          body: `Order #${sibling.order_number} — ${req.user.name} is coming. Keep it ready!`,
+          data: { type: "ORDER_ACCEPTED", order_id: sibling.id, franchise_slug: req.franchise.slug, deep_link: `dropputt://vendor/orders/${sibling.id}` },
+        });
+      }
+    }
     const event = { order_id: order.id, order_number: order.order_number };
     emitTo(rooms.franchiseRiders(franchiseId), "order_taken", event);
     emitTo(rooms.franchise(franchiseId), "order_accepted", event);
@@ -521,9 +565,11 @@ router.put(
         order_type: order.order_type,
         commission_free_until: order.vendor?.commission_free_until,
       });
+      // "Deliver together": this order's share of the trip fee replaces the zone fee (SPEC "Deliver together").
+      const feeZone = order.group_delivery_fee != null ? { ...zone, delivery_fee: order.group_delivery_fee } : zone;
       const financials = calculateOrderFinancials({
         item_total,
-        zone,
+        zone: feeZone,
         franchise,
         payment_method,
         commission_rate: order.vendor?.commission_rate ?? 0,
@@ -1336,6 +1382,11 @@ router.get(
               orderBy: { created_at: "asc" },
               take: 20,
               include: BOARD_INCLUDE,
+            }).then((rows) => {
+              // A "deliver together" trip is one request: show only its first still-open order.
+              const first = new Map();
+              for (const row of rows) if (row.group_id && !first.has(row.group_id)) first.set(row.group_id, row.id);
+              return rows.filter((row) => !row.group_id || first.get(row.group_id) === row.id);
             })
           : [];
 
