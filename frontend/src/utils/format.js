@@ -28,3 +28,13 @@ export const PAYMENT_LABELS = {
   PREPAID_FULL_AT_HOTEL: "Paid at hotel (food + delivery)",
   UPI_TO_ADMIN: "UPI to admin",
 };
+
+/** Wall-clock time in India, e.g. "3:25 PM". */
+export const clockTime = (iso) =>
+  new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" });
+
+/** Minutes until `iso` (rounded, never below 0), or null when there is no time. */
+export function minutesUntil(iso, now = Date.now()) {
+  if (!iso) return null;
+  return Math.max(0, Math.round((new Date(iso).getTime() - now) / 60000));
+}

@@ -43,6 +43,7 @@ export function orderView(order) {
     custom_shop_name: order.custom_shop_name,
     custom_items_text: order.custom_items_text,
     rider_paid_at_shop: order.rider_paid_at_shop,
+    prep_ready_at: order.prep_ready_at,
     bill_image_url: order.bill_image_url,
     voice_note_url: order.voice_note_url,
     // What the customer asked a rider to buy: list photo / prescription and a voice note.

@@ -132,6 +132,8 @@ router.get(
       // The customer may withdraw only until a rider has taken the order.
       can_cancel: order.order_status === "RIDER_REQUESTED",
       cancel_reason: order.order_status === "CANCELLED" ? order.cancel_reason : null,
+      // When the shop says the food is ready; only while the rider has not collected it.
+      prep_ready_at: ["RIDER_REQUESTED", "RIDER_ASSIGNED"].includes(order.order_status) ? order.prep_ready_at : null,
       // The customer may tell us they have the order once the rider has it in hand.
       can_confirm_received: CAN_CONFIRM_STATUSES.includes(order.order_status) && !order.customer_received_at,
       received_at: order.customer_received_at,

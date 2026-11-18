@@ -1192,6 +1192,39 @@ router.post(
   })
 );
 
+// POST /api/v1/orders/:id/prep-time { minutes } — the shop says "ready in N minutes".
+// Stored as a time (prep_ready_at) so the customer and the rider see the same ETA.
+// Allowed until the rider has collected the order; the shop may change it.
+const PREP_MINUTES = [0, 5, 10, 15, 20, 25, 30, 45, 60];
+const prepSchema = z.object({ minutes: z.coerce.number().int().refine((m) => PREP_MINUTES.includes(m), "choose one of the listed times") });
+router.post(
+  "/:id/prep-time",
+  requireRole("VENDOR"),
+  asyncHandler(async (req, res) => {
+    const orderId = parseId(req.params.id);
+    const { minutes } = parse(prepSchema, req.body);
+    const vendor = await prisma.vendor.findFirst({
+      where: { user_id: req.user.id, franchise_id: req.franchise_id },
+      select: { id: true },
+    });
+    if (!vendor) throw forbidden("Vendor profile not found in this franchise");
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, franchise_id: req.franchise_id, vendor_id: vendor.id },
+      select: { id: true, order_status: true },
+    });
+    if (!order) throw orderNotFound();
+    if (!["RIDER_REQUESTED", "RIDER_ASSIGNED"].includes(order.order_status)) {
+      throw new AppError(409, "ORDER_NOT_PREPARING", "The rider has already collected this order");
+    }
+    const prep_ready_at = new Date(Date.now() + minutes * 60_000);
+    await prisma.order.update({ where: { id: orderId }, data: { prep_ready_at } });
+    const payload = { order_id: orderId, prep_ready_at };
+    emitTo(rooms.vendor(vendor.id), "order_prep_time", payload);
+    emitTo(rooms.order(orderId), "order_prep_time", payload);
+    ok(res, payload);
+  })
+);
+
 // GET /api/v1/orders — paginated history (SPEC §48), newest first.
 //   RIDER → own orders, VENDOR → own shop, FRANCHISE_ADMIN → whole franchise.
 //   Optional ?status=DELIVERED (any OrderStatus).

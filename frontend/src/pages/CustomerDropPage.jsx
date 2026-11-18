@@ -6,7 +6,7 @@ import LiveTrackingMap from "../components/customer/LiveTrackingMap.jsx";
 import VoiceRecorder from "../components/customer/VoiceRecorder.jsx";
 import { useToast } from "../components/Toast.jsx";
 import api, { MULTIPART, SOCKET_PATH, SOCKET_URL, getErrorMessage } from "../utils/api.js";
-import { inr } from "../utils/format.js";
+import { clockTime, inr, minutesUntil } from "../utils/format.js";
 import { etaMinutes, formatDistance, remainingRoute } from "../utils/route.js";
 
 // SPEC §21 — exact wording (the server sends the same text).
@@ -49,6 +49,7 @@ export default function CustomerDropPage() {
   const [cancelling, setCancelling] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [clock, setClock] = useState(() => Date.now()); // the "ready in N min" countdown
 
   const load = useCallback(async () => {
     try {
@@ -71,6 +72,11 @@ export default function CustomerDropPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const id = setInterval(() => setClock(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   // Live tracking room for this order — authorised by the Magic Link token.
   useEffect(() => {
     const socket = io(SOCKET_URL, {
@@ -83,6 +89,7 @@ export default function CustomerDropPage() {
     socket.on("live_bike_position", ({ lat, lng }) => setBike([lat, lng]));
     socket.on("order_status_changed", () => load());
     socket.on("order_payment_changed", () => load());
+    socket.on("order_prep_time", () => load());
     // The server re-routes when the rider leaves the road or the pin moves.
     socket.on("route_updated", ({ coords, distance_m, duration_s }) =>
       setOrder((current) => current && { ...current, route: { coords, distance_m, duration_s } })
@@ -256,10 +263,12 @@ export default function CustomerDropPage() {
     shareResult?.gps_accuracy_poor || (fix && fix.accuracy > GPS_LIMIT_M && !shareResult?.saved);
   const warningText = shareResult?.warning?.message || INDOOR_GPS_WARNING_ML;
   const riderName = order.rider?.first_name;
+  const prepLeft = minutesUntil(order.prep_ready_at, clock);
+  const prepText = order.prep_ready_at ? (prepLeft > 0 ? `The shop will have it ready in about ${prepLeft} min (by ${clockTime(order.prep_ready_at)})` : "The shop says your order is ready") : null;
   const stage = (index) => (cancelled ? "todo" : current > index ? "done" : current === index ? "current" : "todo");
   const timeline = [
-    { key: "placed", icon: "🧾", title: "Order placed", text: "Confirmed and processing", state: "done" },
-    { key: "rider", icon: "🛵", title: riderName ? `${riderName} is your delivery rider` : "Finding a rider", text: current >= 1 && riderName ? "Rider is going to the shop" : "Looking for a rider near you", state: current >= 1 ? stage(1) : cancelled ? "todo" : "current" },
+    { key: "placed", icon: "🧾", title: "Order placed", text: prepText && !riderName ? prepText : "Confirmed and processing", state: "done" },
+    { key: "rider", icon: "🛵", title: riderName ? `${riderName} is your delivery rider` : "Finding a rider", text: current >= 1 && riderName ? (prepText ?? "Rider is going to the shop") : "Looking for a rider near you", state: current >= 1 ? stage(1) : cancelled ? "todo" : "current" },
     { key: "way", icon: "📦", title: "Picked up · on the way", text: eta && active ? `About ${eta} min away` : "Your order is on its way to you", state: stage(2) },
     { key: "done", icon: "🏠", title: "Delivered", text: "Enjoy! Thank you for ordering", state: delivered ? "done" : "todo" },
   ];

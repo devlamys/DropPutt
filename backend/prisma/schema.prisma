@@ -524,6 +524,8 @@ model Order {
   magic_link_sent_at   DateTime?
   // The customer tapped "I received it" on the tracking page (optional proof; delivery never waits for it).
   customer_received_at DateTime?
+  // When the shop says the food will be ready (set by the shop: "ready in 15 min"). Shown to the customer and the rider.
+  prep_ready_at        DateTime?
   // Road route rider → drop (OSRM). { coords: [[lat,lng]...], distance_m, duration_s, dest: [lat,lng] }
   route                Json?
   route_updated_at     DateTime?

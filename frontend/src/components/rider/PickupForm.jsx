@@ -1,7 +1,7 @@
 import { Camera, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import api, { MULTIPART, getErrorMessage } from "../../utils/api.js";
-import { PAYMENT_LABELS, inr } from "../../utils/format.js";
+import { PAYMENT_LABELS, clockTime, inr } from "../../utils/format.js";
 import { compressImage } from "../../utils/image.js";
 import OrderItemList from "../OrderItemList.jsx";
 import RequestDetails from "./RequestDetails.jsx";
@@ -144,6 +144,11 @@ export default function PickupForm({ order, zones, onPickedUp, onError }) {
           {order.shop_name ?? "Order"} <span className="text-slate-400">#{order.order_number}</span>
         </h2>
         {order.pickup_address && <p className="text-sm text-slate-500">📍 {order.pickup_address}</p>}
+        {order.prep_ready_at && (
+          <p className="mt-2 inline-block rounded-full bg-amber-100 px-3 py-1 text-sm font-bold text-amber-900">
+            🍳 Shop says ready {new Date(order.prep_ready_at).getTime() <= Date.now() ? "now" : `by ${clockTime(order.prep_ready_at)}`}
+          </p>
+        )}
       </div>
 
       <RequestDetails order={order} />

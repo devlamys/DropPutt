@@ -3498,3 +3498,10 @@ No customer PIN or code is ever asked. The rider's GPS gate at delivery stays th
 * `POST /public/drop/:token/received` ("I received my order"): optional proof. Allowed once the order is `PICKED_UP`, `LOCATION_SHARED` or `DELIVERED` (otherwise 409); stores `orders.customer_received_at` once, repeating it returns `already: true` and changes nothing. It never moves the order's status or any money. The page shows `can_confirm_received` and `received_at`.
 * The Magic Link page shows progress as a list, newest step on top (Order placed, Rider assigned, Picked up and on the way with the road ETA, Delivered), later steps greyed out, plus a "Refresh order status" button.
 * The rider's phone number is still not shown to the customer (§60.6: the Magic Link comes from the business number to keep it private). A "Call rider" button is therefore not offered.
+
+## 63.4 Shop's "ready in N minutes"
+
+* `POST /orders/:id/prep-time { minutes }` (VENDOR of that order's shop; 0, 5, 10, 15, 20, 25, 30, 45 or 60, otherwise 422). Stores `orders.prep_ready_at = now + minutes` (0 = ready now). Allowed while the order is `RIDER_REQUESTED` or `RIDER_ASSIGNED`, otherwise 409; the shop may change it. Another shop's order → 404; riders and admins → 403.
+* Emits `order_prep_time { order_id, prep_ready_at }` to the shop and to the order room (customer page and the accepted rider).
+* The customer's Magic Link page (`prep_ready_at`, null once the rider has collected) shows "The shop will have it ready in about N min (by time)". The rider's pickup card shows "Shop says ready by time". The vendor's order card has the buttons.
+* Nothing else depends on it: it is information only, never blocks pickup.

@@ -13,9 +13,9 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useSocket } from "../hooks/useSocket.js";
 import api, { getErrorMessage, idempotencyHeaders } from "../utils/api.js";
 import { startAlarm, stopAlarm } from "../utils/alarm.js";
-import { inr, minutesAgo } from "../utils/format.js";
+import { clockTime, inr, minutesAgo, minutesUntil } from "../utils/format.js";
 
-const EVENTS = ["new_order_for_vendor", "order_seen", "order_accepted", "order_picked_up", "order_delivered", "order_status_changed", "order_cancelled", "order_payment_changed"];
+const EVENTS = ["new_order_for_vendor", "order_seen", "order_prep_time", "order_accepted", "order_picked_up", "order_delivered", "order_status_changed", "order_cancelled", "order_payment_changed"];
 // A new customer order rings until the shop taps "Got it". The tap is saved on
 // the order (vendor_seen_at), so every phone of the shop stops ringing together.
 const ALERT_STATUSES = ["RIDER_REQUESTED", "RIDER_ASSIGNED"];
@@ -41,6 +41,27 @@ function RiderLine({ order }) {
     );
   }
   return null;
+}
+
+const PREP_CHOICES = [[10, "10 min"], [15, "15 min"], [20, "20 min"], [30, "30 min"], [45, "45 min"], [0, "Ready now"]];
+
+/** The shop tells the customer and the rider how long the food will take. */
+function PrepTime({ order, now, onSet }) {
+  const left = minutesUntil(order.prep_ready_at, now);
+  return (
+    <div className="rounded-xl bg-amber-50 p-3 ring-1 ring-amber-200">
+      <p className="text-sm font-bold text-amber-900">
+        🍳 {order.prep_ready_at ? (left > 0 ? `Ready in ${left} min · by ${clockTime(order.prep_ready_at)}` : "Marked ready") : "How long will it take?"}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {PREP_CHOICES.map(([minutes, label]) => (
+          <button key={minutes} type="button" onClick={() => onSet(order, minutes)} className="min-h-10 rounded-full bg-white px-3.5 text-sm font-bold text-amber-900 ring-1 ring-amber-300 active:scale-95">
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // A shop can withdraw an order until the rider has the food in hand.
@@ -80,6 +101,15 @@ export default function VendorDashboard() {
       !o.vendor_seen_at &&
       !acked.has(o.id)
   );
+  async function setPrep(order, minutes) {
+    try {
+      const { data } = await api.post(`/orders/${order.id}/prep-time`, { minutes });
+      setOrders((list) => list.map((o) => (o.id === order.id ? { ...o, prep_ready_at: data.data.prep_ready_at } : o)));
+      toast(minutes === 0 ? "Marked ready. The customer and rider can see it." : `Told the customer: ready in ${minutes} min.`, "success");
+    } catch (error) {
+      toast(getErrorMessage(error, "Could not save. Try again."), "error");
+    }
+  }
   async function acknowledge(order) {
     setAcked((current) => new Set(current).add(order.id)); // stop the alert at once
     try {
@@ -347,6 +377,7 @@ export default function VendorDashboard() {
                     {(order.items?.length > 0 || ALERT_STATUSES.includes(order.order_status)) && (
                       <div className="space-y-2 md:col-span-4">
                         <RiderLine order={order} />
+                        {SHOP_CAN_CANCEL.includes(order.order_status) && order.order_type !== "CUSTOM_BUY" && <PrepTime order={order} now={now} onSet={setPrep} />}
                         <OrderItemList items={order.items} />
                       </div>
                     )}

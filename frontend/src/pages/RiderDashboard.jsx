@@ -100,6 +100,9 @@ export default function RiderDashboard() {
     magic_link_sent: () => {
       loadOrders().catch(() => {});
     },
+    order_prep_time: () => {
+      loadOrders().catch(() => {});
+    },
     customer_location_shared: () => {
       toast("📍 Customer shared their location", "success");
       loadOrders().catch(() => {});
