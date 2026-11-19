@@ -3,6 +3,7 @@ import { ClipboardList, Clock, CupSoda, Home, MapPin, Search, ShoppingBag, Shopp
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DishGrid from "../components/shop/DishGrid.jsx";
+import DiscountBar from "../components/shop/DiscountBar.jsx";
 import ImageTile from "../components/shop/ImageTile.jsx";
 import ShopCard from "../components/shop/ShopCard.jsx";
 import { useDebounced } from "../hooks/useDebounced.js";

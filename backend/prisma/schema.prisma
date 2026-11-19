@@ -138,7 +138,12 @@ model Franchise {
   whatsapp_phone_number_id String? @unique
   whatsapp_enabled         Boolean @default(false)
   // Orders further than this (km, hotel to customer) are refused. Franchise admin edits it.
-  max_delivery_km          Decimal @default(8) @db.Decimal(5, 2)
+  max_delivery_km          Decimal @default(14) @db.Decimal(5, 2)
+  // Delivery discount: an order of at least delivery_discount_min gets delivery_discount_amount
+  // off the delivery fee (never more than the fee). The franchise pays it; the rider keeps the whole fee.
+  // 0 = no discount.
+  delivery_discount_min    Decimal @default(0) @db.Decimal(12, 2)
+  delivery_discount_amount Decimal @default(0) @db.Decimal(12, 2)
   // Where the franchise is (set by its admin). Customers are shown the nearest franchises first.
   // Extra charge for each shop beyond the first in one "deliver together" order. Edited by the franchise admin.
   extra_stop_fee           Decimal @default(20) @db.Decimal(12, 2)
@@ -458,6 +463,8 @@ model Zone {
   // A band starts where the previous (smaller) one ends.
   max_km           Decimal  @db.Decimal(5, 2)
   delivery_fee     Decimal  @db.Decimal(12, 2)
+  // Smallest food order accepted for this distance band (0 = the shop's own minimum only).
+  min_order_value  Decimal  @default(0) @db.Decimal(12, 2)
   rider_commission Decimal  @default(0) @db.Decimal(12, 2)
   franchise_profit Decimal  @default(0) @db.Decimal(12, 2)
   created_at       DateTime @default(now())

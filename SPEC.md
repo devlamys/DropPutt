@@ -3458,7 +3458,7 @@ The delivery zone, and so the delivery fee, is decided by the software from the 
 | Item | Purpose |
 |---|---|
 | `Zone.max_km` | Upper edge of a distance band; a band starts where the previous (smaller) one ends. `delivery_fee` is the charge for the band. `rider_commission` and `franchise_profit` default to 0 and take no part in the split (§15). |
-| `Franchise.max_delivery_km` (default 8) | Orders further than this are refused. Edited by the franchise admin. |
+| `Franchise.max_delivery_km` (default 14, was 8) | Orders further than this are refused. Edited by the franchise admin. |
 | `Franchise.name` | Editable by the franchise admin (`name` in `PATCH /admin/franchise/settings`, 2 to 60 characters, audited). Display only: the `slug` (subdomain, `x-franchise-slug`) is the tenant key and never changes with the name. Shown as the title of the franchise admin header. |
 | `Franchise.address`, `lat`, `lng` | Where the franchise is, set by its admin in `PATCH /admin/franchise/settings` (`lat` and `lng` go together). A franchise without a location is not listed to customers. |
 
@@ -3609,3 +3609,12 @@ The logo is on every sign-in screen (with the badge), the storefront header, the
 * One place for each rule: `isCashLocked` and `netDue` (`cashHandoverService.js`) for the rider's cash limit and what is owed, money maths only through `orderMath.js`.
 * The old customer shop page (`/shop/:vendorId`) is gone; that URL redirects to `/shop/restaurant/:vendorId`. The old storefront top bar/footer, product tiles and the duplicate shop card were deleted.
 * The Android rider shell (not the web code) owns the background-location plugin.
+
+# 67. Far deliveries: wider area, minimum order, delivery discount
+
+* **Delivery area:** `Franchise.max_delivery_km` now defaults to **14 km** (the franchise admin can still change it, up to 50). Distance bands stay as they are (`Zone`: upper edge in km + fee); the seed has Zone 4 (8–10 km, ₹70), Zone 5 (10–12 km, ₹80), Zone 6 (12–14 km, ₹90). A later "base fee + ₹ per km" formula can replace the bands without changing anything else here.
+* **Minimum order per band:** `Zone.min_order_value` (0 = only the shop's own minimum), set by the franchise admin with `POST/PATCH /admin/zones` (`min_order_value`). The seed asks ₹250 for the three far bands. For a food order the minimum is the larger of the shop's minimum (or the ₹80 snack minimum) and the band's: below it the checkout is refused with `orders to this distance need at least ₹N`. It also applies to each shop of a "deliver together" order, not to Buy Anything, Pick & Drop or Mini Truck (no food bill). `POST /marketplace/delivery-quote` returns `min_order_value` for the pin, `GET /marketplace/zones` for every band.
+* **Delivery discount:** `Franchise.delivery_discount_min` and `delivery_discount_amount` (both 0 = off; set together or both 0, otherwise 422), set with `PATCH /admin/franchise/settings`. A single-shop food order whose item total is at least `delivery_discount_min` gets `delivery_discount_amount` off the delivery fee, never more than the fee (`calculateDeliveryDiscount`, `orderMath.js`). It is stored on the order at checkout as `discount_amount` and shown as `delivery_discount` in the quote/checkout summary and `estimated_total`.
+* **Who pays:** the franchise. `franchise_profit = shop_markup_profit + vendor_commission - royalty_per_order - discount_amount` (negative kept); the rider's earning stays the whole delivery fee and the vendor's earning is unchanged. `grand_total` already subtracted the discount; for a prepaid food bill the discount also lowers what is collected at the door. Reconciliation allocates the discount (the four shares plus the markup account for `grand_total` exactly).
+* **Customer screens:** the cart shows a range bar ("Add ₹X more to get ₹Y off delivery", full and green once earned) and the discount line in the bill; the home screen's cart bar shows the same bar once the shop minimum is met; the delivery-location sheet lists each band with its minimum and the rule; the map quote adds "Min order ₹N" for far pins. `GET /marketplace/feed` carries `delivery_discount` (`{ min, amount }` or null). Admin: Delivery distance & charges has the discount rule and a Min order field per band.
+* Not included: a handling fee (decision pending) and discounts for "deliver together" orders.

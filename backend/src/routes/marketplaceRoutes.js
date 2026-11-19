@@ -8,7 +8,7 @@ import { idempotency } from "../middleware/idempotency.js";
 import { customRequestUpload } from "../middleware/upload.js";
 import { checkoutIpLimiter, checkoutPhoneLimiter } from "../middleware/rateLimit.js";
 import { MAX_GROUP_SHOPS, placeGroupOrder, placeMarketplaceOrder, quoteGroupDelivery } from "../services/checkoutService.js";
-import { deliveryMessage, franchiseCentre, requireDelivery, resolveDelivery } from "../services/deliveryZoneService.js";
+import { deliveryDiscountRule, deliveryMessage, franchiseCentre, requireDelivery, resolveDelivery } from "../services/deliveryZoneService.js";
 import { dispatchOrder } from "../services/dispatchService.js";
 import { emitTo, rooms } from "../socket/socketHandler.js";
 import { CHAYAKADI_LABEL, SNACK_MIN_ORDER_VALUE } from "../utils/constants.js";
@@ -180,6 +180,8 @@ router.get(
       res,
       {
         franchise: { name: req.franchise.name, slug: req.franchise.slug },
+        // "₹amount off delivery on food orders of ₹min or more", or null.
+        delivery_discount: await deliveryDiscountRule(franchise_id),
         is_chayakadi_window: chayakadi,
         // "4 PM Snacks" leads the category row during the window.
         categories: chayakadi
@@ -332,7 +334,7 @@ router.get(
     const zones = await prisma.zone.findMany({
       where: { franchise_id: req.franchise_id },
       orderBy: [{ max_km: "asc" }, { id: "asc" }],
-      select: { id: true, zone_name: true, delivery_fee: true, max_km: true },
+      select: { id: true, zone_name: true, delivery_fee: true, max_km: true, min_order_value: true },
     });
     ok(res, {
       zones: zones.map((zone) => ({
@@ -340,7 +342,9 @@ router.get(
         zone_name: zone.zone_name,
         max_km: moneyStr(zone.max_km),
         delivery_fee: moneyStr(zone.delivery_fee),
+        min_order_value: moneyStr(zone.min_order_value),
       })),
+      delivery_discount: await deliveryDiscountRule(req.franchise_id),
     });
   })
 );
@@ -401,6 +405,9 @@ router.post(
       km: result.km,
       zone_name: result.zone?.zone_name ?? null,
       delivery_fee: result.zone ? moneyStr(result.zone.delivery_fee) : null,
+      // Smallest food order for this distance (0 = only the shop's own minimum).
+      min_order_value: result.zone ? moneyStr(result.zone.min_order_value) : null,
+      delivery_discount: await deliveryDiscountRule(req.franchise_id),
       message: result.deliverable ? null : deliveryMessage(result.reason),
     });
   })

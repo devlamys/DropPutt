@@ -23,7 +23,7 @@ export const tokenFor = (user) => signAccessToken(user, null);
  * and three zones. Returns the rows plus ready-made access tokens.
  */
 export async function makeWorld({ slug = "tf", name = "Test Franchise", franchise = {} } = {}) {
-  const f = await prisma.franchise.create({ data: { name, slug, ...franchise } });
+  const f = await prisma.franchise.create({ data: { name, slug, max_delivery_km: 8, ...franchise } });
   const zones = [];
   for (const [zone_name, delivery_fee, max_km] of [
     ["Zone 1", 30, 2],

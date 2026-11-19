@@ -2,6 +2,7 @@ import { ArrowLeft, Banknote, Loader2, Plus, Smartphone } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import api, { getErrorMessage, idempotencyHeaders } from "../utils/api.js";
 import { inr } from "../utils/format.js";
+import DiscountBar from "./shop/DiscountBar.jsx";
 import LocationPicker from "./shop/LocationPicker.jsx";
 import Stepper from "./shop/Stepper.jsx";
 import { readProfile, saveProfile, useStorefront } from "./shop/StorefrontContext.jsx";
@@ -57,7 +58,7 @@ function Section({ title, ml, children, action }) {
  * Prices shown are for display; the server prices every line itself.
  */
 export default function CartCheckoutModal({ cart, totals, shop, minOrder, onQuantity, onAddMore, onClose, onPlaced, carts = [], activeId, onSelect, minOrderOf }) {
-  const { toast } = useStorefront();
+  const { toast, feed } = useStorefront();
   const profile = readProfile();
   const [phone, setPhone] = useState(profile.phone || "");
   const [name, setName] = useState(profile.name || "");
@@ -123,12 +124,17 @@ export default function CartCheckoutModal({ cart, totals, shop, minOrder, onQuan
 
   const deliverable = together ? Boolean(groupQuote && !groupQuote.error) : Boolean(quote?.deliverable);
   const fee = deliverable ? Number(together ? groupQuote.together_fee : quote.delivery_fee) : null;
-  const total = fee == null ? null : billItems + fee;
-  const short = together ? 0 : minOrder - totals.subtotal;
+  // Far bands can ask for a bigger order than the shop does; the delivery discount (a range bar) is for single-shop orders.
+  const zoneMin = together ? 0 : Number(quote?.min_order_value ?? 0);
+  const effectiveMin = Math.max(minOrder, zoneMin);
+  const rule = together ? null : (quote?.delivery_discount ?? feed?.delivery_discount ?? null);
+  const discount = deliverable && rule && totals.subtotal >= Number(rule.min) ? Math.min(Number(rule.amount), fee) : 0;
+  const total = fee == null ? null : billItems + fee - discount;
+  const short = together ? 0 : effectiveMin - totals.subtotal;
   const upi = payment === "UPI_TO_ADMIN";
 
   const problems = [];
-  if (short > 0) problems.push(`Add ${inr(short)} more to reach the minimum order`);
+  if (short > 0) problems.push(zoneMin > minOrder ? `Orders to this distance need at least ${inr(zoneMin)}. Add ${inr(short)} more` : `Add ${inr(short)} more to reach the minimum order`);
   for (const { c, short: s2 } of shortCarts) problems.push(`Add ${inr(s2)} more from ${c.shop_name} to reach its minimum order`);
   if (!validPhone(phone)) problems.push("Enter your 10-digit mobile number");
   if (turning.trim().length < 3) problems.push("Add a turning point or landmark near your house");
@@ -229,7 +235,7 @@ export default function CartCheckoutModal({ cart, totals, shop, minOrder, onQuan
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
           {(together ? carts : [cart]).map((c) => {
             const count = c.lines.reduce((n, l) => n + l.quantity, 0);
-            const min = together ? (minOrderOf?.(c) ?? 0) : minOrder;
+            const min = together ? (minOrderOf?.(c) ?? 0) : effectiveMin;
             const cShort = min - subtotalOf(c);
             return (
               <Section
@@ -256,12 +262,14 @@ export default function CartCheckoutModal({ cart, totals, shop, minOrder, onQuan
                 </ul>
                 {cShort > 0 && (
                   <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-200">
-                    Minimum order here is <span className="tabular-nums">{inr(min)}</span>. Add <span className="tabular-nums">{inr(cShort)}</span> more.
+                    {!together && zoneMin > minOrder ? "Orders to this distance need at least" : "Minimum order here is"} <span className="tabular-nums">{inr(min)}</span>. Add <span className="tabular-nums">{inr(cShort)}</span> more.
                   </p>
                 )}
               </Section>
             );
           })}
+
+          <DiscountBar rule={rule} subtotal={billItems} />
 
           <Section title="Where to deliver" ml="എത്തിക്കേണ്ട സ്ഥലം">
             <div className="grid grid-cols-5 gap-2.5">
@@ -320,6 +328,9 @@ export default function CartCheckoutModal({ cart, totals, shop, minOrder, onQuan
             <dl className="space-y-1.5 text-sm">
               <div className="flex justify-between"><dt className="text-slate-600">Item total</dt><dd className="font-semibold tabular-nums">{inr(billItems)}</dd></div>
               <div className="flex justify-between"><dt className="text-slate-600">Delivery fee{together ? " (one trip)" : ""}</dt><dd className="font-semibold tabular-nums">{fee == null ? "Set location" : inr(fee)}</dd></div>
+              {discount > 0 && (
+                <div className="flex justify-between text-green-700"><dt>Delivery discount</dt><dd className="font-semibold tabular-nums">− {inr(discount)}</dd></div>
+              )}
               {together && groupQuote && !groupQuote.error && Number(groupQuote.separate_fee) > Number(groupQuote.together_fee) && (
                 <div className="flex justify-between text-green-700"><dt>Saved vs separate orders</dt><dd className="font-semibold tabular-nums">{inr(Number(groupQuote.separate_fee) - Number(groupQuote.together_fee))}</dd></div>
               )}

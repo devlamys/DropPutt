@@ -699,6 +699,8 @@ const franchiseSettingsView = (franchise) => ({
   default_commission_rate: moneyStr(franchise.default_commission_rate),
   rain_surge_fee: moneyStr(franchise.rain_surge_fee),
   max_delivery_km: moneyStr(franchise.max_delivery_km),
+  delivery_discount_min: moneyStr(franchise.delivery_discount_min),
+  delivery_discount_amount: moneyStr(franchise.delivery_discount_amount),
   extra_stop_fee: moneyStr(franchise.extra_stop_fee),
   address: franchise.address,
   lat: coordStr(franchise.lat),
@@ -832,6 +834,7 @@ const zoneView = (zone) => ({
   zone_name: zone.zone_name,
   max_km: moneyStr(zone.max_km),
   delivery_fee: moneyStr(zone.delivery_fee),
+  min_order_value: moneyStr(zone.min_order_value),
 });
 
 const zoneFields = {
@@ -839,9 +842,11 @@ const zoneFields = {
   max_km: z.coerce.number().min(0.5).max(50),
   delivery_fee: zMoney,
 };
-const zoneCreateSchema = z.object(zoneFields);
+// Smallest food order for this distance band; 0 = only the shop's own minimum.
+const zoneMinOrder = zMoney.refine((v) => Number(v) <= 100000, { message: "too large" });
+const zoneCreateSchema = z.object({ ...zoneFields, min_order_value: zoneMinOrder.optional() });
 const zoneUpdateSchema = z
-  .object(zoneFields)
+  .object({ ...zoneFields, min_order_value: zoneMinOrder })
   .partial()
   .refine((body) => Object.keys(body).length > 0, { message: "nothing to update" });
 
@@ -880,6 +885,7 @@ router.post(
         zone_name: body.zone_name,
         max_km: km2(body.max_km),
         delivery_fee: moneyStr(body.delivery_fee),
+        ...(body.min_order_value !== undefined ? { min_order_value: moneyStr(body.min_order_value) } : {}),
       },
     });
     audit("zone.created", { franchise_id: req.franchise_id, by_user_id: req.user.id, zone_id: zone.id });
@@ -902,6 +908,7 @@ router.patch(
         ...(body.zone_name !== undefined ? { zone_name: body.zone_name } : {}),
         ...(body.max_km !== undefined ? { max_km: km2(body.max_km) } : {}),
         ...(body.delivery_fee !== undefined ? { delivery_fee: moneyStr(body.delivery_fee) } : {}),
+        ...(body.min_order_value !== undefined ? { min_order_value: moneyStr(body.min_order_value) } : {}),
       },
     });
     audit("zone.updated", {
@@ -941,6 +948,9 @@ const settingsSchema = z
     max_delivery_km: z.coerce.number().min(0.5).max(50).optional(),
     // Extra charge per additional shop when a customer has several shops delivered together.
     extra_stop_fee: zMoney.optional(),
+    // "₹amount off the delivery fee on food orders of ₹min or more"; both 0 = no discount.
+    delivery_discount_min: zMoney.optional(),
+    delivery_discount_amount: zMoney.optional(),
     // The name customers and staff see. The slug (the web address) never changes with it.
     name: z.string().trim().min(2).max(60).optional(),
     // Where the franchise is: customers are shown the nearest franchises first.
@@ -960,6 +970,14 @@ const settingsSchema = z
   .refine((body) => body.extra_stop_fee === undefined || Number(body.extra_stop_fee) <= 200, {
     message: "extra_stop_fee must be at most 200",
     path: ["extra_stop_fee"],
+  })
+  .refine((body) => body.delivery_discount_min === undefined || Number(body.delivery_discount_min) <= 100000, {
+    message: "delivery_discount_min is too large",
+    path: ["delivery_discount_min"],
+  })
+  .refine((body) => body.delivery_discount_amount === undefined || Number(body.delivery_discount_amount) <= 500, {
+    message: "delivery_discount_amount must be at most 500",
+    path: ["delivery_discount_amount"],
   });
 
 router.patch(
@@ -968,9 +986,19 @@ router.patch(
   asyncHandler(async (req, res) => {
     const body = parse(settingsSchema, req.body);
     const before = await prisma.franchise.findUnique({ where: { id: req.franchise_id } });
+    // The discount rule is either complete (a minimum and an amount) or off (both 0).
+    const discountMin = money(body.delivery_discount_min ?? before.delivery_discount_min);
+    const discountAmount = money(body.delivery_discount_amount ?? before.delivery_discount_amount);
+    if (discountMin.gt(0) !== discountAmount.gt(0)) {
+      throw validationError("Request validation failed", [
+        { field: "delivery_discount_amount", issue: "set both the minimum order and the discount, or set both to 0" },
+      ]);
+    }
     const franchise = await prisma.franchise.update({
       where: { id: req.franchise_id },
       data: {
+        ...(body.delivery_discount_min !== undefined ? { delivery_discount_min: moneyStr(discountMin) } : {}),
+        ...(body.delivery_discount_amount !== undefined ? { delivery_discount_amount: moneyStr(discountAmount) } : {}),
         ...(body.rain_surge_fee !== undefined
           ? { rain_surge_fee: moneyStr(body.rain_surge_fee) }
           : {}),
@@ -987,6 +1015,8 @@ router.patch(
       before: {
         rain_surge_fee: moneyStr(before.rain_surge_fee),
         max_delivery_km: moneyStr(before.max_delivery_km),
+        delivery_discount_min: moneyStr(before.delivery_discount_min),
+        delivery_discount_amount: moneyStr(before.delivery_discount_amount),
         name: before.name,
         address: before.address,
         lat: coordStr(before.lat),
@@ -995,6 +1025,8 @@ router.patch(
       after: {
         rain_surge_fee: moneyStr(franchise.rain_surge_fee),
         max_delivery_km: moneyStr(franchise.max_delivery_km),
+        delivery_discount_min: moneyStr(franchise.delivery_discount_min),
+        delivery_discount_amount: moneyStr(franchise.delivery_discount_amount),
         name: franchise.name,
         address: franchise.address,
         lat: coordStr(franchise.lat),

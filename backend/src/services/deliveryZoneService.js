@@ -7,6 +7,8 @@
 import { prisma } from "../config/prisma.js";
 import { AppError } from "../utils/response.js";
 import { haversineMetres, isLatLng } from "../utils/geo.js";
+import { money } from "../utils/orderMath.js";
+import { moneyStr } from "../utils/serializers.js";
 import { fetchRoadDistance, fetchRoadDistances, routingEnabled } from "./routeService.js";
 
 /** Roads wind: with no router, a straight line is stretched by this much. */
@@ -65,6 +67,20 @@ export async function franchiseCentre(franchise_id, db = prisma) {
   if (shops.length === 0) return null;
   const mean = (key) => shops.reduce((sum, shop) => sum + Number(shop[key]), 0) / shops.length;
   return { lat: mean("lat"), lng: mean("lng") };
+}
+
+/**
+ * The franchise's delivery discount rule for the storefront: { min, amount } ("₹amount off the
+ * delivery fee on food orders of ₹min or more"), or null when there is none.
+ */
+export async function deliveryDiscountRule(franchise_id, db = prisma) {
+  const row = await db.franchise.findUnique({
+    where: { id: franchise_id },
+    select: { delivery_discount_min: true, delivery_discount_amount: true },
+  });
+  const min = money(row?.delivery_discount_min ?? 0);
+  const amount = money(row?.delivery_discount_amount ?? 0);
+  return min.gt(0) && amount.gt(0) ? { min: moneyStr(min), amount: moneyStr(amount) } : null;
 }
 
 const MESSAGES = {

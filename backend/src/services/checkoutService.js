@@ -7,7 +7,7 @@
 import crypto from "node:crypto";
 import { prisma, TX_OPTIONS } from "../config/prisma.js";
 import { emitTo, rooms } from "../socket/socketHandler.js";
-import { addMoney, money } from "../utils/orderMath.js";
+import { addMoney, calculateDeliveryDiscount, money, subtractMoney } from "../utils/orderMath.js";
 import { AppError, fieldError } from "../utils/response.js";
 import { moneyStr } from "../utils/serializers.js";
 import { istDayRange } from "../utils/time.js";
@@ -23,6 +23,15 @@ export const CATEGORY_BY_SHOP = Object.freeze({
   FISH_MEAT: "FISH_MEAT",
   MEDICAL_PHARMACY: "MEDICAL",
 });
+
+/** The delivery discount this food total earns on the franchise's rule (0 when it has none). */
+const discountFor = (franchise, item_total, zone) =>
+  calculateDeliveryDiscount({
+    item_total,
+    delivery_fee: zone.delivery_fee,
+    threshold: franchise.delivery_discount_min,
+    amount: franchise.delivery_discount_amount,
+  });
 
 async function loadOpenVendor(franchise_id, vendor_id) {
   const vendor = await prisma.vendor.findFirst({ where: { id: vendor_id, franchise_id } });
@@ -45,11 +54,16 @@ export async function quoteMarketplaceOrder({ franchise_id, vendor_id, drop_lat,
     })
   );
   const zone = delivery.zone;
+  const rule = await prisma.franchise.findUnique({
+    where: { id: franchise_id },
+    select: { delivery_discount_min: true, delivery_discount_amount: true },
+  });
   const rollback = Symbol("rollback");
   let quote;
   try {
     await prisma.$transaction(async (tx) => {
-      const cart = await buildCart(tx, vendor, items, new Date());
+      const cart = await buildCart(tx, vendor, items, new Date(), { zone });
+      const discount = discountFor(rule, cart.item_total, zone);
       quote = {
         vendor,
         zone,
@@ -57,7 +71,8 @@ export async function quoteMarketplaceOrder({ franchise_id, vendor_id, drop_lat,
         lines: cart.lines,
         item_total: moneyStr(cart.item_total),
         delivery_fee: moneyStr(zone.delivery_fee),
-        estimated_total: moneyStr(addMoney(cart.item_total, money(zone.delivery_fee))),
+        delivery_discount: moneyStr(discount),
+        estimated_total: moneyStr(subtractMoney(addMoney(cart.item_total, money(zone.delivery_fee)), discount)),
       };
       throw rollback;
     }, TX_OPTIONS);
@@ -94,7 +109,8 @@ export async function placeMarketplaceOrder({ franchise, body, customer_phone, c
       }
       const zone = delivery.zone;
 
-      const cart = await buildCart(tx, vendor, body.items, new Date());
+      const cart = await buildCart(tx, vendor, body.items, new Date(), { zone });
+      const discount = discountFor(current, cart.item_total, zone);
 
       await tx.customer.upsert({
         where: { franchise_id_phone: { franchise_id, phone: customer_phone } },
@@ -136,11 +152,13 @@ export async function placeMarketplaceOrder({ franchise, body, customer_phone, c
           ...(hasPin ? { drop_lat: body.drop_lat, drop_lng: body.drop_lng } : {}),
           voice_note_url: body.voice_note_url ?? null,
           item_total: moneyStr(cart.item_total),
+          // Taken off the delivery fee; the franchise pays it, the rider keeps the whole fee.
+          discount_amount: moneyStr(discount),
           items: { create: cart.lines },
         },
         include: { items: { include: { product: { select: { name: true } } } } },
       });
-      return { order, zone, cart };
+      return { order, zone, cart, discount };
     }, TX_OPTIONS);
 
   let created;
@@ -153,7 +171,7 @@ export async function placeMarketplaceOrder({ franchise, body, customer_phone, c
       if (!collision || attempt >= 3) throw error;
     }
   }
-  const { order, zone, cart } = created;
+  const { order, zone, cart, discount } = created;
 
   await Promise.all([
     dispatchOrder(order, { franchise_slug: franchise.slug, shop_name: vendor.shop_name }),
@@ -164,7 +182,7 @@ export async function placeMarketplaceOrder({ franchise, body, customer_phone, c
   emitTo(rooms.vendor(vendor.id), "order_status_changed", event);
   emitTo(rooms.franchise(franchise_id), "order_status_changed", event);
 
-  const total = addMoney(cart.item_total, money(zone.delivery_fee));
+  const total = subtractMoney(addMoney(cart.item_total, money(zone.delivery_fee)), discount);
   return {
     order,
     vendor,
@@ -180,6 +198,7 @@ export async function placeMarketplaceOrder({ franchise, body, customer_phone, c
       })),
       item_total: moneyStr(cart.item_total),
       delivery_fee: moneyStr(zone.delivery_fee),
+      delivery_discount: moneyStr(discount),
       distance_km: delivery.km,
       estimated_total: moneyStr(total),
       payment_method: order.payment_method,
@@ -266,7 +285,7 @@ export async function placeGroupOrder({ franchise, body, customer_phone, channel
       const orders = [];
       for (let i = 0; i < vendors.length; i += 1) {
         const vendor = vendors[i];
-        const cart = await buildCart(tx, vendor, body.carts[i].items, new Date());
+        const cart = await buildCart(tx, vendor, body.carts[i].items, new Date(), { zone: deliveries[i].zone });
         const order = await tx.order.create({
           data: {
             franchise_id,

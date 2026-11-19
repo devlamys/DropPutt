@@ -60,6 +60,21 @@ export function calculateLineTotal(unit_price, quantity) {
   return multiplyMoney(unit_price, quantity);
 }
 
+// ─── Delivery discount ──────────────────────────────────────────────────────
+
+/**
+ * The delivery discount for a food order: `amount` off the delivery fee once the food total
+ * reaches `threshold`. Never more than the fee itself; 0 when the rule is off (threshold or
+ * amount is 0) or the order is below the threshold.
+ */
+export function calculateDeliveryDiscount({ item_total, delivery_fee, threshold = 0, amount = 0 }) {
+  const min = money(threshold);
+  const off = money(amount);
+  if (!min.gt(0) || !off.gt(0) || money(item_total).lt(min)) return money(0);
+  const fee = money(delivery_fee);
+  return off.gt(fee) ? fee : off;
+}
+
 // ─── §10.1 Commission-free orders ───────────────────────────────────────────
 
 /**
@@ -167,7 +182,10 @@ export function calculateVendorAdminPayable({
 /**
  * Split (§11): the rider keeps the whole delivery fee.
  *   rider_earning    = zone.delivery_fee + rider_tip
- *   franchise_profit = shop_markup_profit + vendor_commission - royalty_per_order
+ *   franchise_profit = shop_markup_profit + vendor_commission - royalty_per_order - discount_amount
+ *
+ * A delivery discount is paid by the franchise, so the customer pays less while the rider
+ * and the vendor still get their full amounts.
  *
  * super_admin_profit = royalty_per_order. A negative franchise_profit is kept
  * as-is — it is never clamped to zero.
@@ -178,13 +196,15 @@ export function calculateSplit({
   shop_markup_profit = 0,
   vendor_commission = 0,
   royalty_per_order = 0,
+  discount_amount = 0,
 }) {
   const super_admin_profit = money(royalty_per_order);
   return {
     rider_earning: addMoney(zone.delivery_fee, rider_tip),
     franchise_profit: subtractMoney(
       addMoney(shop_markup_profit, vendor_commission),
-      royalty_per_order
+      royalty_per_order,
+      discount_amount
     ),
     super_admin_profit,
   };
@@ -243,6 +263,7 @@ export function calculateOrderFinancials({
     grand_total,
     delivery_fee,
     rider_tip: tip,
+    delivery_side_discount: discount, // a prepaid food bill leaves only the delivery side to collect
   });
 
   const { rider_earning, franchise_profit, super_admin_profit } =
@@ -252,6 +273,7 @@ export function calculateOrderFinancials({
       shop_markup_profit: markup,
       vendor_commission,
       royalty_per_order: franchise.royalty_per_order, // always charged, trial or not (§10.1)
+      discount_amount: discount,
     });
 
   return {

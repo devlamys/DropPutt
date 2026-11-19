@@ -4,7 +4,8 @@ import api, { getErrorMessage, getRequestSlug, switchShopFranchise } from "../..
 import { fetchPlaceName } from "../../utils/place.js";
 
 import LocationPicker from "./LocationPicker.jsx";
-import { readProfile, saveProfile } from "./StorefrontContext.jsx";
+import DiscountBar from "./DiscountBar.jsx";
+import { readProfile, saveProfile, useStorefront } from "./StorefrontContext.jsx";
 
 const publicApi = { skipAuth: true };
 
@@ -17,6 +18,7 @@ const publicApi = { skipAuth: true };
  * the shop, so only the out-of-delivery-area warning appears.
  */
 export default function ZoneSheet({ onClose, onPlace, cartCount = 0, onClearCart }) {
+  const { feed } = useStorefront();
   const profile = readProfile();
   const current = getRequestSlug();
   const [pin, setPin] = useState(profile.lat != null && profile.lng != null ? { lat: profile.lat, lng: profile.lng } : null);

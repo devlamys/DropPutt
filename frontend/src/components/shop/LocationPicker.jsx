@@ -187,7 +187,7 @@ export default function LocationPicker({ shop, pin, onChange, hideCharge = false
             : out
               ? quote.message
               : quote
-                ? `${quote.km} km${shop ? ` from ${shop.shop_name}` : ""} · Delivery ${inr(quote.delivery_fee)}`
+                ? `${quote.km} km${shop ? ` from ${shop.shop_name}` : ""} · Delivery ${inr(quote.delivery_fee)}${Number(quote.min_order_value) > 0 ? ` · Min order ${inr(quote.min_order_value)}` : ""}`
                 : ""}
         </p>
       )}

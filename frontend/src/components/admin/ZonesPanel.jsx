@@ -13,9 +13,11 @@ const field = "w-full rounded-xl border border-slate-300 px-3 py-2 text-sm";
 export default function ZonesPanel({ franchise, onUpdated, toast }) {
   const [zones, setZones] = useState(null);
   const [editing, setEditing] = useState(null); // zone | "new" | null
-  const [form, setForm] = useState({ zone_name: "", max_km: "", delivery_fee: "" });
-  const [limit, setLimit] = useState(String(Number(franchise.max_delivery_km ?? 8)));
+  const [form, setForm] = useState({ zone_name: "", max_km: "", delivery_fee: "", min_order_value: "" });
+  const [limit, setLimit] = useState(String(Number(franchise.max_delivery_km ?? 14)));
   const [busy, setBusy] = useState(null);
+  const off = (value) => (Number(value) > 0 ? String(Number(value)) : "");
+  const [discount, setDiscount] = useState({ min: off(franchise.delivery_discount_min), amount: off(franchise.delivery_discount_amount) });
   const [stopFee, setStopFee] = useState(String(Number(franchise.extra_stop_fee ?? 20)));
   const [where, setWhere] = useState({
     address: franchise.address ?? "",
@@ -58,6 +60,23 @@ export default function ZonesPanel({ franchise, onUpdated, toast }) {
     );
   }
 
+  async function saveDiscount() {
+    setBusy("discount");
+    try {
+      const { data } = await api.patch("/admin/franchise/settings", {
+        delivery_discount_min: String(Number(discount.min || 0)),
+        delivery_discount_amount: String(Number(discount.amount || 0)),
+      });
+      onUpdated(data.data.franchise);
+      const f = data.data.franchise;
+      toast(Number(f.delivery_discount_min) > 0 ? `${inr(f.delivery_discount_amount)} off delivery on orders of ${inr(f.delivery_discount_min)}+` : "Delivery discount switched off", "success");
+    } catch (error) {
+      toast(getErrorMessage(error), "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function saveStopFee() {
     setBusy("stop");
     try {
@@ -87,14 +106,14 @@ export default function ZonesPanel({ franchise, onUpdated, toast }) {
 
   function open(zone) {
     setEditing(zone);
-    setForm(zone === "new" ? { zone_name: "", max_km: "", delivery_fee: "" } : { zone_name: zone.zone_name, max_km: String(Number(zone.max_km)), delivery_fee: String(Number(zone.delivery_fee)) });
+    setForm(zone === "new" ? { zone_name: "", max_km: "", delivery_fee: "", min_order_value: "" } : { zone_name: zone.zone_name, max_km: String(Number(zone.max_km)), delivery_fee: String(Number(zone.delivery_fee)), min_order_value: off(zone.min_order_value) });
   }
 
   async function saveZone(event) {
     event.preventDefault();
     setBusy("zone");
     try {
-      const body = { zone_name: form.zone_name.trim(), max_km: Number(form.max_km), delivery_fee: String(form.delivery_fee) };
+      const body = { zone_name: form.zone_name.trim(), max_km: Number(form.max_km), delivery_fee: String(form.delivery_fee), min_order_value: String(Number(form.min_order_value || 0)) };
       if (editing === "new") await api.post("/admin/zones", body);
       else await api.patch(`/admin/zones/${editing.id}`, body);
       toast("Saved", "success");
@@ -133,6 +152,19 @@ export default function ZonesPanel({ franchise, onUpdated, toast }) {
         <button type="button" onClick={saveLimit} disabled={busy === "limit"} className="rounded-xl bg-slate-900 px-3 py-2 font-semibold text-white disabled:opacity-60">
           {busy === "limit" ? "…" : "Save"}
         </button>
+      </div>
+
+      <div className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm ring-1 ring-emerald-200">
+        <h4 className="font-bold text-emerald-900">Delivery discount</h4>
+        <p className="mt-0.5 text-xs text-emerald-900/80">Customers see a progress bar in their cart: &quot;Add ₹X more to get ₹Y off delivery&quot;. You pay the discount from your profit; the rider still gets the whole delivery charge. Leave both empty to switch it off.</p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <label htmlFor="disc-min" className="font-semibold">Food order of</label>
+          <input id="disc-min" type="number" min="0" step="10" placeholder="350" value={discount.min} onChange={(e) => setDiscount({ ...discount, min: e.target.value })} className="w-24 rounded-xl border border-slate-300 px-3 py-2" />
+          <label htmlFor="disc-amt" className="font-semibold">or more gets ₹</label>
+          <input id="disc-amt" type="number" min="0" max="500" step="5" placeholder="20" value={discount.amount} onChange={(e) => setDiscount({ ...discount, amount: e.target.value })} className="w-20 rounded-xl border border-slate-300 px-3 py-2" />
+          <span className="text-slate-600">off delivery</span>
+          <button type="button" onClick={saveDiscount} disabled={busy === "discount"} className="rounded-xl bg-slate-900 px-3 py-2 font-semibold text-white disabled:opacity-60">{busy === "discount" ? "…" : "Save"}</button>
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
@@ -183,7 +215,7 @@ export default function ZonesPanel({ franchise, onUpdated, toast }) {
               <li key={zone.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold">{zone.zone_name}</p>
-                  <p className="text-xs text-slate-500">{label}</p>
+                  <p className="text-xs text-slate-500">{label}{Number(zone.min_order_value) > 0 ? ` · min order ${inr(zone.min_order_value)}` : ""}</p>
                 </div>
                 <span className="font-bold tabular-nums">{inr(zone.delivery_fee)}</span>
                 <button type="button" aria-label={`Edit ${zone.zone_name}`} onClick={() => open(zone)} className="rounded-full p-2 hover:bg-slate-100"><Pencil className="h-4 w-4" /></button>
@@ -195,10 +227,11 @@ export default function ZonesPanel({ franchise, onUpdated, toast }) {
       )}
 
       {editing && (
-        <form onSubmit={saveZone} className="mt-3 grid gap-2 rounded-xl bg-slate-50 p-3 sm:grid-cols-[2fr_1fr_1fr_auto] sm:items-end">
+        <form onSubmit={saveZone} className="mt-3 grid gap-2 rounded-xl bg-slate-50 p-3 sm:grid-cols-[2fr_1fr_1fr_1fr_auto] sm:items-end">
           <label className="text-xs font-semibold">Name<input className={field} value={form.zone_name} onChange={(e) => setForm({ ...form, zone_name: e.target.value })} required minLength={2} /></label>
           <label className="text-xs font-semibold">Up to (km)<input className={field} type="number" step="0.5" min="0.5" max="50" value={form.max_km} onChange={(e) => setForm({ ...form, max_km: e.target.value })} required /></label>
           <label className="text-xs font-semibold">Charge (₹)<input className={field} inputMode="decimal" value={form.delivery_fee} onChange={(e) => setForm({ ...form, delivery_fee: e.target.value })} required /></label>
+          <label className="text-xs font-semibold">Min order (₹)<input className={field} inputMode="decimal" placeholder="0 = shop's own" value={form.min_order_value} onChange={(e) => setForm({ ...form, min_order_value: e.target.value })} /></label>
           <div className="flex gap-2">
             <button disabled={busy === "zone"} className="rounded-xl bg-green-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-60">Save</button>
             <button type="button" onClick={() => setEditing(null)} className="rounded-xl border px-3 py-2 text-sm font-semibold">Cancel</button>

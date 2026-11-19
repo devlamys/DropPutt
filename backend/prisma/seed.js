@@ -66,7 +66,17 @@ async function main() {
   const franchise = await prisma.franchise.upsert({
     where: { slug: FRANCHISE_SLUG },
     update: { name: "Kizhissery", is_active: true, address: "Kizhissery Junction", lat: "11.1786000", lng: "75.9982000" },
-    create: { name: "Kizhissery", slug: FRANCHISE_SLUG, address: "Kizhissery Junction", lat: "11.1786000", lng: "75.9982000" },
+    create: {
+      name: "Kizhissery",
+      slug: FRANCHISE_SLUG,
+      address: "Kizhissery Junction",
+      lat: "11.1786000",
+      lng: "75.9982000",
+      max_delivery_km: "14.00",
+      // ₹20 off the delivery fee on food orders of ₹350 or more (the franchise admin can change or switch it off).
+      delivery_discount_min: "350.00",
+      delivery_discount_amount: "20.00",
+    },
   });
   const franchise_id = franchise.id;
 
@@ -186,6 +196,10 @@ async function main() {
     { zone_name: "Zone 1 — Kizhissery Town (0–2 km)", max_km: "2.00", delivery_fee: "30.00", rider_commission: "20.00", franchise_profit: "10.00" },
     { zone_name: "Zone 2 — Nearby (2–5 km)", max_km: "5.00", delivery_fee: "40.00", rider_commission: "27.00", franchise_profit: "13.00" },
     { zone_name: "Zone 3 — Outer (5–8 km)", max_km: "8.00", delivery_fee: "50.00", rider_commission: "35.00", franchise_profit: "15.00" },
+    // Far bands: the rider keeps the whole fee, and a food order must be at least ₹250.
+    { zone_name: "Zone 4 — Far (8–10 km)", max_km: "10.00", delivery_fee: "70.00", min_order_value: "250.00" },
+    { zone_name: "Zone 5 — Farther (10–12 km)", max_km: "12.00", delivery_fee: "80.00", min_order_value: "250.00" },
+    { zone_name: "Zone 6 — Farthest (12–14 km)", max_km: "14.00", delivery_fee: "90.00", min_order_value: "250.00" },
   ];
 
   for (const zone of zones) {

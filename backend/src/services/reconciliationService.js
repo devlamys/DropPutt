@@ -119,8 +119,9 @@ export async function checkOrders(orders) {
     }
 
     // 1. Split identity. A partner-vendor order allocates item + fee + tip +
-    //    markup across the four parties (the discount is a customer saving);
-    //    with no partner vendor the shop purchase itself is not split.
+    //    markup across the four parties (a delivery discount comes out of the
+    //    franchise's profit, so it is allocated too); with no partner vendor
+    //    the shop purchase itself is not split.
     const allocated = addMoney(
       order.vendor_earning,
       order.rider_earning,
@@ -128,11 +129,7 @@ export async function checkOrders(orders) {
       order.super_admin_profit
     );
     const passThrough = order.vendor_id ? money(0) : money(order.item_total);
-    const expectedUnallocated = subtractMoney(
-      passThrough,
-      order.discount_amount,
-      order.shop_markup_profit
-    );
+    const expectedUnallocated = subtractMoney(passThrough, order.shop_markup_profit);
     const unallocated = subtractMoney(order.grand_total, allocated);
     if (!unallocated.eq(expectedUnallocated)) {
       add(

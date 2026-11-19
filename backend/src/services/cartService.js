@@ -13,7 +13,7 @@ import { isChayakadiWindow, istMinutesOfDay } from "../utils/time.js";
  * Validates a cart against PostgreSQL and returns authoritative lines.
  * Repeated products are merged into one line.
  */
-export async function buildCart(tx, vendor, items, now) {
+export async function buildCart(tx, vendor, items, now, { zone = null } = {}) {
   const quantities = new Map();
   for (const item of items) {
     quantities.set(item.product_id, (quantities.get(item.product_id) || 0) + item.quantity);
@@ -60,9 +60,17 @@ export async function buildCart(tx, vendor, items, now) {
   const snackCart =
     isChayakadiWindow(now) &&
     lines.every((line) => line.slot_type === "EVENING_SNACKS_3_TO_6");
-  const minimum = money(snackCart ? SNACK_MIN_ORDER_VALUE : vendor.min_order_value);
+  const shopMinimum = money(snackCart ? SNACK_MIN_ORDER_VALUE : vendor.min_order_value);
+  // A far delivery band can ask for more than the shop does (set by the franchise admin).
+  const zoneMinimum = money(zone?.min_order_value ?? 0);
+  const minimum = zoneMinimum.gt(shopMinimum) ? zoneMinimum : shopMinimum;
   if (item_total.lt(minimum)) {
-    throw fieldError("items", `minimum order value is ₹${minimum.toFixed(2)}`);
+    throw fieldError(
+      "items",
+      zoneMinimum.gt(shopMinimum)
+        ? `orders to this distance need at least ₹${minimum.toFixed(2)}`
+        : `minimum order value is ₹${minimum.toFixed(2)}`
+    );
   }
 
   // Take the portions. The guard makes two orders for the last portion safe:
