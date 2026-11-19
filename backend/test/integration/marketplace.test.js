@@ -282,7 +282,14 @@ describe("custom orders: Buy Anything, Pick & Drop, Mini Truck", () => {
     assert.equal(order.order_category, "PICK_DROP");
   });
 
+  it("Mini Truck is refused for customers while it is coming soon", async () => {
+    const res = await customOrder({ order_type: "MINI_TRUCK", details: "Sofa", pickup_address: "Old house, Main Road" });
+    assert.equal(res.status, 403);
+    assert.equal(await prisma.order.count(), 0);
+  });
+
   it("Mini Truck is only offered to mini-truck riders", async () => {
+    process.env.MINI_TRUCK_ENABLED = "true";
     const bikeRider = connect(server.url, { auth: { token: w.riders[0].token }, transports: ["websocket"] });
     const bikeSeen = [];
     bikeRider.on("new_rider_request", (e) => bikeSeen.push(e));
@@ -297,6 +304,7 @@ describe("custom orders: Buy Anything, Pick & Drop, Mini Truck", () => {
       assert.equal(bikeSeen.length, 0, "a bike rider must not be called for a mini truck");
       assert.equal((await prisma.order.findFirst()).order_type, "MINI_TRUCK");
     } finally {
+      delete process.env.MINI_TRUCK_ENABLED;
       bikeRider.close();
     }
   });

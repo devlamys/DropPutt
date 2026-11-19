@@ -3596,7 +3596,7 @@ One mark for every app: an isometric logistics cube (a food box, a grocery bag, 
 
 | Role | Badge | Line under the name |
 |---|---|---|
-| customer | none | FOOD • GROCERY • MINI-TRUCK |
+| customer | none | FOOD • GROCERY • PICK & DROP |
 | vendor | PARTNER (emerald) | Hotel & Store Panel |
 | rider | RIDER (dark, amber text) | Delivery Fleet App |
 | admin | ADMIN (red) | Franchise Control |
@@ -3618,3 +3618,7 @@ The logo is on every sign-in screen (with the badge), the storefront header, the
 * **Who pays:** the franchise. `franchise_profit = shop_markup_profit + vendor_commission - royalty_per_order - discount_amount` (negative kept); the rider's earning stays the whole delivery fee and the vendor's earning is unchanged. `grand_total` already subtracted the discount; for a prepaid food bill the discount also lowers what is collected at the door. Reconciliation allocates the discount (the four shares plus the markup account for `grand_total` exactly).
 * **Customer screens:** the cart shows a range bar ("Add ₹X more to get ₹Y off delivery", full and green once earned) and the discount line in the bill; the home screen's cart bar shows the same bar once the shop minimum is met; the delivery-location sheet lists each band with its minimum and the rule; the map quote adds "Min order ₹N" for far pins. `GET /marketplace/feed` carries `delivery_discount` (`{ min, amount }` or null). Admin: Delivery distance & charges has the discount rule and a Min order field per band.
 * Not included: a handling fee (decision pending) and discounts for "deliver together" orders.
+
+### Mini Truck: coming soon (customer app)
+
+Customers cannot book a Mini Truck yet. The home tile reads "Pick & Drop" with "Mini Truck coming soon", the request sheet shows the Mini Truck option disabled, and `POST /marketplace/orders` refuses `order_type = MINI_TRUCK` with `403 FEATURE_COMING_SOON` unless `MINI_TRUCK_ENABLED=true` is set. Vendor/admin quick-call and the dispatch filter for MINI_TRUCK riders are unchanged. The full plan is in `docs/minitrukplan.md`.

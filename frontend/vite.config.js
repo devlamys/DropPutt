@@ -3,8 +3,8 @@ import react from "@vitejs/plugin-react";
 
 // One code base, several apps: `--mode vendor` builds the vendor app, and so on (src/appMode.js).
 const APPS = {
-  all: { name: "DropPutt", short: "DropPutt", tagline: "FOOD • GROCERY • MINI-TRUCK", start: "/", theme: "#E8431A" },
-  customer: { name: "DropPutt", short: "DropPutt", tagline: "FOOD • GROCERY • MINI-TRUCK", start: "/shop", theme: "#E8431A" },
+  all: { name: "DropPutt", short: "DropPutt", tagline: "FOOD • GROCERY • PICK & DROP", start: "/", theme: "#E8431A" },
+  customer: { name: "DropPutt", short: "DropPutt", tagline: "FOOD • GROCERY • PICK & DROP", start: "/shop", theme: "#E8431A" },
   vendor: { name: "DropPutt Vendor", short: "DP Vendor", tagline: "SHOP DASHBOARD", start: "/vendor", theme: "#E8431A" },
   rider: { name: "DropPutt Rider", short: "DP Rider", tagline: "DELIVERY PARTNER", start: "/rider", theme: "#E8431A" },
   admin: { name: "DropPutt Admin", short: "DP Admin", tagline: "CONTROL ROOM", start: "/admin", theme: "#E8431A" },

@@ -261,8 +261,8 @@ export default function StorefrontHome() {
                 <>
                   {!photo && <Truck className="h-7 w-7 shrink-0 text-flame-700" />}
                   <span className={`min-w-0 ${photo ? TEXT_SHADOW : ""}`}>
-                    <span className={`block font-extrabold leading-tight ${photo ? "text-[13px]" : "text-[15px]"}`}>Pick &amp; Drop / Mini Truck</span>
-                    <span className={`block font-semibold ${photo ? "text-[10px] opacity-95" : "text-[11px] text-slate-500"}`}>പിക്ക് &amp; ഡ്രോപ്പ് · മിനി ട്രക്ക്</span>
+                    <span className={`block font-extrabold leading-tight ${photo ? "text-[13px]" : "text-[15px]"}`}>Pick &amp; Drop</span>
+                    <span className={`block font-semibold ${photo ? "text-[10px] opacity-95" : "text-[11px] text-slate-500"}`}>പിക്ക് &amp; ഡ്രോപ്പ് · മിനി ട്രക്ക് ഉടൻ വരുന്നു</span>
                   </span>
                 </>
               )}

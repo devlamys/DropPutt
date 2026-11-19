@@ -556,6 +556,10 @@ router.post(
   idempotency(),
   asyncHandler(async (req, res) => {
     const body = parse(customOrderSchema, req.body);
+    // Mini Truck is "coming soon" for customers; set MINI_TRUCK_ENABLED=true to open it again.
+    if (body.order_type === "MINI_TRUCK" && process.env.MINI_TRUCK_ENABLED !== "true") {
+      throw new AppError(403, "FEATURE_COMING_SOON", "Mini Truck is coming soon.");
+    }
     const franchise_id = req.franchise_id;
     const kind = ORDER_KINDS[body.order_type];
     const photo = req.files?.photo?.[0];

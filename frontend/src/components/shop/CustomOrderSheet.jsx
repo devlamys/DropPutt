@@ -129,10 +129,13 @@ export default function CustomOrderSheet({ kind: initialKind, onClose, onPlaced 
                 type="button"
                 role="radio"
                 aria-checked={kind === k}
+                aria-disabled={k === "MINI_TRUCK"}
+                disabled={k === "MINI_TRUCK"}
                 onClick={() => setKind(k)}
-                className={`h-12 rounded-xl text-sm font-bold transition-transform active:scale-[0.98] ${kind === k ? "bg-[#E8431A] text-white " : "text-slate-600"}`}
+                className={`h-12 rounded-xl text-sm font-bold transition-transform active:scale-[0.98] ${kind === k ? "bg-[#E8431A] text-white " : "text-slate-600"} ${k === "MINI_TRUCK" ? "opacity-60" : ""}`}
               >
                 {KINDS[k].title}
+                {k === "MINI_TRUCK" && <span className="block text-[10px] font-semibold">Coming soon • ഉടൻ വരുന്നു</span>}
               </button>
             ))}
           </div>

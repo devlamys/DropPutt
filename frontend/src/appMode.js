@@ -10,8 +10,8 @@
 export const APP = import.meta.env.VITE_APP || "all";
 
 export const APP_INFO = {
-  all: { name: "DropPutt", tagline: "FOOD • GROCERY • MINI-TRUCK", start: "/", loginApp: null },
-  customer: { name: "DropPutt", tagline: "FOOD • GROCERY • MINI-TRUCK", start: "/shop", loginApp: null },
+  all: { name: "DropPutt", tagline: "FOOD • GROCERY • PICK & DROP", start: "/", loginApp: null },
+  customer: { name: "DropPutt", tagline: "FOOD • GROCERY • PICK & DROP", start: "/shop", loginApp: null },
   vendor: { name: "DropPutt Vendor", tagline: "SHOP DASHBOARD", start: "/vendor", loginApp: "vendor" },
   rider: { name: "DropPutt Rider", tagline: "DELIVERY PARTNER", start: "/rider", loginApp: "rider" },
   admin: { name: "DropPutt Admin", tagline: "CONTROL ROOM", start: "/admin", loginApp: "admin" },

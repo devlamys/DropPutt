@@ -7,7 +7,7 @@ import { defaultTileImage, forgetSiteImages } from "../../hooks/useSiteImages.js
 const SLOTS = [
   { slot: "restaurants", label: "Open Restaurants", hint: "Big tile, left of the home screen" },
   { slot: "buy_anything", label: "Buy Anything (Custom Book)", hint: "Small tile, top right" },
-  { slot: "pick_drop", label: "Pick & Drop / Mini Truck", hint: "Small tile, right" },
+  { slot: "pick_drop", label: "Pick & Drop", hint: "Small tile, right" },
   { slot: "chayakadi", label: "4 PM Chayakadi & Coolbar", hint: "Wide banner at the top" },
   { slot: "mart", label: "DropPutt Mart", hint: "Wide tile under the buttons" },
 ];
